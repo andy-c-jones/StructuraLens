@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/StructuraLens.Cli/StructuraLens.Cli.csproj" />
+    <Project Path="src/StructuraLens.Core/StructuraLens.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/StructuraLens.Tests/StructuraLens.Tests.csproj" />
+  </Folder>
+</Solution>

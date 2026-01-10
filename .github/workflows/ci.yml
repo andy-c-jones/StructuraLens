@@ -1,0 +1,104 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Cache NuGet
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/*.sln') }}
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --no-restore -c Release
+
+      - name: Test
+        run: dotnet test --no-build -c Release --verbosity normal
+
+      - name: Publish self-contained (linux-x64)
+        run: |
+          dotnet publish src/StructuraLens.Cli/StructuraLens.Cli.csproj \
+            -c Release \
+            -r linux-x64 \
+            --self-contained true \
+            -o ./artifacts/publish/linux-x64
+
+      - name: Run tool against own codebase
+        run: |
+          chmod +x ./artifacts/publish/linux-x64/StructuraLens.Cli
+          ./artifacts/publish/linux-x64/StructuraLens.Cli analyze . --out ./artifacts/self-analysis-report.json || true
+
+      - name: Upload published artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: structuralens-linux-x64
+          path: ./artifacts/publish/linux-x64
+
+      - name: Upload self-analysis report
+        uses: actions/upload-artifact@v4
+        with:
+          name: self-analysis-report
+          path: ./artifacts/self-analysis-report.json
+          if-no-files-found: ignore
+
+      - name: Build Docker image
+        run: |
+          docker build -t structura-lens:${{ github.sha }} -f Dockerfile .
+
+      - name: Save Docker image to tar
+        run: |
+          docker save structura-lens:${{ github.sha }} -o image.tar
+
+      - name: Upload Docker image tar
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-image-tar
+          path: image.tar
+
+      - name: Login to GHCR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Tag and push image to GHCR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          IMAGE_NAME=ghcr.io/${{ github.repository_owner }}/structura-lens
+          docker tag structura-lens:${{ github.sha }} ${IMAGE_NAME}:$(echo ${{ github.sha }} | cut -c1-7)
+          docker tag structura-lens:${{ github.sha }} ${IMAGE_NAME}:latest
+          docker push ${IMAGE_NAME}:$(echo ${{ github.sha }} | cut -c1-7)
+          docker push ${IMAGE_NAME}:latest
+
+  benchmark:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run sample analysis for benchmarks
+        run: |
+          echo 'Run benchmarks or sample analyses here'
