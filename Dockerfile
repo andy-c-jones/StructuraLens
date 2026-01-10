@@ -20,4 +20,4 @@ RUN dotnet publish src/StructuraLens.Cli/StructuraLens.Cli.csproj \
 FROM mcr.microsoft.com/dotnet/runtime-deps:10.0 AS runtime
 WORKDIR /app
 COPY --from=build /app/publish .
-ENTRYPOINT ["./StructuraLens.Cli"]
+ENTRYPOINT ["/app/StructuraLens.Cli"]
