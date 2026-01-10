@@ -97,7 +97,7 @@
     },
     "rules": {
       "type": "array",
-      "description": "Architecture linting rules (for future use)",
+      "description": "Architecture linting rules to enforce dependency constraints",
       "items": {
         "type": "object",
         "properties": {
@@ -112,15 +112,37 @@
           "severity": {
             "type": "string",
             "enum": ["error", "warning", "info"],
-            "default": "warning"
+            "default": "warning",
+            "description": "Severity level. 'error' causes non-zero exit code."
           },
           "enabled": {
             "type": "boolean",
-            "default": true
+            "default": true,
+            "description": "Whether this rule is active"
+          },
+          "from": {
+            "type": "string",
+            "default": "*",
+            "description": "Pattern matching source entities this rule applies to"
+          },
+          "allow": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Allowed dependency patterns. If specified, only these are permitted."
+          },
+          "disallow": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Disallowed dependency patterns. These dependencies are forbidden."
+          },
+          "dependencyType": {
+            "type": "string",
+            "enum": ["any", "project", "namespace", "type"],
+            "default": "any",
+            "description": "What type of dependency this rule applies to"
           }
         },
-        "required": ["id"],
-        "additionalProperties": false
+        "required": ["id"]
       }
     }
   },

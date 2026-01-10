@@ -17,10 +17,9 @@ var formatOption = new Option<string>("--format", "-f")
     DefaultValueFactory = _ => "json"
 };
 
-var couplingModeOption = new Option<string>("--coupling-mode", "-c")
+var couplingModeOption = new Option<string?>("--coupling-mode", "-c")
 {
-    Description = "Coupling analysis mode: internal (own code only), filtered (exclude System/Microsoft), all (everything)",
-    DefaultValueFactory = _ => "filtered"
+    Description = "Coupling analysis mode: internal (own code only), filtered (exclude System/Microsoft), all (everything)"
 };
 
 var configOption = new Option<string?>("--config")
@@ -47,7 +46,7 @@ analyzeCommand.SetAction(async (parseResult, cancellationToken) =>
     var path = parseResult.GetValue(pathArgument)!;
     var output = parseResult.GetValue(outputOption);
     var format = parseResult.GetValue(formatOption) ?? "json";
-    var couplingMode = parseResult.GetValue(couplingModeOption) ?? "filtered";
+    var couplingMode = parseResult.GetValue(couplingModeOption);
     var configPath = parseResult.GetValue(configOption);
 
     try
@@ -56,7 +55,7 @@ analyzeCommand.SetAction(async (parseResult, cancellationToken) =>
         Console.WriteLine($"Analyzing: {path}");
         Console.WriteLine();
 
-        // Build configuration from CLI options or config file
+        // Build configuration: explicit path > auto-discovery > defaults
         StructuraLensConfig config;
         if (!string.IsNullOrEmpty(configPath) && File.Exists(configPath))
         {
@@ -65,21 +64,34 @@ analyzeCommand.SetAction(async (parseResult, cancellationToken) =>
             { 
                 PropertyNameCaseInsensitive = true 
             }) ?? ConfigurationLoader.CreateDefaultConfig();
+            Console.WriteLine($"Using config: {configPath}");
         }
         else
         {
-            config = ConfigurationLoader.CreateDefaultConfig();
+            // Auto-discover configuration from solution/project directory
+            config = await ConfigurationLoader.LoadSolutionConfigAsync(path, cancellationToken);
+            if (config.Rules.Count > 0 || config.Coupling.Mode != CouplingMode.Filtered)
+            {
+                Console.WriteLine("Using auto-discovered configuration");
+            }
         }
 
-        // Override coupling mode from CLI if specified
-        config.Coupling.Mode = couplingMode.ToLowerInvariant() switch
+        // Override coupling mode from CLI if explicitly specified
+        if (!string.IsNullOrEmpty(couplingMode))
         {
-            "internal" => CouplingMode.Internal,
-            "all" => CouplingMode.All,
-            _ => CouplingMode.Filtered
-        };
+            config.Coupling.Mode = couplingMode.ToLowerInvariant() switch
+            {
+                "internal" => CouplingMode.Internal,
+                "all" => CouplingMode.All,
+                _ => CouplingMode.Filtered
+            };
+        }
 
         Console.WriteLine($"Coupling mode: {config.Coupling.Mode}");
+        if (config.Rules.Count > 0)
+        {
+            Console.WriteLine($"Architecture rules: {config.Rules.Count}");
+        }
         Console.WriteLine();
 
         var analyzer = new SolutionAnalyzer();
@@ -126,6 +138,12 @@ analyzeCommand.SetAction(async (parseResult, cancellationToken) =>
             {
                 Console.WriteLine(json);
             }
+        }
+
+        // Return non-zero exit code if there are linting errors
+        if (report.LintingResults != null && report.LintingResults.ErrorCount > 0)
+        {
+            return 1;
         }
 
         return 0;
@@ -193,6 +211,47 @@ static void PrintSummary(AnalysisReport report)
             Console.WriteLine($"Most Coupled Entity: {coupling.MostCoupledEntity}");
         if (!string.IsNullOrEmpty(coupling.MostUnstableEntity))
             Console.WriteLine($"Most Unstable Entity: {coupling.MostUnstableEntity}");
+    }
+
+    // Print linting results
+    if (report.LintingResults != null)
+    {
+        Console.WriteLine();
+        Console.WriteLine("=== Architecture Linting ===");
+        Console.WriteLine($"Rules Evaluated: {report.LintingResults.RulesEvaluated}");
+        Console.WriteLine($"Errors: {report.LintingResults.ErrorCount}");
+        Console.WriteLine($"Warnings: {report.LintingResults.WarningCount}");
+        Console.WriteLine($"Info: {report.LintingResults.InfoCount}");
+        Console.WriteLine($"Status: {(report.LintingResults.Passed ? "PASSED" : "FAILED")}");
+
+        if (report.LintingResults.Violations.Count > 0)
+        {
+            Console.WriteLine();
+            Console.WriteLine("Violations:");
+            foreach (var violation in report.LintingResults.Violations.Take(20))
+            {
+                var color = violation.Severity switch
+                {
+                    StructuraLens.Core.Configuration.RuleSeverity.Error => ConsoleColor.Red,
+                    StructuraLens.Core.Configuration.RuleSeverity.Warning => ConsoleColor.Yellow,
+                    _ => ConsoleColor.Cyan
+                };
+                Console.ForegroundColor = color;
+                var severityLabel = violation.Severity.ToString().ToUpper();
+                Console.Write($"  [{severityLabel}] ");
+                Console.ResetColor();
+                Console.WriteLine($"{violation.RuleId}: {violation.Message}");
+                if (violation.FromEntity != null && violation.ToEntity != null)
+                {
+                    Console.WriteLine($"         {violation.FromEntity} → {violation.ToEntity}");
+                }
+            }
+
+            if (report.LintingResults.Violations.Count > 20)
+            {
+                Console.WriteLine($"  ... and {report.LintingResults.Violations.Count - 20} more violations");
+            }
+        }
     }
     
     Console.WriteLine();

@@ -1,0 +1,69 @@
+{
+  "$schema": "./docs/config.schema.json",
+  "coupling": {
+    "mode": "filtered",
+    "excludePatterns": [
+      "System.*",
+      "Microsoft.*"
+    ]
+  },
+  "rules": [
+    {
+      "id": "CORE-NO-CLI",
+      "description": "Core library must not depend on CLI",
+      "severity": "error",
+      "from": "StructuraLens.Core.*",
+      "disallow": ["StructuraLens.Cli*"]
+    },
+    {
+      "id": "CORE-ALLOWED-PACKAGES",
+      "description": "Core library may only use approved NuGet packages",
+      "severity": "error",
+      "from": "StructuraLens.Core.*",
+      "dependencyType": "namespace",
+      "allow": [
+        "StructuraLens.Core.*",
+        "Microsoft.CodeAnalysis*",
+        "Microsoft.Build*",
+        "System*"
+      ]
+    },
+    {
+      "id": "CLI-ALLOWED-PACKAGES",
+      "description": "CLI may only use approved packages",
+      "severity": "error",
+      "from": "StructuraLens.Cli*",
+      "dependencyType": "namespace",
+      "allow": [
+        "StructuraLens.Core.*",
+        "StructuraLens.Cli*",
+        "System*"
+      ]
+    },
+    {
+      "id": "TESTS-NO-PRODUCTION-INTERNALS",
+      "description": "Tests should not depend on private implementations",
+      "severity": "warning",
+      "from": "StructuraLens.Tests.*",
+      "disallow": ["*.Internal", "*.Private"]
+    },
+    {
+      "id": "NO-NEWTONSOFT",
+      "description": "Use System.Text.Json instead of Newtonsoft.Json",
+      "severity": "error",
+      "disallow": ["Newtonsoft.*"]
+    },
+    {
+      "id": "NO-ENTITYFRAMEWORK",
+      "description": "This project does not use Entity Framework",
+      "severity": "error",
+      "disallow": ["Microsoft.EntityFrameworkCore*", "EntityFramework*"]
+    },
+    {
+      "id": "NO-ASPNET",
+      "description": "This is a CLI tool, not a web application",
+      "severity": "error",
+      "disallow": ["Microsoft.AspNetCore*", "Microsoft.AspNet*"]
+    }
+  ]
+}

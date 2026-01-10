@@ -68,7 +68,7 @@ StructuraLens automatically discovers configuration files by:
 | `coupling` | object | - | Coupling analysis configuration |
 | `metrics` | object | - | Metrics calculation configuration |
 | `output` | object | - | Output configuration |
-| `rules` | array | [] | Architecture linting rules (future) |
+| `rules` | array | [] | Architecture linting rules |
 
 ### Coupling Configuration
 
@@ -360,3 +360,186 @@ Most modern editors (VS Code, Rider, Visual Studio) will provide:
 - Autocompletion for property names
 - Validation of property values
 - Documentation on hover
+
+## Architecture Linting Rules
+
+Architecture linting enforces dependency constraints in your codebase. Rules are evaluated against the coupling analysis results.
+
+### Rule Structure
+
+```json
+{
+  "rules": [
+    {
+      "id": "RULE-ID",
+      "description": "Human-readable description of the rule",
+      "severity": "error",
+      "enabled": true,
+      "from": "*",
+      "allow": ["Pattern1.*", "Pattern2.*"],
+      "disallow": ["BadPattern.*"],
+      "dependencyType": "any"
+    }
+  ]
+}
+```
+
+### Rule Properties
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `id` | string | (required) | Unique rule identifier |
+| `description` | string | - | Human-readable description shown in violations |
+| `severity` | string | "warning" | Rule severity: "error", "warning", or "info" |
+| `enabled` | boolean | true | Whether the rule is active |
+| `from` | string | "*" | Pattern matching source entities this rule applies to |
+| `allow` | array | [] | Allowed dependency patterns (allowlist mode) |
+| `disallow` | array | [] | Disallowed dependency patterns (blocklist mode) |
+| `dependencyType` | string | "any" | Type filter: "any", "project", "namespace", "type" |
+
+### Rule Modes
+
+#### Disallow Mode (Blocklist)
+
+Specify patterns that are forbidden:
+
+```json
+{
+  "id": "NO-LEGACY",
+  "description": "Do not use legacy library",
+  "severity": "error",
+  "disallow": ["LegacyLib.*"]
+}
+```
+
+#### Allow Mode (Allowlist)
+
+Specify only allowed patterns (anything else is a violation):
+
+```json
+{
+  "id": "CORE-DEPS",
+  "description": "Core may only use approved dependencies",
+  "severity": "error",
+  "from": "MyApp.Core.*",
+  "allow": ["MyApp.*", "System*", "Microsoft.Extensions*"]
+}
+```
+
+### Pattern Matching
+
+Patterns use wildcard matching:
+- `*` matches any characters (including `.`)
+- `?` matches a single character
+- Matching is case-insensitive
+
+Examples:
+- `System*` matches `System`, `System.Linq`, `System.Text.Json`
+- `*.Tests` matches `MyApp.Tests`, `Core.Tests`
+- `MyApp.Core.*` matches `MyApp.Core.Services`, `MyApp.Core.Models`
+
+### Severity Levels
+
+| Severity | Exit Code | Description |
+|----------|-----------|-------------|
+| `error` | Non-zero (1) | Causes build/CI failure |
+| `warning` | Zero (0) | Reported but doesn't fail |
+| `info` | Zero (0) | Informational only |
+
+### Common Architecture Rules
+
+#### Layer Separation
+
+```json
+{
+  "rules": [
+    {
+      "id": "UI-NO-DB",
+      "description": "UI layer must not access database directly",
+      "severity": "error",
+      "from": "*.UI*",
+      "disallow": ["*.Data*", "*.Database*", "EntityFramework*"]
+    },
+    {
+      "id": "DOMAIN-NO-INFRA",
+      "description": "Domain layer must not depend on infrastructure",
+      "severity": "error",
+      "from": "*.Domain*",
+      "disallow": ["*.Infrastructure*", "*.Data*"]
+    }
+  ]
+}
+```
+
+#### Approved Dependencies Only
+
+```json
+{
+  "rules": [
+    {
+      "id": "CORE-APPROVED-ONLY",
+      "description": "Core library may only use approved packages",
+      "severity": "error",
+      "from": "MyCompany.Core.*",
+      "dependencyType": "namespace",
+      "allow": [
+        "MyCompany.*",
+        "System*",
+        "Microsoft.Extensions*"
+      ]
+    }
+  ]
+}
+```
+
+#### Banned Libraries
+
+```json
+{
+  "rules": [
+    {
+      "id": "NO-NEWTONSOFT",
+      "description": "Use System.Text.Json instead of Newtonsoft.Json",
+      "severity": "error",
+      "disallow": ["Newtonsoft.*"]
+    },
+    {
+      "id": "NO-ASPNET",
+      "description": "This is a CLI tool, not a web application",
+      "severity": "error",
+      "disallow": ["Microsoft.AspNetCore*"]
+    }
+  ]
+}
+```
+
+### Dogfooding Example
+
+StructuraLens uses its own linting. See the project's `structuralens.json`:
+
+```json
+{
+  "rules": [
+    {
+      "id": "CORE-NO-CLI",
+      "description": "Core library must not depend on CLI",
+      "severity": "error",
+      "from": "StructuraLens.Core.*",
+      "disallow": ["StructuraLens.Cli*"]
+    },
+    {
+      "id": "CORE-ALLOWED-PACKAGES",
+      "description": "Core library may only use approved packages",
+      "severity": "error",
+      "from": "StructuraLens.Core.*",
+      "dependencyType": "namespace",
+      "allow": [
+        "StructuraLens.Core.*",
+        "Microsoft.CodeAnalysis*",
+        "Microsoft.Build*",
+        "System*"
+      ]
+    }
+  ]
+}
+```

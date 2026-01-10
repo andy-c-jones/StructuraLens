@@ -156,7 +156,7 @@ public class OutputConfig
 }
 
 /// <summary>
-/// Architecture rule for future use.
+/// Architecture rule defining allowed or disallowed dependencies.
 /// </summary>
 public class ArchitectureRule
 {
@@ -167,8 +167,68 @@ public class ArchitectureRule
     public string? Description { get; set; }
 
     [JsonPropertyName("severity")]
-    public string Severity { get; set; } = "warning";
+    public RuleSeverity Severity { get; set; } = RuleSeverity.Warning;
 
     [JsonPropertyName("enabled")]
     public bool Enabled { get; set; } = true;
+
+    /// <summary>
+    /// The source pattern - which entities this rule applies FROM.
+    /// Supports wildcards (* and ?).
+    /// </summary>
+    [JsonPropertyName("from")]
+    public string From { get; set; } = "*";
+
+    /// <summary>
+    /// Allowed dependency patterns. If specified, only these dependencies are permitted.
+    /// </summary>
+    [JsonPropertyName("allow")]
+    public List<string> Allow { get; set; } = [];
+
+    /// <summary>
+    /// Disallowed dependency patterns. These dependencies are forbidden.
+    /// </summary>
+    [JsonPropertyName("disallow")]
+    public List<string> Disallow { get; set; } = [];
+
+    /// <summary>
+    /// What type of dependency this rule applies to.
+    /// </summary>
+    [JsonPropertyName("dependencyType")]
+    public RuleDependencyType DependencyType { get; set; } = RuleDependencyType.Any;
+}
+
+/// <summary>
+/// Rule severity levels.
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum RuleSeverity
+{
+    /// <summary>Informational only, does not affect exit code.</summary>
+    Info,
+    
+    /// <summary>Warning, does not fail the build by default.</summary>
+    Warning,
+    
+    /// <summary>Error, causes non-zero exit code.</summary>
+    Error
+}
+
+/// <summary>
+/// Types of dependencies a rule can apply to.
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum RuleDependencyType
+{
+    /// <summary>Apply to all dependency types.</summary>
+    Any,
+    
+    /// <summary>Apply only to project references.</summary>
+    Project,
+    
+    /// <summary>Apply only to namespace references.</summary>
+    Namespace,
+    
+    /// <summary>Apply only to type references.</summary>
+    Type
 }

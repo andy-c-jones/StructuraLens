@@ -81,13 +81,19 @@ public sealed class SolutionAnalyzer
         // Analyze coupling across the entire solution with configuration
         var couplingAnalysis = await CouplingAnalyzer.AnalyzeSolutionAsync(solution, config, cancellationToken);
 
+        // Run architecture linting if rules are configured
+        var lintingResults = config.Rules.Count > 0
+            ? ArchitectureLinter.Evaluate(couplingAnalysis, config.Rules)
+            : null;
+
         return new AnalysisReport(
             SolutionPath: fullPath,
             AnalyzedAt: DateTime.UtcNow,
             Projects: projectMetricsList,
             Warnings: _warnings)
         {
-            CouplingAnalysis = couplingAnalysis
+            CouplingAnalysis = couplingAnalysis,
+            LintingResults = lintingResults
         };
     }
 
@@ -125,13 +131,19 @@ public sealed class SolutionAnalyzer
         // Analyze internal coupling within the project with configuration
         var couplingAnalysis = await CouplingAnalyzer.AnalyzeProjectCouplingAsync(project, config, cancellationToken);
 
+        // Run architecture linting if rules are configured
+        var lintingResults = config.Rules.Count > 0
+            ? ArchitectureLinter.Evaluate(couplingAnalysis, config.Rules)
+            : null;
+
         return new AnalysisReport(
             SolutionPath: fullPath,
             AnalyzedAt: DateTime.UtcNow,
             Projects: [projectMetrics],
             Warnings: _warnings)
         {
-            CouplingAnalysis = couplingAnalysis
+            CouplingAnalysis = couplingAnalysis,
+            LintingResults = lintingResults
         };
     }
 

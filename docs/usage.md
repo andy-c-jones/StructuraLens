@@ -229,8 +229,45 @@ MI = max(0, 100 * (171 - 5.2*ln(V) - 0.23*CC - 16.2*ln(LOC)) / 171)
 
 | Code | Meaning |
 |------|---------|
-| 0 | Success |
-| 1 | Error (file not found, analysis failure, etc.) |
+| 0 | Success (no linting errors) |
+| 1 | Error (file not found, analysis failure, or linting errors) |
+
+**Note:** Architecture linting violations with `error` severity cause exit code 1. Warnings and info do not affect the exit code.
+
+## Architecture Linting
+
+StructuraLens can enforce dependency rules via configuration. See [Configuration](configuration.md#architecture-linting-rules) for details.
+
+When linting rules are configured, the summary output includes:
+
+```
+=== Architecture Linting ===
+Rules Evaluated: 5
+Errors: 0
+Warnings: 2
+Info: 0
+Status: PASSED
+
+Violations:
+  [WARNING] NO-LEGACY: Avoid legacy library
+         MyApp.Services → LegacyLib.Core
+```
+
+### Example: Enforce Layer Architecture
+
+```json
+{
+  "rules": [
+    {
+      "id": "UI-NO-DB",
+      "description": "UI layer must not access database directly",
+      "severity": "error",
+      "from": "*.UI*",
+      "disallow": ["*.Data*", "EntityFramework*"]
+    }
+  ]
+}
+```
 
 ## Tips for Best Results
 
