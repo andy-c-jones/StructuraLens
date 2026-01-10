@@ -64,6 +64,7 @@ public static class HtmlReportGenerator
         sb.AppendLine(GenerateTabs());
         sb.AppendLine(GenerateTabContents());
         sb.AppendLine("  </div>");
+        sb.AppendLine("  <footer class=\"copyright\">&copy; " + DateTime.UtcNow.Year + " Dark Peak Development. All rights reserved.</footer>");
         sb.AppendLine($"  <script>const reportData = {compactJson};</script>");
         sb.AppendLine($"  <script>const diagnosticsData = {diagnosticsJson};</script>");
         sb.AppendLine(GenerateJavaScript());
@@ -159,6 +160,7 @@ public static class HtmlReportGenerator
     .mi-good { background: var(--success); }
     .mi-medium { background: var(--warning); }
     .mi-poor { background: var(--error); }
+    .copyright { text-align: center; padding: 20px; color: var(--text-muted); font-size: 12px; border-top: 1px solid var(--border); margin-top: 30px; }
     @media (max-width: 768px) {
       .cards { grid-template-columns: repeat(2, 1fr); }
       .header { flex-direction: column; align-items: flex-start; gap: 10px; }
