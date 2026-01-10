@@ -9,7 +9,7 @@ permissions:
   id-token: write
 
 jobs:
-  release:
+  release-and-deploy:
     runs-on: ubuntu-latest
     environment: production
 
@@ -34,14 +34,10 @@ jobs:
         run: |
           npx semantic-release
 
-  docker:
-    needs: release
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      - name: Get latest tag
+        id: get_tag
+        run: |
+          echo "tag=$(git describe --tags --abbrev=0)" >> $GITHUB_OUTPUT
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
@@ -55,11 +51,6 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Get latest tag
-        id: get_tag
-        run: |
-          echo "tag=$(git describe --tags --abbrev=0)" >> $GITHUB_OUTPUT
 
       - name: Build and push image
         env:
