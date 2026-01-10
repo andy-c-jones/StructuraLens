@@ -141,6 +141,63 @@ structuralens analyze MyProject.sln --out report.json
 }
 ```
 
+### Compact Format (.slr)
+
+The compact format is optimized for size and machine parsing. It uses short property names and includes graph data for visualization with d3.js or similar libraries. Use the `.slr` (StructuraLens Report) extension.
+
+```bash
+structuralens analyze MyProject.sln --format compact --out report.slr
+```
+
+**Size comparison:** ~99% smaller than full JSON (1KB vs 1.4MB for a typical project)
+
+See [Compact Format Specification](compact-format.md) for complete documentation.
+
+```json
+{
+  "v": 1,
+  "p": "/path/to/MyProject.sln",
+  "t": 1768063200000,
+  "prj": [
+    {"n":"MyProject.Core","tc":20,"mc":100,"cc":150,"loc":500,"dit":3,"mi":72.5,"ce":5,"ca":15,"i":0.25}
+  ],
+  "g": {
+    "p": {
+      "n": [[0,"MyProject.Core",500],[1,"MyProject.Api",300]],
+      "e": [[1,0,1]]
+    },
+    "ns": {
+      "n": [[0,"MyProject.Core.Services",200]],
+      "e": []
+    }
+  },
+  "l": {"r":5,"e":0,"w":0,"ok":true}
+}
+```
+
+#### Compact Format Schema
+
+| Field | Description |
+|-------|-------------|
+| `v` | Format version |
+| `p` | Solution/project path |
+| `t` | Timestamp (Unix milliseconds) |
+| `prj` | Array of project metrics |
+| `g` | Graph data for visualization |
+| `g.p` | Project dependency graph (nodes + edges) |
+| `g.ns` | Namespace dependency graph (internal only) |
+| `l` | Linting results |
+
+**Project metrics (`prj[]`):**
+- `n`: Name, `tc`: Type count, `mc`: Method count
+- `cc`: Cyclomatic complexity, `loc`: Lines of code
+- `dit`: Max depth of inheritance, `mi`: Avg maintainability index
+- `ce`: Efferent coupling, `ca`: Afferent coupling, `i`: Instability
+
+**Graph nodes (`g.p.n`, `g.ns.n`):** `[id, name, size]`
+
+**Graph edges (`g.p.e`, `g.ns.e`):** `[sourceId, targetId, weight]`
+
 ### Summary Format
 
 Human-readable summary for quick analysis:

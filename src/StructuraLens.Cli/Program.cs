@@ -3,17 +3,18 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using StructuraLens.Core.Analysis;
 using StructuraLens.Core.Configuration;
+using StructuraLens.Core.Export;
 using StructuraLens.Core.Models;
 
 // Create options
 var outputOption = new Option<string?>("--out", "-o")
 {
-    Description = "Output file path for the JSON report"
+    Description = "Output file path for the report"
 };
 
 var formatOption = new Option<string>("--format", "-f")
 {
-    Description = "Output format (json, summary)",
+    Description = "Output format: json (full), compact (optimized), summary (human-readable)",
     DefaultValueFactory = _ => "json"
 };
 
@@ -118,6 +119,27 @@ analyzeCommand.SetAction(async (parseResult, cancellationToken) =>
         {
             PrintSummary(report);
         }
+        else if (format == "compact")
+        {
+            var compactReport = CompactReportExporter.Export(report);
+            var jsonOptions = new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+            };
+
+            var json = JsonSerializer.Serialize(compactReport, jsonOptions);
+
+            if (!string.IsNullOrEmpty(output))
+            {
+                await File.WriteAllTextAsync(output, json, cancellationToken);
+                Console.WriteLine($"Compact report written to: {output} ({json.Length:N0} bytes)");
+            }
+            else
+            {
+                Console.WriteLine(json);
+            }
+        }
         else
         {
             var jsonOptions = new JsonSerializerOptions
@@ -167,17 +189,22 @@ rootCommand.SetAction(_ =>
     Console.WriteLine("Usage: structuralens analyze <path> [options]");
     Console.WriteLine();
     Console.WriteLine("Options:");
-    Console.WriteLine("  --out, -o <file>              Output file path for the JSON report");
-    Console.WriteLine("  --format, -f <json|summary>   Output format (default: json)");
-    Console.WriteLine("  --coupling-mode, -c <mode>    Coupling mode: internal, filtered, all (default: filtered)");
-    Console.WriteLine("  --config <path>               Path to structuralens.json configuration file");
+    Console.WriteLine("  --out, -o <file>                   Output file path for the report");
+    Console.WriteLine("  --format, -f <json|compact|summary> Output format (default: json)");
+    Console.WriteLine("  --coupling-mode, -c <mode>         Coupling mode: internal, filtered, all");
+    Console.WriteLine("  --config <path>                    Path to structuralens.json configuration file");
+    Console.WriteLine();
+    Console.WriteLine("Output formats:");
+    Console.WriteLine("  json     - Full JSON report with all details (human-readable)");
+    Console.WriteLine("  compact  - Optimized .slr format for tooling (99% smaller, includes graph data)");
+    Console.WriteLine("  summary  - Human-readable console summary");
     Console.WriteLine();
     Console.WriteLine("Coupling modes:");
     Console.WriteLine("  internal  - Only track dependencies between your own code");
     Console.WriteLine("  filtered  - Track external deps but exclude System.*/Microsoft.* (default)");
     Console.WriteLine("  all       - Track all dependencies including framework libraries");
     Console.WriteLine();
-    Console.WriteLine("Run this tool after building your solution for full analysis.");
+    Console.WriteLine("Configuration is auto-discovered from structuralens.json in the project directory.");
     return 0;
 });
 
