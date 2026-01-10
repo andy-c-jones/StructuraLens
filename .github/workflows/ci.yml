@@ -48,12 +48,12 @@ jobs:
           chmod +x ./artifacts/publish/linux-x64/StructuraLens.Cli
           ./artifacts/publish/linux-x64/StructuraLens.Cli analyze . --out ./artifacts/self-analysis-report.json || true
 
-      - name: Upload published artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: structuralens-linux-x64
-          path: ./artifacts/publish/linux-x64
-
+ #     - name: Upload published artifacts
+ #       uses: actions/upload-artifact@v4
+ #       with:
+ #         name: structuralens-linux-x64
+ #         path: ./artifacts/publish/linux-x64
+ #
       - name: Upload self-analysis report
         uses: actions/upload-artifact@v4
         with:
@@ -69,28 +69,28 @@ jobs:
         run: |
           docker save structura-lens:${{ github.sha }} -o image.tar
 
-      - name: Upload Docker image tar
-        uses: actions/upload-artifact@v4
-        with:
-          name: docker-image-tar
-          path: image.tar
+   #   - name: Upload Docker image tar
+   #     uses: actions/upload-artifact@v4
+   #     with:
+   #       name: docker-image-tar
+   #       path: image.tar
 
-      - name: Login to GHCR
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: docker/login-action@v2
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+   #   - name: Login to GHCR
+   #     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+   #     uses: docker/login-action@v2
+   #     with:
+   #       registry: ghcr.io
+   #       username: ${{ github.actor }}
+   #       password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Tag and push image to GHCR
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          IMAGE_NAME=ghcr.io/${{ github.repository_owner }}/structura-lens
-          docker tag structura-lens:${{ github.sha }} ${IMAGE_NAME}:$(echo ${{ github.sha }} | cut -c1-7)
-          docker tag structura-lens:${{ github.sha }} ${IMAGE_NAME}:latest
-          docker push ${IMAGE_NAME}:$(echo ${{ github.sha }} | cut -c1-7)
-          docker push ${IMAGE_NAME}:latest
+   #   - name: Tag and push image to GHCR
+   #     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+   #     run: |
+   #       IMAGE_NAME=ghcr.io/${{ github.repository_owner }}/structura-lens
+   #       docker tag structura-lens:${{ github.sha }} ${IMAGE_NAME}:$(echo ${{ github.sha }} | cut -c1-7)
+   #       docker tag structura-lens:${{ github.sha }} ${IMAGE_NAME}:latest
+   #       docker push ${IMAGE_NAME}:$(echo ${{ github.sha }} | cut -c1-7)
+   #       docker push ${IMAGE_NAME}:latest
 
   benchmark:
     runs-on: ubuntu-latest
