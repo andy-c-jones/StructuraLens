@@ -14,7 +14,7 @@ var outputOption = new Option<string?>("--out", "-o")
 
 var formatOption = new Option<string>("--format", "-f")
 {
-    Description = "Output format: json (full), compact (optimized), summary (human-readable)",
+    Description = "Output format: json, compact, html, summary",
     DefaultValueFactory = _ => "json"
 };
 
@@ -138,6 +138,20 @@ analyzeCommand.SetAction(async (parseResult, cancellationToken) =>
             else
             {
                 Console.WriteLine(json);
+            }
+        }
+        else if (format == "html")
+        {
+            var html = HtmlReportGenerator.Generate(report);
+
+            if (!string.IsNullOrEmpty(output))
+            {
+                await File.WriteAllTextAsync(output, html, cancellationToken);
+                Console.WriteLine($"HTML report written to: {output} ({html.Length:N0} bytes)");
+            }
+            else
+            {
+                Console.WriteLine(html);
             }
         }
         else

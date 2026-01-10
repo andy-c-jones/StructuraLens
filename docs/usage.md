@@ -223,6 +223,23 @@ See [Compact Format Specification](compact-format.md) for complete documentation
 
 **Graph edges (`g.p.e`, `g.ns.e`):** `[sourceId, targetId, weight]`
 
+### HTML Format
+
+Interactive single-file HTML report with tabs, filters, and dependency diagrams. Requires no server - just open in a browser.
+
+```bash
+structuralens analyze MyProject.sln --format html --out report.html
+```
+
+**Features:**
+- **Summary tab**: Overview cards with key metrics
+- **Projects tab**: Filterable project metrics table
+- **Coupling tab**: Interactive D3.js force-directed graphs for project and namespace dependencies
+- **Linting tab**: Architecture rule violations
+- **Diagnostics tab**: Compiler errors and warnings with filters
+
+The HTML report loads D3.js from CDN for the dependency graphs. All other CSS and JavaScript is embedded inline.
+
 ### Summary Format
 
 Human-readable summary for quick analysis:
