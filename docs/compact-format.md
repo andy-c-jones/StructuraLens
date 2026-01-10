@@ -56,7 +56,9 @@ Each project is represented as an object with aggregated metrics:
   "mi": 72.5,
   "ce": 5,
   "ca": 12,
-  "i": 0.29
+  "i": 0.29,
+  "err": 0,
+  "warn": 2
 }
 ```
 
@@ -72,6 +74,8 @@ Each project is represented as an object with aggregated metrics:
 | `ce` | `int` | Efferent coupling (outbound dependencies) |
 | `ca` | `int` | Afferent coupling (inbound dependencies) |
 | `i` | `double` | Instability ratio (0=stable, 1=unstable) |
+| `err` | `int` | Compiler error count (omitted if 0) |
+| `warn` | `int` | Compiler warning count (omitted if 0) |
 
 #### Optional: Type Details (`types`)
 

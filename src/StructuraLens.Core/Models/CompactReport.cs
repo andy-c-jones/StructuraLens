@@ -76,6 +76,16 @@ public record CompactProject
     [JsonPropertyName("i")]
     public double Instability { get; init; }
 
+    /// <summary>Compiler errors count.</summary>
+    [JsonPropertyName("err")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public int Errors { get; init; }
+
+    /// <summary>Compiler warnings count.</summary>
+    [JsonPropertyName("warn")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public int Warnings { get; init; }
+
     /// <summary>Type metrics (optional, for detailed reports).</summary>
     [JsonPropertyName("types")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

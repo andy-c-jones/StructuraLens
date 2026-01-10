@@ -62,6 +62,8 @@ public static class CompactReportExporter
                 EfferentCoupling = projectCoupling?.EfferentCoupling ?? 0,
                 AfferentCoupling = projectCoupling?.AfferentCoupling ?? 0,
                 Instability = Math.Round(projectCoupling?.Instability ?? 0, 2),
+                Errors = project.Diagnostics?.ErrorCount ?? 0,
+                Warnings = project.Diagnostics?.WarningCount ?? 0,
                 Types = includeTypes ? ExportTypes(project.Types, includeMethods) : null
             };
 

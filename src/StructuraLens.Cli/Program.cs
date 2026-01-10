@@ -334,6 +334,30 @@ static void PrintSummary(AnalysisReport report)
             Console.WriteLine($"  Avg Maintainability Index: {avgMI:F1}");
         }
 
+        // Show diagnostics for this project
+        if (project.Diagnostics != null)
+        {
+            var diag = project.Diagnostics;
+            if (diag.ErrorCount > 0 || diag.WarningCount > 0)
+            {
+                Console.Write("  Diagnostics: ");
+                if (diag.ErrorCount > 0)
+                {
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.Write($"{diag.ErrorCount} errors");
+                    Console.ResetColor();
+                    if (diag.WarningCount > 0) Console.Write(", ");
+                }
+                if (diag.WarningCount > 0)
+                {
+                    Console.ForegroundColor = ConsoleColor.Yellow;
+                    Console.Write($"{diag.WarningCount} warnings");
+                    Console.ResetColor();
+                }
+                Console.WriteLine();
+            }
+        }
+
         // Show coupling for this project
         if (report.CouplingAnalysis != null)
         {
