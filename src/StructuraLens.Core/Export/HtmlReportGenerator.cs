@@ -419,39 +419,88 @@ public static class HtmlReportGenerator
         return;
       }
 
-      const nodes = graphData.n.map(([id, name, size]) => ({ id, name, size: Math.max(size, 100) }));
       const links = graphData.e.map(([source, target, weight]) => ({ source, target, weight }));
+      
+      // Count outbound dependencies for each node (how many things it depends on)
+      const outboundCounts = {};
+      links.forEach(l => {
+        outboundCounts[l.source] = (outboundCounts[l.source] || 0) + l.weight;
+      });
+      
+      // Calculate min/max for relative sizing
+      const counts = Object.values(outboundCounts);
+      const minCount = Math.min(...counts, 0);
+      const maxCount = Math.max(...counts, 1);
+      const minRadius = 15;
+      const maxRadius = 200;
+      
+      const getRadius = (nodeId) => {
+        const count = outboundCounts[nodeId] || 0;
+        if (maxCount === minCount) return (minRadius + maxRadius) / 2;
+        const ratio = (count - minCount) / (maxCount - minCount);
+        return minRadius + ratio * (maxRadius - minRadius);
+      };
 
-      const svg = d3.select(`#${containerId}`).append('svg').attr('viewBox', [0, 0, width, height]);
+      const nodes = graphData.n.map(([id, name, size]) => ({ 
+        id, name, size, 
+        radius: getRadius(id),
+        depCount: outboundCounts[id] || 0
+      }));
+
+      const svg = d3.select(`#${containerId}`).append('svg')
+        .attr('width', width)
+        .attr('height', height);
+      
+      // Add zoom behavior
+      const g = svg.append('g');
+      const zoom = d3.zoom()
+        .scaleExtent([0.1, 4])
+        .on('zoom', (e) => g.attr('transform', e.transform));
+      svg.call(zoom);
+      
+      // Calculate average radius for link distance scaling
+      const avgRadius = nodes.reduce((sum, n) => sum + n.radius, 0) / nodes.length;
       
       const simulation = d3.forceSimulation(nodes)
-        .force('link', d3.forceLink(links).id(d => d.id).distance(150))
-        .force('charge', d3.forceManyBody().strength(-400))
+        .force('link', d3.forceLink(links).id(d => d.id)
+          .distance(d => {
+            const sourceNode = nodes.find(n => n.id === (d.source.id ?? d.source));
+            const targetNode = nodes.find(n => n.id === (d.target.id ?? d.target));
+            const sourceR = sourceNode?.radius || avgRadius;
+            const targetR = targetNode?.radius || avgRadius;
+            return sourceR + targetR + 100; // Base gap between node edges
+          }))
+        .force('charge', d3.forceManyBody().strength(-800).distanceMax(600))
         .force('center', d3.forceCenter(width / 2, height / 2))
-        .force('collision', d3.forceCollide().radius(d => Math.sqrt(d.size) / 3 + 20));
+        .force('collision', d3.forceCollide().radius(d => d.radius + 30).strength(1))
+        .force('x', d3.forceX(width / 2).strength(0.03))
+        .force('y', d3.forceY(height / 2).strength(0.03));
 
-      // Arrow marker
+      // Arrow marker - fixed size regardless of stroke width
       svg.append('defs').append('marker')
         .attr('id', `arrow-${containerId}`)
         .attr('viewBox', '0 -5 10 10')
-        .attr('refX', 20)
+        .attr('refX', 10)
         .attr('refY', 0)
-        .attr('markerWidth', 6)
-        .attr('markerHeight', 6)
+        .attr('markerWidth', 10)
+        .attr('markerHeight', 10)
+        .attr('markerUnits', 'userSpaceOnUse')
         .attr('orient', 'auto')
         .append('path')
-        .attr('fill', '#666')
+        .attr('fill', 'var(--accent)')
         .attr('d', 'M0,-5L10,0L0,5');
 
-      const link = svg.append('g')
+      const link = g.append('g')
         .selectAll('line')
         .data(links)
         .join('line')
         .attr('class', 'link')
-        .attr('stroke-width', d => Math.min(d.weight, 5))
+        .attr('stroke', 'var(--accent)')
+        .attr('stroke-opacity', 0.6)
+        .attr('stroke-width', d => Math.min(Math.max(d.weight / 2, 1), 4))
         .attr('marker-end', `url(#arrow-${containerId})`);
 
-      const node = svg.append('g')
+      const node = g.append('g')
         .selectAll('g')
         .data(nodes)
         .join('g')
@@ -462,18 +511,31 @@ public static class HtmlReportGenerator
           .on('end', (e, d) => { if (!e.active) simulation.alphaTarget(0); d.fx = null; d.fy = null; }));
 
       node.append('circle')
-        .attr('r', d => Math.sqrt(d.size) / 3 + 10)
+        .attr('r', d => d.radius)
         .attr('fill', '#1f3460');
 
       node.append('text')
         .attr('dy', 4)
         .attr('text-anchor', 'middle')
+        .attr('font-size', d => Math.max(9, Math.min(12, d.radius / 3)))
         .text(d => d.name);
 
-      node.append('title').text(d => `${d.name}\nLOC: ${d.size}`);
+      node.append('title').text(d => `${d.name}\nOutbound deps: ${d.depCount}\nLOC: ${d.size}`);
 
+      // Position arrows at edge of target circle
       simulation.on('tick', () => {
-        link.attr('x1', d => d.source.x).attr('y1', d => d.source.y).attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+        link.each(function(d) {
+          const dx = d.target.x - d.source.x;
+          const dy = d.target.y - d.source.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist === 0) return;
+          const targetRadius = d.target.radius || 20;
+          const ratio = (dist - targetRadius - 5) / dist;
+          d.targetX = d.source.x + dx * ratio;
+          d.targetY = d.source.y + dy * ratio;
+        });
+        link.attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+            .attr('x2', d => d.targetX || d.target.x).attr('y2', d => d.targetY || d.target.y);
         node.attr('transform', d => `translate(${d.x},${d.y})`);
       });
     }
