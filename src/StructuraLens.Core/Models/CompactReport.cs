@@ -31,6 +31,11 @@ public record CompactReport
     /// <summary>Linting results.</summary>
     [JsonPropertyName("l")]
     public CompactLinting? Linting { get; init; }
+
+    /// <summary>Roslyn diagnostics (compiler errors, warnings, etc.).</summary>
+    [JsonPropertyName("diag")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public CompactDiagnostics? Diagnostics { get; init; }
 }
 
 /// <summary>Compact project metrics.</summary>
@@ -200,4 +205,25 @@ public record CompactLinting
     [JsonPropertyName("v")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<object[]>? Violations { get; init; }
+}
+
+/// <summary>Compact diagnostics (Roslyn compiler issues).</summary>
+public record CompactDiagnostics
+{
+    /// <summary>Total error count.</summary>
+    [JsonPropertyName("e")]
+    public int Errors { get; init; }
+
+    /// <summary>Total warning count.</summary>
+    [JsonPropertyName("w")]
+    public int Warnings { get; init; }
+
+    /// <summary>Total info count.</summary>
+    [JsonPropertyName("i")]
+    public int Info { get; init; }
+
+    /// <summary>All diagnostics: [project, id, severity, message, file, line, column].</summary>
+    /// <remarks>Severity: 0=hidden, 1=info, 2=warning, 3=error.</remarks>
+    [JsonPropertyName("d")]
+    public IReadOnlyList<object[]> Items { get; init; } = [];
 }

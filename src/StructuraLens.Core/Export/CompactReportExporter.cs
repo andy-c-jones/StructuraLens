@@ -22,6 +22,7 @@ public static class CompactReportExporter
         var projects = ExportProjects(report, includeTypeDetails, includeMethodDetails);
         var graph = BuildGraph(report);
         var linting = ExportLinting(report.LintingResults);
+        var diagnostics = ExportDiagnostics(report);
 
         return new CompactReport
         {
@@ -30,7 +31,8 @@ public static class CompactReportExporter
             Timestamp = new DateTimeOffset(report.AnalyzedAt).ToUnixTimeMilliseconds(),
             Projects = projects,
             Graph = graph,
-            Linting = linting
+            Linting = linting,
+            Diagnostics = diagnostics
         };
     }
 
@@ -273,6 +275,41 @@ public static class CompactReportExporter
         }
 
         return shortName;
+    }
+
+    private static CompactDiagnostics? ExportDiagnostics(AnalysisReport report)
+    {
+        var allDiagnostics = report.Projects
+            .Where(p => p.Diagnostics != null)
+            .SelectMany(p => p.Diagnostics!.Diagnostics.Select(d => new { Project = p.Name, Diagnostic = d }))
+            .ToList();
+
+        if (allDiagnostics.Count == 0) return null;
+
+        var items = allDiagnostics.Select(x => new object[]
+        {
+            x.Project,
+            x.Diagnostic.Id,
+            x.Diagnostic.Severity switch
+            {
+                DiagnosticLevel.Error => 3,
+                DiagnosticLevel.Warning => 2,
+                DiagnosticLevel.Info => 1,
+                _ => 0
+            },
+            x.Diagnostic.Message,
+            x.Diagnostic.FilePath,
+            x.Diagnostic.Line,
+            x.Diagnostic.Column
+        }).ToList();
+
+        return new CompactDiagnostics
+        {
+            Errors = allDiagnostics.Count(x => x.Diagnostic.Severity == DiagnosticLevel.Error),
+            Warnings = allDiagnostics.Count(x => x.Diagnostic.Severity == DiagnosticLevel.Warning),
+            Info = allDiagnostics.Count(x => x.Diagnostic.Severity == DiagnosticLevel.Info),
+            Items = items
+        };
     }
 
     private static string GetNamespace(string fullTypeName)

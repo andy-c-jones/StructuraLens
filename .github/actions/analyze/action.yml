@@ -29,8 +29,15 @@ runs:
     - name: Run StructuraLens analysis
       shell: bash
       run: |
+        # Mount NuGet cache if available to avoid re-downloading packages
+        NUGET_MOUNT=""
+        if [ -d "$HOME/.nuget/packages" ]; then
+          NUGET_MOUNT="-v $HOME/.nuget/packages:/root/.nuget/packages:ro"
+        fi
+        
         docker run --rm \
           -v "${{ github.workspace }}:/workspace" \
+          $NUGET_MOUNT \
           -w /workspace \
           ${{ inputs.image }} \
           analyze "${{ inputs.solution }}" \

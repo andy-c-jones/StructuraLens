@@ -59,6 +59,9 @@ public sealed class SolutionAnalyzer
             throw new FileNotFoundException($"Solution file not found: {fullPath}");
         }
 
+        // Restore NuGet packages to ensure all references are available
+        await RestorePackagesAsync(fullPath, cancellationToken);
+
         using var workspace = MSBuildWorkspace.Create();
         workspace.RegisterWorkspaceFailedHandler(e =>
         {
@@ -117,6 +120,9 @@ public sealed class SolutionAnalyzer
         {
             throw new FileNotFoundException($"Project file not found: {fullPath}");
         }
+
+        // Restore NuGet packages to ensure all references are available
+        await RestorePackagesAsync(fullPath, cancellationToken);
 
         using var workspace = MSBuildWorkspace.Create();
         workspace.RegisterWorkspaceFailedHandler(e =>
@@ -408,5 +414,23 @@ public sealed class SolutionAnalyzer
             LinesOfExecutableCode: loc,
             HalsteadVolume: halstead.Volume,
             MaintainabilityIndex: mi);
+    }
+
+    private static async Task RestorePackagesAsync(string projectOrSolutionPath, CancellationToken cancellationToken)
+    {
+        var startInfo = new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = "dotnet",
+            Arguments = $"restore \"{projectOrSolutionPath}\" --verbosity quiet",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        using var process = System.Diagnostics.Process.Start(startInfo);
+        if (process == null) return;
+
+        await process.WaitForExitAsync(cancellationToken);
     }
 }
