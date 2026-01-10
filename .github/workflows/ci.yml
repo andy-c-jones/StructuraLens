@@ -108,13 +108,4 @@ jobs:
    #       docker push ${IMAGE_NAME}:$(echo ${{ github.sha }} | cut -c1-7)
    #       docker push ${IMAGE_NAME}:latest
 
-  benchmark:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
 
-      - name: Run sample analysis for benchmarks
-        run: |
-          echo 'Run benchmarks or sample analyses here'
