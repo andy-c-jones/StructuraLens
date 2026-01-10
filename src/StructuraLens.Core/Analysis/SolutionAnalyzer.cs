@@ -123,89 +123,29 @@ public sealed class SolutionAnalyzer
                 continue;
 
             var root = await syntaxTree.GetRootAsync(cancellationToken);
+            
+            // Analyze traditional type declarations
             var typeDeclarations = root.DescendantNodes()
                 .OfType<TypeDeclarationSyntax>();
 
             foreach (var typeDecl in typeDeclarations)
             {
-                var typeSymbol = semanticModel.GetDeclaredSymbol(typeDecl) as INamedTypeSymbol;
-                var dit = DepthOfInheritanceCalculator.Calculate(typeSymbol);
+                var typeMetrics = AnalyzeTypeDeclaration(typeDecl, semanticModel, document.FilePath ?? "");
+                typeMetricsList.Add(typeMetrics);
+            }
 
-                var methodMetricsList = new List<MethodMetrics>();
+            // Analyze top-level statements (C# 9+ feature)
+            var topLevelStatements = root.DescendantNodes()
+                .OfType<GlobalStatementSyntax>()
+                .ToList();
 
-                var methods = typeDecl.DescendantNodes()
-                    .OfType<MethodDeclarationSyntax>();
-
-                foreach (var method in methods)
+            if (topLevelStatements.Count > 0)
+            {
+                var topLevelMetrics = AnalyzeTopLevelStatements(root, topLevelStatements, semanticModel, document.FilePath ?? "");
+                if (topLevelMetrics != null)
                 {
-                    var methodSymbol = semanticModel.GetDeclaredSymbol(method);
-                    var fullName = methodSymbol?.ToDisplayString() ?? method.Identifier.Text;
-
-                    var cc = method.Body != null || method.ExpressionBody != null
-                        ? CyclomaticComplexityCalculator.Calculate(method)
-                        : 1;
-
-                    var loc = method.Body != null
-                        ? LinesOfCodeCalculator.Calculate(method.Body)
-                        : (method.ExpressionBody != null ? 1 : 0);
-
-                    var halstead = HalsteadCalculator.Calculate(method);
-                    var mi = MaintainabilityIndexCalculator.Calculate(halstead.Volume, cc, loc);
-
-                    var lineSpan = method.GetLocation().GetLineSpan();
-
-                    methodMetricsList.Add(new MethodMetrics(
-                        FullName: fullName,
-                        FilePath: document.FilePath ?? "",
-                        StartLine: lineSpan.StartLinePosition.Line + 1,
-                        EndLine: lineSpan.EndLinePosition.Line + 1,
-                        CyclomaticComplexity: cc,
-                        LinesOfExecutableCode: loc,
-                        HalsteadVolume: halstead.Volume,
-                        MaintainabilityIndex: mi));
+                    typeMetricsList.Add(topLevelMetrics);
                 }
-
-                // Also analyze constructors, properties, etc.
-                var constructors = typeDecl.DescendantNodes()
-                    .OfType<ConstructorDeclarationSyntax>();
-
-                foreach (var ctor in constructors)
-                {
-                    var ctorSymbol = semanticModel.GetDeclaredSymbol(ctor);
-                    var fullName = ctorSymbol?.ToDisplayString() ?? $"{typeDecl.Identifier.Text}.ctor";
-
-                    var cc = ctor.Body != null || ctor.ExpressionBody != null
-                        ? CyclomaticComplexityCalculator.Calculate(ctor)
-                        : 1;
-
-                    var loc = ctor.Body != null
-                        ? LinesOfCodeCalculator.Calculate(ctor.Body)
-                        : (ctor.ExpressionBody != null ? 1 : 0);
-
-                    var halstead = HalsteadCalculator.Calculate(ctor);
-                    var mi = MaintainabilityIndexCalculator.Calculate(halstead.Volume, cc, loc);
-
-                    var lineSpan = ctor.GetLocation().GetLineSpan();
-
-                    methodMetricsList.Add(new MethodMetrics(
-                        FullName: fullName,
-                        FilePath: document.FilePath ?? "",
-                        StartLine: lineSpan.StartLinePosition.Line + 1,
-                        EndLine: lineSpan.EndLinePosition.Line + 1,
-                        CyclomaticComplexity: cc,
-                        LinesOfExecutableCode: loc,
-                        HalsteadVolume: halstead.Volume,
-                        MaintainabilityIndex: mi));
-                }
-
-                var lineSpanType = typeDecl.GetLocation().GetLineSpan();
-                var typeName = typeSymbol?.ToDisplayString() ?? typeDecl.Identifier.Text;
-
-                typeMetricsList.Add(new TypeMetrics(
-                    FullName: typeName,
-                    FilePath: document.FilePath ?? "",
-                    DepthOfInheritance: dit,
-                    Methods: methodMetricsList));
             }
         }
 
@@ -213,5 +153,169 @@ public sealed class SolutionAnalyzer
             Name: project.Name,
             FilePath: project.FilePath ?? "",
             Types: typeMetricsList);
+    }
+
+    private TypeMetrics AnalyzeTypeDeclaration(TypeDeclarationSyntax typeDecl, SemanticModel semanticModel, string filePath)
+    {
+        var typeSymbol = semanticModel.GetDeclaredSymbol(typeDecl) as INamedTypeSymbol;
+        var dit = DepthOfInheritanceCalculator.Calculate(typeSymbol);
+
+        var methodMetricsList = new List<MethodMetrics>();
+
+        var methods = typeDecl.DescendantNodes()
+            .OfType<MethodDeclarationSyntax>();
+
+        foreach (var method in methods)
+        {
+            var metrics = AnalyzeMethod(method, semanticModel, filePath);
+            methodMetricsList.Add(metrics);
+        }
+
+        var constructors = typeDecl.DescendantNodes()
+            .OfType<ConstructorDeclarationSyntax>();
+
+        foreach (var ctor in constructors)
+        {
+            var metrics = AnalyzeConstructor(ctor, typeDecl, semanticModel, filePath);
+            methodMetricsList.Add(metrics);
+        }
+
+        var typeName = typeSymbol?.ToDisplayString() ?? typeDecl.Identifier.Text;
+
+        return new TypeMetrics(
+            FullName: typeName,
+            FilePath: filePath,
+            DepthOfInheritance: dit,
+            Methods: methodMetricsList);
+    }
+
+    private TypeMetrics? AnalyzeTopLevelStatements(SyntaxNode root, List<GlobalStatementSyntax> topLevelStatements, SemanticModel semanticModel, string filePath)
+    {
+        var methodMetricsList = new List<MethodMetrics>();
+
+        // Analyze the top-level code as a single "Main" method
+        var firstStatement = topLevelStatements.First();
+        var lastStatement = topLevelStatements.Last();
+
+        var cc = CyclomaticComplexityCalculator.Calculate(root);
+        var loc = topLevelStatements.Sum(s => LinesOfCodeCalculator.Calculate(s));
+        var halstead = HalsteadCalculator.Calculate(root);
+        var mi = MaintainabilityIndexCalculator.Calculate(halstead.Volume, cc, loc);
+
+        var startLine = firstStatement.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
+        var endLine = lastStatement.GetLocation().GetLineSpan().EndLinePosition.Line + 1;
+
+        methodMetricsList.Add(new MethodMetrics(
+            FullName: "<Program>$.Main(string[])",
+            FilePath: filePath,
+            StartLine: startLine,
+            EndLine: endLine,
+            CyclomaticComplexity: cc,
+            LinesOfExecutableCode: loc,
+            HalsteadVolume: halstead.Volume,
+            MaintainabilityIndex: mi));
+
+        // Analyze local functions defined in top-level code
+        var localFunctions = root.DescendantNodes()
+            .OfType<LocalFunctionStatementSyntax>()
+            .Where(lf => !lf.Ancestors().OfType<TypeDeclarationSyntax>().Any());
+
+        foreach (var localFunc in localFunctions)
+        {
+            var metrics = AnalyzeLocalFunction(localFunc, filePath);
+            methodMetricsList.Add(metrics);
+        }
+
+        return new TypeMetrics(
+            FullName: "<Program>$",
+            FilePath: filePath,
+            DepthOfInheritance: 0,
+            Methods: methodMetricsList);
+    }
+
+    private MethodMetrics AnalyzeMethod(MethodDeclarationSyntax method, SemanticModel semanticModel, string filePath)
+    {
+        var methodSymbol = semanticModel.GetDeclaredSymbol(method);
+        var fullName = methodSymbol?.ToDisplayString() ?? method.Identifier.Text;
+
+        var cc = method.Body != null || method.ExpressionBody != null
+            ? CyclomaticComplexityCalculator.Calculate(method)
+            : 1;
+
+        var loc = method.Body != null
+            ? LinesOfCodeCalculator.Calculate(method.Body)
+            : (method.ExpressionBody != null ? 1 : 0);
+
+        var halstead = HalsteadCalculator.Calculate(method);
+        var mi = MaintainabilityIndexCalculator.Calculate(halstead.Volume, cc, loc);
+
+        var lineSpan = method.GetLocation().GetLineSpan();
+
+        return new MethodMetrics(
+            FullName: fullName,
+            FilePath: filePath,
+            StartLine: lineSpan.StartLinePosition.Line + 1,
+            EndLine: lineSpan.EndLinePosition.Line + 1,
+            CyclomaticComplexity: cc,
+            LinesOfExecutableCode: loc,
+            HalsteadVolume: halstead.Volume,
+            MaintainabilityIndex: mi);
+    }
+
+    private MethodMetrics AnalyzeConstructor(ConstructorDeclarationSyntax ctor, TypeDeclarationSyntax typeDecl, SemanticModel semanticModel, string filePath)
+    {
+        var ctorSymbol = semanticModel.GetDeclaredSymbol(ctor);
+        var fullName = ctorSymbol?.ToDisplayString() ?? $"{typeDecl.Identifier.Text}.ctor";
+
+        var cc = ctor.Body != null || ctor.ExpressionBody != null
+            ? CyclomaticComplexityCalculator.Calculate(ctor)
+            : 1;
+
+        var loc = ctor.Body != null
+            ? LinesOfCodeCalculator.Calculate(ctor.Body)
+            : (ctor.ExpressionBody != null ? 1 : 0);
+
+        var halstead = HalsteadCalculator.Calculate(ctor);
+        var mi = MaintainabilityIndexCalculator.Calculate(halstead.Volume, cc, loc);
+
+        var lineSpan = ctor.GetLocation().GetLineSpan();
+
+        return new MethodMetrics(
+            FullName: fullName,
+            FilePath: filePath,
+            StartLine: lineSpan.StartLinePosition.Line + 1,
+            EndLine: lineSpan.EndLinePosition.Line + 1,
+            CyclomaticComplexity: cc,
+            LinesOfExecutableCode: loc,
+            HalsteadVolume: halstead.Volume,
+            MaintainabilityIndex: mi);
+    }
+
+    private MethodMetrics AnalyzeLocalFunction(LocalFunctionStatementSyntax localFunc, string filePath)
+    {
+        var fullName = $"<Program>$.{localFunc.Identifier.Text}()";
+
+        var cc = localFunc.Body != null || localFunc.ExpressionBody != null
+            ? CyclomaticComplexityCalculator.Calculate(localFunc)
+            : 1;
+
+        var loc = localFunc.Body != null
+            ? LinesOfCodeCalculator.Calculate(localFunc.Body)
+            : (localFunc.ExpressionBody != null ? 1 : 0);
+
+        var halstead = HalsteadCalculator.Calculate(localFunc);
+        var mi = MaintainabilityIndexCalculator.Calculate(halstead.Volume, cc, loc);
+
+        var lineSpan = localFunc.GetLocation().GetLineSpan();
+
+        return new MethodMetrics(
+            FullName: fullName,
+            FilePath: filePath,
+            StartLine: lineSpan.StartLinePosition.Line + 1,
+            EndLine: lineSpan.EndLinePosition.Line + 1,
+            CyclomaticComplexity: cc,
+            LinesOfExecutableCode: loc,
+            HalsteadVolume: halstead.Volume,
+            MaintainabilityIndex: mi);
     }
 }
