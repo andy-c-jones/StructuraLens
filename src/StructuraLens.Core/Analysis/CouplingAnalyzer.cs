@@ -159,7 +159,7 @@ public static class CouplingAnalyzer
             if (syntaxTree == null || semanticModel == null) continue;
 
             var root = await syntaxTree.GetRootAsync(cancellationToken);
-            var analyzer = new DocumentCouplingAnalyzer(semanticModel, document.FilePath ?? "");
+            var analyzer = new DocumentCouplingAnalyzer(semanticModel, document.FilePath ?? "", root);
             analyzer.Visit(root);
             dependencies.AddRange(analyzer.Dependencies);
         }
@@ -250,13 +250,22 @@ internal sealed class DocumentCouplingAnalyzer : CSharpSyntaxWalker
     private readonly SemanticModel _semanticModel;
     private readonly string _filePath;
     private readonly List<DependencyEdge> _dependencies = [];
+    private readonly string? _primaryNamespace;
 
     public IReadOnlyList<DependencyEdge> Dependencies => _dependencies;
 
-    public DocumentCouplingAnalyzer(SemanticModel semanticModel, string filePath)
+    public DocumentCouplingAnalyzer(SemanticModel semanticModel, string filePath, SyntaxNode root)
     {
         _semanticModel = semanticModel;
         _filePath = filePath;
+        
+        // Pre-scan for file-level namespace (file-scoped or first traditional namespace)
+        _primaryNamespace = root.DescendantNodes()
+            .OfType<FileScopedNamespaceDeclarationSyntax>()
+            .FirstOrDefault()?.Name.ToString()
+            ?? root.DescendantNodes()
+                .OfType<NamespaceDeclarationSyntax>()
+                .FirstOrDefault()?.Name.ToString();
     }
 
     public override void VisitUsingDirective(UsingDirectiveSyntax node)
@@ -266,7 +275,7 @@ internal sealed class DocumentCouplingAnalyzer : CSharpSyntaxWalker
             var namespaceName = node.Name.ToString();
             var containingNamespace = GetContainingNamespace(node);
 
-            if (containingNamespace != namespaceName)
+            if (!string.IsNullOrEmpty(containingNamespace) && containingNamespace != namespaceName)
             {
                 _dependencies.Add(new DependencyEdge(
                     FromEntity: containingNamespace,
@@ -285,7 +294,7 @@ internal sealed class DocumentCouplingAnalyzer : CSharpSyntaxWalker
     public override void VisitIdentifierName(IdentifierNameSyntax node)
     {
         var symbolInfo = _semanticModel.GetSymbolInfo(node);
-        if (symbolInfo.Symbol is ITypeSymbol typeSymbol && !typeSymbol.IsFromSource())
+        if (symbolInfo.Symbol is ITypeSymbol typeSymbol)
         {
             AnalyzeTypeReference(node, typeSymbol);
         }
@@ -341,8 +350,15 @@ internal sealed class DocumentCouplingAnalyzer : CSharpSyntaxWalker
 
     private string GetContainingNamespace(SyntaxNode node)
     {
+        // First check ancestors (for traditional namespace blocks or nested contexts)
         var namespaceDecl = node.Ancestors().OfType<BaseNamespaceDeclarationSyntax>().FirstOrDefault();
-        return namespaceDecl?.Name?.ToString() ?? "";
+        if (namespaceDecl != null)
+        {
+            return namespaceDecl.Name.ToString();
+        }
+        
+        // Fall back to file's primary namespace
+        return _primaryNamespace ?? "";
     }
 
     private string? GetContainingType(SyntaxNode node)
