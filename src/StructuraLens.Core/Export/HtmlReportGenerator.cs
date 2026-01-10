@@ -468,7 +468,7 @@ public static class HtmlReportGenerator
       node.append('text')
         .attr('dy', 4)
         .attr('text-anchor', 'middle')
-        .text(d => d.name.split('.').pop());
+        .text(d => d.name);
 
       node.append('title').text(d => `${d.name}\nLOC: ${d.size}`);
 
