@@ -87,6 +87,30 @@ public static class HtmlReportGenerator
       --warning: #fbbf24;
       --error: #f87171;
       --border: #334;
+      --node-default: #1f3460;
+      --heat-green: #2d5a3d;
+      --heat-yellow: #6b5b2d;
+      --heat-red: #5a2d2d;
+      --node-text: #eee;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #f5f5f7;
+        --bg-card: #fff;
+        --bg-hover: #e8e8ec;
+        --text: #1d1d1f;
+        --text-muted: #6e6e73;
+        --accent: #0066cc;
+        --success: #28a745;
+        --warning: #f0ad4e;
+        --error: #dc3545;
+        --border: #d2d2d7;
+        --node-default: #a0b4d4;
+        --heat-green: #a8d5ba;
+        --heat-yellow: #f0e6b8;
+        --heat-red: #e8b8b8;
+        --node-text: #1d1d1f;
+      }
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; }
@@ -124,7 +148,7 @@ public static class HtmlReportGenerator
     .graph-fullpage { height: calc(100vh - 200px); min-height: 500px; }
     .graph-container svg { width: 100%; height: 100%; }
     .node circle { stroke: var(--accent); stroke-width: 2px; cursor: pointer; }
-    .node text { fill: var(--text); font-size: 11px; pointer-events: none; }
+    .node text { fill: var(--node-text); font-size: 11px; pointer-events: none; font-weight: 500; }
     .link { stroke: var(--border); stroke-opacity: 0.6; }
     .tooltip { position: absolute; background: var(--bg-card); border: 1px solid var(--border); padding: 10px; border-radius: 6px; font-size: 0.85rem; pointer-events: none; z-index: 100; }
     .section { margin-bottom: 30px; }
@@ -393,10 +417,23 @@ public static class HtmlReportGenerator
             <option value="project">Project Dependencies</option>
             <option value="namespace">Namespace Dependencies</option>
           </select>
+          <label>Color by:</label>
+          <select id="colorMetric">
+            <option value="none">None</option>
+            <option value="diagnostics">Diagnostics Count</option>
+            <option value="linting">Linting Violations</option>
+            <option value="coupling">Coupling (Ce)</option>
+            <option value="complexity">Cyclomatic Complexity</option>
+            <option value="loc">Lines of Code</option>
+            <option value="maintainability">Maintainability Index</option>
+          </select>
         </div>
         <div id="graphContainer" class="graph-container graph-fullpage"></div>
       `;
       document.getElementById('graphSelector').addEventListener('change', () => {
+        renderCurrentGraph();
+      });
+      document.getElementById('colorMetric').addEventListener('change', () => {
         renderCurrentGraph();
       });
     }
@@ -404,12 +441,114 @@ public static class HtmlReportGenerator
     function renderCurrentGraph() {
       const container = document.getElementById('graphContainer');
       const selector = document.getElementById('graphSelector');
+      const colorMetric = document.getElementById('colorMetric').value;
       const graphData = selector.value === 'project' ? reportData.g.p : reportData.g.ns;
       container.innerHTML = '';
-      renderGraph('graphContainer', graphData);
+      renderGraph('graphContainer', graphData, colorMetric, selector.value);
     }
 
-    function renderGraph(containerId, graphData) {
+    // Get color on green-yellow-red scale with muted saturation
+    // ratio 0 = green, 0.5 = yellow, 1 = red
+    // Interpolates smoothly between the three colors
+    function getHeatColor(ratio) {
+      ratio = Math.max(0, Math.min(1, ratio));
+      
+      // Get computed CSS colors for interpolation
+      const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches || 
+                     !window.matchMedia('(prefers-color-scheme: light)').matches;
+      
+      // RGB values for dark and light modes
+      const colors = isDark ? {
+        green: [45, 90, 61],    // #2d5a3d
+        yellow: [107, 91, 45],  // #6b5b2d
+        red: [90, 45, 45]       // #5a2d2d
+      } : {
+        green: [168, 213, 186], // #a8d5ba
+        yellow: [240, 230, 184], // #f0e6b8
+        red: [232, 184, 184]    // #e8b8b8
+      };
+      
+      let r, g, b;
+      if (ratio < 0.5) {
+        // Interpolate green to yellow
+        const t = ratio * 2;
+        r = Math.round(colors.green[0] + t * (colors.yellow[0] - colors.green[0]));
+        g = Math.round(colors.green[1] + t * (colors.yellow[1] - colors.green[1]));
+        b = Math.round(colors.green[2] + t * (colors.yellow[2] - colors.green[2]));
+      } else {
+        // Interpolate yellow to red
+        const t = (ratio - 0.5) * 2;
+        r = Math.round(colors.yellow[0] + t * (colors.red[0] - colors.yellow[0]));
+        g = Math.round(colors.yellow[1] + t * (colors.red[1] - colors.yellow[1]));
+        b = Math.round(colors.yellow[2] + t * (colors.red[2] - colors.yellow[2]));
+      }
+      
+      return `rgb(${r}, ${g}, ${b})`;
+    }
+
+    function getProjectMetrics(name) {
+      return reportData.prj.find(p => p.n === name);
+    }
+
+    function getNodeColor(node, colorMetric, graphType) {
+      if (colorMetric === 'none') return 'var(--node-default)';
+      
+      // For namespace view, try to find project by prefix match
+      let metrics = null;
+      if (graphType === 'project') {
+        metrics = getProjectMetrics(node.name);
+      } else {
+        // Find best matching project for namespace
+        const matchingProjects = reportData.prj.filter(p => node.name.startsWith(p.n.replace('.', '')));
+        if (matchingProjects.length > 0) {
+          metrics = matchingProjects.reduce((a, b) => a.n.length > b.n.length ? a : b);
+        }
+      }
+      
+      if (!metrics) return 'var(--node-default)';
+      
+      const allProjects = reportData.prj;
+      let value, values;
+      
+      switch (colorMetric) {
+        case 'diagnostics':
+          value = (metrics.err || 0) * 5 + (metrics.warn || 0); // Errors weighted 5x
+          values = allProjects.map(p => (p.err || 0) * 5 + (p.warn || 0));
+          break;
+        case 'linting':
+          const violations = reportData.l?.v?.filter(v => v[2] === metrics.n || v[3]?.startsWith(metrics.n))?.length || 0;
+          value = violations;
+          values = allProjects.map(p => reportData.l?.v?.filter(v => v[2] === p.n || v[3]?.startsWith(p.n))?.length || 0);
+          break;
+        case 'coupling':
+          value = metrics.ce || 0;
+          values = allProjects.map(p => p.ce || 0);
+          break;
+        case 'complexity':
+          value = metrics.cc || 0;
+          values = allProjects.map(p => p.cc || 0);
+          break;
+        case 'loc':
+          value = metrics.loc || 0;
+          values = allProjects.map(p => p.loc || 0);
+          break;
+        case 'maintainability':
+          // Maintainability is inverse - lower MI is worse
+          value = 100 - (metrics.mi || 100);
+          values = allProjects.map(p => 100 - (p.mi || 100));
+          break;
+        default:
+          return 'var(--node-default)';
+      }
+      
+      const min = Math.min(...values);
+      const max = Math.max(...values);
+      if (max === min) return getHeatColor(0);
+      const ratio = (value - min) / (max - min);
+      return getHeatColor(ratio);
+    }
+
+    function renderGraph(containerId, graphData, colorMetric = 'none', graphType = 'project') {
       const container = document.getElementById(containerId);
       const width = container.clientWidth || 800;
       const height = container.clientHeight || 600;
@@ -512,7 +651,7 @@ public static class HtmlReportGenerator
 
       node.append('circle')
         .attr('r', d => d.radius)
-        .attr('fill', '#1f3460');
+        .attr('fill', d => getNodeColor(d, colorMetric, graphType));
 
       node.append('text')
         .attr('dy', 4)
