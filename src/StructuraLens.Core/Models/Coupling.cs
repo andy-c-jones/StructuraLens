@@ -115,4 +115,7 @@ public record CouplingSummary
     
     /// <summary>Most unstable entity (highest instability score).</summary>
     public string? MostUnstableEntity { get; init; }
+    
+    /// <summary>The coupling mode used for this analysis.</summary>
+    public string CouplingMode { get; init; } = "Filtered";
 }

@@ -2,6 +2,7 @@ using Microsoft.Build.Locator;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.MSBuild;
+using StructuraLens.Core.Configuration;
 using StructuraLens.Core.Models;
 
 namespace StructuraLens.Core.Analysis;
@@ -37,7 +38,18 @@ public sealed class SolutionAnalyzer
         }
     }
 
-    public async Task<AnalysisReport> AnalyzeSolutionAsync(string solutionPath, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Analyzes a solution using default configuration.
+    /// </summary>
+    public Task<AnalysisReport> AnalyzeSolutionAsync(string solutionPath, CancellationToken cancellationToken = default)
+    {
+        return AnalyzeSolutionAsync(solutionPath, ConfigurationLoader.CreateDefaultConfig(), cancellationToken);
+    }
+
+    /// <summary>
+    /// Analyzes a solution with specified configuration.
+    /// </summary>
+    public async Task<AnalysisReport> AnalyzeSolutionAsync(string solutionPath, StructuraLensConfig config, CancellationToken cancellationToken = default)
     {
         EnsureMSBuildRegistered();
 
@@ -66,8 +78,8 @@ public sealed class SolutionAnalyzer
             projectMetricsList.Add(projectMetrics);
         }
 
-        // Analyze coupling across the entire solution
-        var couplingAnalysis = await CouplingAnalyzer.AnalyzeSolutionAsync(solution, cancellationToken);
+        // Analyze coupling across the entire solution with configuration
+        var couplingAnalysis = await CouplingAnalyzer.AnalyzeSolutionAsync(solution, config, cancellationToken);
 
         return new AnalysisReport(
             SolutionPath: fullPath,
@@ -79,7 +91,18 @@ public sealed class SolutionAnalyzer
         };
     }
 
-    public async Task<AnalysisReport> AnalyzeProjectAsync(string projectPath, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Analyzes a project using default configuration.
+    /// </summary>
+    public Task<AnalysisReport> AnalyzeProjectAsync(string projectPath, CancellationToken cancellationToken = default)
+    {
+        return AnalyzeProjectAsync(projectPath, ConfigurationLoader.CreateDefaultConfig(), cancellationToken);
+    }
+
+    /// <summary>
+    /// Analyzes a project with specified configuration.
+    /// </summary>
+    public async Task<AnalysisReport> AnalyzeProjectAsync(string projectPath, StructuraLensConfig config, CancellationToken cancellationToken = default)
     {
         EnsureMSBuildRegistered();
 
@@ -99,8 +122,8 @@ public sealed class SolutionAnalyzer
         var project = await workspace.OpenProjectAsync(fullPath, cancellationToken: cancellationToken);
         var projectMetrics = await AnalyzeProjectAsync(project, cancellationToken);
 
-        // Analyze internal coupling within the project
-        var couplingAnalysis = await CouplingAnalyzer.AnalyzeProjectCouplingAsync(project, cancellationToken);
+        // Analyze internal coupling within the project with configuration
+        var couplingAnalysis = await CouplingAnalyzer.AnalyzeProjectCouplingAsync(project, config, cancellationToken);
 
         return new AnalysisReport(
             SolutionPath: fullPath,

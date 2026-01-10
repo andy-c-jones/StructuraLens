@@ -1,6 +1,7 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using StructuraLens.Core.Configuration;
 using StructuraLens.Core.Models;
 
 namespace StructuraLens.Core.Analysis;
@@ -11,14 +12,20 @@ namespace StructuraLens.Core.Analysis;
 public static class CouplingAnalyzer
 {
     /// <summary>
-    /// Analyzes coupling for an entire solution.
+    /// Analyzes coupling for an entire solution using default configuration.
     /// </summary>
-    public static async Task<CouplingAnalysis> AnalyzeSolutionAsync(Solution solution, CancellationToken cancellationToken = default)
+    public static Task<CouplingAnalysis> AnalyzeSolutionAsync(Solution solution, CancellationToken cancellationToken = default)
+    {
+        return AnalyzeSolutionAsync(solution, ConfigurationLoader.CreateDefaultConfig(), cancellationToken);
+    }
+
+    /// <summary>
+    /// Analyzes coupling for an entire solution with specified configuration.
+    /// </summary>
+    public static async Task<CouplingAnalysis> AnalyzeSolutionAsync(Solution solution, StructuraLensConfig config, CancellationToken cancellationToken = default)
     {
         var allDependencies = new List<DependencyEdge>();
-        var projectCouplingMetrics = new List<CouplingMetrics>();
-        var namespaceCouplingMetrics = new List<CouplingMetrics>();
-        var typeCouplingMetrics = new List<CouplingMetrics>();
+        var projectNames = solution.Projects.Select(p => p.Name).ToList();
 
         // Analyze project-to-project dependencies
         var projectDependencies = AnalyzeProjectDependencies(solution);
@@ -29,18 +36,17 @@ public static class CouplingAnalyzer
         {
             var projectCoupling = await AnalyzeProjectInternalCouplingAsync(project, cancellationToken);
             allDependencies.AddRange(projectCoupling.dependencies);
-            namespaceCouplingMetrics.AddRange(projectCoupling.namespaceCoupling);
-            typeCouplingMetrics.AddRange(projectCoupling.typeCoupling);
         }
 
-        // Build project-level coupling metrics
-        projectCouplingMetrics = BuildProjectCouplingMetrics(solution, allDependencies);
+        // Apply filtering based on configuration
+        var filteredDependencies = DependencyFilter.FilterDependencies(allDependencies, config.Coupling, projectNames);
 
-        // Build complete namespace and type coupling (including cross-project)
-        namespaceCouplingMetrics = BuildNamespaceCouplingMetrics(allDependencies);
-        typeCouplingMetrics = BuildTypeCouplingMetrics(allDependencies);
+        // Build coupling metrics from filtered dependencies
+        var projectCouplingMetrics = BuildProjectCouplingMetrics(solution, filteredDependencies);
+        var namespaceCouplingMetrics = BuildNamespaceCouplingMetrics(filteredDependencies);
+        var typeCouplingMetrics = BuildTypeCouplingMetrics(filteredDependencies);
 
-        var summary = BuildCouplingSummary(projectCouplingMetrics, namespaceCouplingMetrics, typeCouplingMetrics, allDependencies);
+        var summary = BuildCouplingSummary(projectCouplingMetrics, namespaceCouplingMetrics, typeCouplingMetrics, filteredDependencies, config);
 
         return new CouplingAnalysis(
             AnalyzedEntity: solution.FilePath ?? "Solution",
@@ -49,7 +55,58 @@ public static class CouplingAnalyzer
             ProjectCoupling = projectCouplingMetrics,
             NamespaceCoupling = namespaceCouplingMetrics,
             TypeCoupling = typeCouplingMetrics,
-            AllDependencies = allDependencies,
+            AllDependencies = filteredDependencies,
+            Summary = summary
+        };
+    }
+
+    /// <summary>
+    /// Analyzes coupling for a single project using default configuration.
+    /// </summary>
+    public static Task<CouplingAnalysis> AnalyzeProjectCouplingAsync(Project project, CancellationToken cancellationToken = default)
+    {
+        return AnalyzeProjectCouplingAsync(project, ConfigurationLoader.CreateDefaultConfig(), cancellationToken);
+    }
+
+    /// <summary>
+    /// Analyzes coupling for a single project with specified configuration.
+    /// </summary>
+    public static async Task<CouplingAnalysis> AnalyzeProjectCouplingAsync(Project project, StructuraLensConfig config, CancellationToken cancellationToken = default)
+    {
+        var allDependencies = new List<DependencyEdge>();
+        var projectNames = new List<string> { project.Name };
+
+        // Analyze internal coupling within the project
+        var projectCoupling = await AnalyzeProjectInternalCouplingAsync(project, cancellationToken);
+        allDependencies.AddRange(projectCoupling.dependencies);
+
+        // Apply filtering based on configuration
+        var filteredDependencies = DependencyFilter.FilterDependencies(allDependencies, config.Coupling, projectNames);
+
+        // Build coupling metrics from filtered dependencies
+        var namespaceCouplingMetrics = BuildNamespaceCouplingMetrics(filteredDependencies);
+        var typeCouplingMetrics = BuildTypeCouplingMetrics(filteredDependencies);
+
+        // For single project, create a simple project coupling metric
+        var projectCouplingMetrics = new List<CouplingMetrics>
+        {
+            new(project.Name, DependencyType.ProjectReference)
+            {
+                OutboundDependencies = [],
+                InboundDependencies = []
+            }
+        };
+
+        var summary = BuildCouplingSummary(projectCouplingMetrics, namespaceCouplingMetrics, typeCouplingMetrics, filteredDependencies, config);
+
+        return new CouplingAnalysis(
+            AnalyzedEntity: project.FilePath ?? project.Name,
+            AnalyzedAt: DateTime.UtcNow)
+        {
+            ProjectCoupling = projectCouplingMetrics,
+            NamespaceCoupling = namespaceCouplingMetrics,
+            TypeCoupling = typeCouplingMetrics,
+            AllDependencies = filteredDependencies,
             Summary = summary
         };
     }
@@ -84,43 +141,8 @@ public static class CouplingAnalyzer
     }
 
     /// <summary>
-    /// Analyzes coupling for a single project (internal coupling only).
+    /// Analyzes internal coupling within a single project.
     /// </summary>
-    public static async Task<CouplingAnalysis> AnalyzeProjectCouplingAsync(Project project, CancellationToken cancellationToken = default)
-    {
-        var allDependencies = new List<DependencyEdge>();
-        var namespaceCouplingMetrics = new List<CouplingMetrics>();
-        var typeCouplingMetrics = new List<CouplingMetrics>();
-
-        // Analyze internal coupling within the project
-        var projectCoupling = await AnalyzeProjectInternalCouplingAsync(project, cancellationToken);
-        allDependencies.AddRange(projectCoupling.dependencies);
-        namespaceCouplingMetrics.AddRange(projectCoupling.namespaceCoupling);
-        typeCouplingMetrics.AddRange(projectCoupling.typeCoupling);
-
-        // For single project, create a simple project coupling metric
-        var projectCouplingMetrics = new List<CouplingMetrics>
-        {
-            new(project.Name, DependencyType.ProjectReference)
-            {
-                OutboundDependencies = [],
-                InboundDependencies = []
-            }
-        };
-
-        var summary = BuildCouplingSummary(projectCouplingMetrics, namespaceCouplingMetrics, typeCouplingMetrics, allDependencies);
-
-        return new CouplingAnalysis(
-            AnalyzedEntity: project.FilePath ?? project.Name,
-            AnalyzedAt: DateTime.UtcNow)
-        {
-            ProjectCoupling = projectCouplingMetrics,
-            NamespaceCoupling = namespaceCouplingMetrics,
-            TypeCoupling = typeCouplingMetrics,
-            AllDependencies = allDependencies,
-            Summary = summary
-        };
-    }
     private static async Task<(List<DependencyEdge> dependencies, List<CouplingMetrics> namespaceCoupling, List<CouplingMetrics> typeCoupling)>
         AnalyzeProjectInternalCouplingAsync(Project project, CancellationToken cancellationToken)
     {
@@ -202,7 +224,8 @@ public static class CouplingAnalyzer
         List<CouplingMetrics> projectCoupling,
         List<CouplingMetrics> namespaceCoupling, 
         List<CouplingMetrics> typeCoupling,
-        List<DependencyEdge> allDependencies)
+        List<DependencyEdge> allDependencies,
+        StructuraLensConfig config)
     {
         var allMetrics = projectCoupling.Concat(namespaceCoupling).Concat(typeCoupling).ToList();
         
@@ -213,7 +236,8 @@ public static class CouplingAnalyzer
             AverageAfferentCoupling = allMetrics.Count > 0 ? allMetrics.Average(m => m.AfferentCoupling) : 0,
             AverageInstability = allMetrics.Count > 0 ? allMetrics.Average(m => m.Instability) : 0,
             MostCoupledEntity = allMetrics.OrderByDescending(m => m.TotalCouplingStrength).FirstOrDefault()?.EntityName,
-            MostUnstableEntity = allMetrics.OrderByDescending(m => m.Instability).FirstOrDefault()?.EntityName
+            MostUnstableEntity = allMetrics.OrderByDescending(m => m.Instability).FirstOrDefault()?.EntityName,
+            CouplingMode = config.Coupling.Mode.ToString()
         };
     }
 }
@@ -242,7 +266,7 @@ internal sealed class DocumentCouplingAnalyzer : CSharpSyntaxWalker
             var namespaceName = node.Name.ToString();
             var containingNamespace = GetContainingNamespace(node);
 
-            if (containingNamespace != namespaceName) // Don't count self-references
+            if (containingNamespace != namespaceName)
             {
                 _dependencies.Add(new DependencyEdge(
                     FromEntity: containingNamespace,
@@ -297,7 +321,6 @@ internal sealed class DocumentCouplingAnalyzer : CSharpSyntaxWalker
                 ReferencedSymbol = typeSymbol.Name
             });
 
-            // Also add namespace-level dependency
             var fromNamespace = GetNamespace(fromType);
             var toNamespace = typeSymbol.ContainingNamespace?.ToDisplayString() ?? "";
             

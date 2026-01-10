@@ -2,6 +2,7 @@ using System.CommandLine;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using StructuraLens.Core.Analysis;
+using StructuraLens.Core.Configuration;
 using StructuraLens.Core.Models;
 
 // Create options
@@ -16,6 +17,17 @@ var formatOption = new Option<string>("--format", "-f")
     DefaultValueFactory = _ => "json"
 };
 
+var couplingModeOption = new Option<string>("--coupling-mode", "-c")
+{
+    Description = "Coupling analysis mode: internal (own code only), filtered (exclude System/Microsoft), all (everything)",
+    DefaultValueFactory = _ => "filtered"
+};
+
+var configOption = new Option<string?>("--config")
+{
+    Description = "Path to structuralens.json configuration file"
+};
+
 // Create path argument
 var pathArgument = new Argument<string>("path")
 {
@@ -27,12 +39,16 @@ var analyzeCommand = new Command("analyze", "Analyze a solution or project for c
 analyzeCommand.Arguments.Add(pathArgument);
 analyzeCommand.Options.Add(outputOption);
 analyzeCommand.Options.Add(formatOption);
+analyzeCommand.Options.Add(couplingModeOption);
+analyzeCommand.Options.Add(configOption);
 
 analyzeCommand.SetAction(async (parseResult, cancellationToken) =>
 {
     var path = parseResult.GetValue(pathArgument)!;
     var output = parseResult.GetValue(outputOption);
     var format = parseResult.GetValue(formatOption) ?? "json";
+    var couplingMode = parseResult.GetValue(couplingModeOption) ?? "filtered";
+    var configPath = parseResult.GetValue(configOption);
 
     try
     {
@@ -40,10 +56,36 @@ analyzeCommand.SetAction(async (parseResult, cancellationToken) =>
         Console.WriteLine($"Analyzing: {path}");
         Console.WriteLine();
 
+        // Build configuration from CLI options or config file
+        StructuraLensConfig config;
+        if (!string.IsNullOrEmpty(configPath) && File.Exists(configPath))
+        {
+            var json = await File.ReadAllTextAsync(configPath, cancellationToken);
+            config = System.Text.Json.JsonSerializer.Deserialize<StructuraLensConfig>(json, new JsonSerializerOptions 
+            { 
+                PropertyNameCaseInsensitive = true 
+            }) ?? ConfigurationLoader.CreateDefaultConfig();
+        }
+        else
+        {
+            config = ConfigurationLoader.CreateDefaultConfig();
+        }
+
+        // Override coupling mode from CLI if specified
+        config.Coupling.Mode = couplingMode.ToLowerInvariant() switch
+        {
+            "internal" => CouplingMode.Internal,
+            "all" => CouplingMode.All,
+            _ => CouplingMode.Filtered
+        };
+
+        Console.WriteLine($"Coupling mode: {config.Coupling.Mode}");
+        Console.WriteLine();
+
         var analyzer = new SolutionAnalyzer();
         var report = path.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)
-            ? await analyzer.AnalyzeProjectAsync(path, cancellationToken)
-            : await analyzer.AnalyzeSolutionAsync(path, cancellationToken);
+            ? await analyzer.AnalyzeProjectAsync(path, config, cancellationToken)
+            : await analyzer.AnalyzeSolutionAsync(path, config, cancellationToken);
 
         if (report.Warnings.Count > 0)
         {
@@ -104,10 +146,20 @@ rootCommand.Subcommands.Add(analyzeCommand);
 rootCommand.SetAction(_ =>
 {
     Console.WriteLine("StructuraLens v0.1.0");
-    Console.WriteLine("Usage: structuralens analyze <path> [--out <file>] [--format json|summary]");
+    Console.WriteLine("Usage: structuralens analyze <path> [options]");
+    Console.WriteLine();
+    Console.WriteLine("Options:");
+    Console.WriteLine("  --out, -o <file>              Output file path for the JSON report");
+    Console.WriteLine("  --format, -f <json|summary>   Output format (default: json)");
+    Console.WriteLine("  --coupling-mode, -c <mode>    Coupling mode: internal, filtered, all (default: filtered)");
+    Console.WriteLine("  --config <path>               Path to structuralens.json configuration file");
+    Console.WriteLine();
+    Console.WriteLine("Coupling modes:");
+    Console.WriteLine("  internal  - Only track dependencies between your own code");
+    Console.WriteLine("  filtered  - Track external deps but exclude System.*/Microsoft.* (default)");
+    Console.WriteLine("  all       - Track all dependencies including framework libraries");
     Console.WriteLine();
     Console.WriteLine("Run this tool after building your solution for full analysis.");
-    Console.WriteLine("If DLLs are not present, source-only analysis will be performed.");
     return 0;
 });
 
@@ -131,6 +183,7 @@ static void PrintSummary(AnalysisReport report)
         Console.WriteLine();
         Console.WriteLine("=== Coupling Summary ===");
         var coupling = report.CouplingAnalysis.Summary;
+        Console.WriteLine($"Mode: {coupling.CouplingMode}");
         Console.WriteLine($"Total Dependencies: {coupling.TotalDependencies}");
         Console.WriteLine($"Average Efferent Coupling: {coupling.AverageEfferentCoupling:F1}");
         Console.WriteLine($"Average Afferent Coupling: {coupling.AverageAfferentCoupling:F1}");
