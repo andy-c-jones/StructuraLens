@@ -66,11 +66,17 @@ public sealed class SolutionAnalyzer
             projectMetricsList.Add(projectMetrics);
         }
 
+        // Analyze coupling across the entire solution
+        var couplingAnalysis = await CouplingAnalyzer.AnalyzeSolutionAsync(solution, cancellationToken);
+
         return new AnalysisReport(
             SolutionPath: fullPath,
             AnalyzedAt: DateTime.UtcNow,
             Projects: projectMetricsList,
-            Warnings: _warnings);
+            Warnings: _warnings)
+        {
+            CouplingAnalysis = couplingAnalysis
+        };
     }
 
     public async Task<AnalysisReport> AnalyzeProjectAsync(string projectPath, CancellationToken cancellationToken = default)
@@ -93,11 +99,17 @@ public sealed class SolutionAnalyzer
         var project = await workspace.OpenProjectAsync(fullPath, cancellationToken: cancellationToken);
         var projectMetrics = await AnalyzeProjectAsync(project, cancellationToken);
 
+        // Analyze internal coupling within the project
+        var couplingAnalysis = await CouplingAnalyzer.AnalyzeProjectCouplingAsync(project, cancellationToken);
+
         return new AnalysisReport(
             SolutionPath: fullPath,
             AnalyzedAt: DateTime.UtcNow,
             Projects: [projectMetrics],
-            Warnings: _warnings);
+            Warnings: _warnings)
+        {
+            CouplingAnalysis = couplingAnalysis
+        };
     }
 
     private async Task<ProjectMetrics> AnalyzeProjectAsync(Project project, CancellationToken cancellationToken)

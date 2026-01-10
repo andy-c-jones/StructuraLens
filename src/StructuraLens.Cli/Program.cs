@@ -125,6 +125,23 @@ static void PrintSummary(AnalysisReport report)
     Console.WriteLine($"Methods: {report.TotalMethods}");
     Console.WriteLine($"Total Cyclomatic Complexity: {report.TotalCyclomaticComplexity}");
     Console.WriteLine($"Total Lines of Executable Code: {report.TotalLinesOfExecutableCode}");
+    
+    if (report.CouplingAnalysis != null)
+    {
+        Console.WriteLine();
+        Console.WriteLine("=== Coupling Summary ===");
+        var coupling = report.CouplingAnalysis.Summary;
+        Console.WriteLine($"Total Dependencies: {coupling.TotalDependencies}");
+        Console.WriteLine($"Average Efferent Coupling: {coupling.AverageEfferentCoupling:F1}");
+        Console.WriteLine($"Average Afferent Coupling: {coupling.AverageAfferentCoupling:F1}");
+        Console.WriteLine($"Average Instability: {coupling.AverageInstability:F2}");
+        
+        if (!string.IsNullOrEmpty(coupling.MostCoupledEntity))
+            Console.WriteLine($"Most Coupled Entity: {coupling.MostCoupledEntity}");
+        if (!string.IsNullOrEmpty(coupling.MostUnstableEntity))
+            Console.WriteLine($"Most Unstable Entity: {coupling.MostUnstableEntity}");
+    }
+    
     Console.WriteLine();
 
     foreach (var project in report.Projects)
@@ -141,6 +158,20 @@ static void PrintSummary(AnalysisReport report)
         {
             var avgMI = allMethods.Average(m => m.MaintainabilityIndex);
             Console.WriteLine($"  Avg Maintainability Index: {avgMI:F1}");
+        }
+
+        // Show coupling for this project
+        if (report.CouplingAnalysis != null)
+        {
+            var projectCoupling = report.CouplingAnalysis.ProjectCoupling
+                .FirstOrDefault(pc => pc.EntityName == project.Name);
+            
+            if (projectCoupling != null)
+            {
+                Console.WriteLine($"  Efferent Coupling (Ce): {projectCoupling.EfferentCoupling}");
+                Console.WriteLine($"  Afferent Coupling (Ca): {projectCoupling.AfferentCoupling}");
+                Console.WriteLine($"  Instability (I): {projectCoupling.Instability:F2}");
+            }
         }
 
         var highComplexityMethods = allMethods

@@ -53,4 +53,9 @@ public record AnalysisReport(
     public int TotalMethods => Projects.Sum(p => p.Types.Sum(t => t.Methods.Count));
     public int TotalCyclomaticComplexity => Projects.Sum(p => p.TotalCyclomaticComplexity);
     public int TotalLinesOfExecutableCode => Projects.Sum(p => p.TotalLinesOfExecutableCode);
+
+    /// <summary>
+    /// Coupling analysis results for the entire solution.
+    /// </summary>
+    public CouplingAnalysis? CouplingAnalysis { get; init; }
 }
