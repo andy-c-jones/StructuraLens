@@ -22,7 +22,14 @@ dotnet run --project src/StructuraLens.Cli -- analyze YourSolution.sln
 
 ## CLI Reference
 
-### Basic Usage
+### Commands
+
+| Command | Description |
+|---------|-------------|
+| `analyze <path>` | Analyze a solution or project for code metrics |
+| `init [path]` | Create a default `structuralens.json` configuration file |
+
+### analyze
 
 ```bash
 structuralens analyze <path> [options]
@@ -30,14 +37,32 @@ structuralens analyze <path> [options]
 
 Where `<path>` is the path to a solution (`.sln`, `.slnx`) or project (`.csproj`) file.
 
-### Options
+#### Options
 
 | Option | Short | Description | Default |
 |--------|-------|-------------|---------|
-| `--out` | `-o` | Output file path for the JSON report | stdout |
-| `--format` | `-f` | Output format: `json` or `summary` | `json` |
-| `--coupling-mode` | `-c` | Coupling analysis mode: `internal`, `filtered`, `all` | `filtered` |
+| `--out` | `-o` | Output file path for the report | stdout |
+| `--format` | `-f` | Output format: `json`, `compact`, `summary` | `json` |
+| `--coupling-mode` | `-c` | Coupling analysis mode: `internal`, `filtered`, `all` | from config |
 | `--config` | | Path to `structuralens.json` configuration file | auto-discover |
+
+### init
+
+```bash
+structuralens init [path]
+```
+
+Creates a default `structuralens.json` configuration file. If `path` is omitted, creates in the current directory.
+
+```bash
+# Create config in current directory
+structuralens init
+
+# Create config in specific directory
+structuralens init ./src/MyProject
+```
+
+The generated config includes sensible defaults and can be customized for your project's architecture rules.
 
 ### Examples
 

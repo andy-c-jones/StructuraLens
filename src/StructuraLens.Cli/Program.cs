@@ -179,32 +179,67 @@ analyzeCommand.SetAction(async (parseResult, cancellationToken) =>
     }
 });
 
+// Create init subcommand
+var initPathArgument = new Argument<string?>("path")
+{
+    Description = "Directory to create structuralens.json in (default: current directory)",
+    Arity = ArgumentArity.ZeroOrOne
+};
+
+var initCommand = new Command("init", "Create a default structuralens.json configuration file");
+initCommand.Arguments.Add(initPathArgument);
+
+initCommand.SetAction(async (parseResult, cancellationToken) =>
+{
+    var path = parseResult.GetValue(initPathArgument) ?? Directory.GetCurrentDirectory();
+    var directory = Directory.Exists(path) ? path : Path.GetDirectoryName(path) ?? Directory.GetCurrentDirectory();
+    var configPath = Path.Combine(directory, "structuralens.json");
+
+    if (File.Exists(configPath))
+    {
+        Console.ForegroundColor = ConsoleColor.Yellow;
+        Console.WriteLine($"Configuration file already exists: {configPath}");
+        Console.ResetColor();
+        return 1;
+    }
+
+    try
+    {
+        await ConfigurationLoader.CreateDefaultConfigAsync(directory, cancellationToken);
+        Console.WriteLine($"Created: {configPath}");
+        Console.WriteLine();
+        Console.WriteLine("Edit this file to configure:");
+        Console.WriteLine("  - Coupling analysis mode and filters");
+        Console.WriteLine("  - Architecture linting rules");
+        Console.WriteLine("  - Output preferences");
+        Console.WriteLine();
+        Console.WriteLine("See: https://github.com/your-org/structuralens/blob/main/docs/configuration.md");
+        return 0;
+    }
+    catch (Exception ex)
+    {
+        Console.ForegroundColor = ConsoleColor.Red;
+        Console.WriteLine($"Error: {ex.Message}");
+        Console.ResetColor();
+        return 1;
+    }
+});
+
 // Create root command
 var rootCommand = new RootCommand("StructuraLens - C# code complexity analyzer");
 rootCommand.Subcommands.Add(analyzeCommand);
+rootCommand.Subcommands.Add(initCommand);
 
 rootCommand.SetAction(_ =>
 {
     Console.WriteLine("StructuraLens v0.1.0");
-    Console.WriteLine("Usage: structuralens analyze <path> [options]");
+    Console.WriteLine("Usage: structuralens <command> [options]");
     Console.WriteLine();
-    Console.WriteLine("Options:");
-    Console.WriteLine("  --out, -o <file>                   Output file path for the report");
-    Console.WriteLine("  --format, -f <json|compact|summary> Output format (default: json)");
-    Console.WriteLine("  --coupling-mode, -c <mode>         Coupling mode: internal, filtered, all");
-    Console.WriteLine("  --config <path>                    Path to structuralens.json configuration file");
+    Console.WriteLine("Commands:");
+    Console.WriteLine("  analyze <path>   Analyze a solution or project for code metrics");
+    Console.WriteLine("  init [path]      Create a default structuralens.json configuration file");
     Console.WriteLine();
-    Console.WriteLine("Output formats:");
-    Console.WriteLine("  json     - Full JSON report with all details (human-readable)");
-    Console.WriteLine("  compact  - Optimized .slr format for tooling (99% smaller, includes graph data)");
-    Console.WriteLine("  summary  - Human-readable console summary");
-    Console.WriteLine();
-    Console.WriteLine("Coupling modes:");
-    Console.WriteLine("  internal  - Only track dependencies between your own code");
-    Console.WriteLine("  filtered  - Track external deps but exclude System.*/Microsoft.* (default)");
-    Console.WriteLine("  all       - Track all dependencies including framework libraries");
-    Console.WriteLine();
-    Console.WriteLine("Configuration is auto-discovered from structuralens.json in the project directory.");
+    Console.WriteLine("Run 'structuralens <command> --help' for more information on a command.");
     return 0;
 });
 
