@@ -95,11 +95,11 @@ public static class HtmlReportGenerator
     h2 { font-size: 1.2rem; font-weight: 500; margin-bottom: 1rem; color: var(--accent); }
     .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid var(--border); }
     .header-info { font-size: 0.85rem; color: var(--text-muted); }
-    .tabs { display: flex; gap: 5px; margin-bottom: 20px; flex-wrap: wrap; }
-    .tab { padding: 10px 20px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px 6px 0 0; cursor: pointer; transition: all 0.2s; }
+    .tabs { display: flex; gap: 5px; flex-wrap: wrap; }
+    .tab { padding: 10px 20px; background: var(--bg-card); border: 1px solid var(--border); border-bottom: none; border-radius: 6px 6px 0 0; cursor: pointer; transition: all 0.2s; margin-bottom: -1px; }
     .tab:hover { background: var(--bg-hover); }
     .tab.active { background: var(--accent); color: var(--bg); border-color: var(--accent); }
-    .tab-content { display: none; background: var(--bg-card); border: 1px solid var(--border); border-radius: 0 6px 6px 6px; padding: 20px; }
+    .tab-content { display: none; background: var(--bg-card); border: 1px solid var(--border); border-radius: 0 0 6px 6px; padding: 20px; }
     .tab-content.active { display: block; }
     .filter-bar { margin-bottom: 20px; display: flex; gap: 15px; align-items: center; flex-wrap: wrap; }
     .filter-bar label { font-size: 0.9rem; color: var(--text-muted); }
