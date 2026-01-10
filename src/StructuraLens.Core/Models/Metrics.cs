@@ -9,7 +9,9 @@ public record MethodMetrics(
     int StartLine,
     int EndLine,
     int CyclomaticComplexity,
-    int LinesOfExecutableCode);
+    int LinesOfExecutableCode,
+    double HalsteadVolume,
+    double MaintainabilityIndex);
 
 /// <summary>
 /// Represents code metrics for a single type (class, struct, etc.).

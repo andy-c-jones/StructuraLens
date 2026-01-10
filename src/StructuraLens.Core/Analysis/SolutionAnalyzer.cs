@@ -149,6 +149,9 @@ public sealed class SolutionAnalyzer
                         ? LinesOfCodeCalculator.Calculate(method.Body)
                         : (method.ExpressionBody != null ? 1 : 0);
 
+                    var halstead = HalsteadCalculator.Calculate(method);
+                    var mi = MaintainabilityIndexCalculator.Calculate(halstead.Volume, cc, loc);
+
                     var lineSpan = method.GetLocation().GetLineSpan();
 
                     methodMetricsList.Add(new MethodMetrics(
@@ -157,7 +160,9 @@ public sealed class SolutionAnalyzer
                         StartLine: lineSpan.StartLinePosition.Line + 1,
                         EndLine: lineSpan.EndLinePosition.Line + 1,
                         CyclomaticComplexity: cc,
-                        LinesOfExecutableCode: loc));
+                        LinesOfExecutableCode: loc,
+                        HalsteadVolume: halstead.Volume,
+                        MaintainabilityIndex: mi));
                 }
 
                 // Also analyze constructors, properties, etc.
@@ -177,6 +182,9 @@ public sealed class SolutionAnalyzer
                         ? LinesOfCodeCalculator.Calculate(ctor.Body)
                         : (ctor.ExpressionBody != null ? 1 : 0);
 
+                    var halstead = HalsteadCalculator.Calculate(ctor);
+                    var mi = MaintainabilityIndexCalculator.Calculate(halstead.Volume, cc, loc);
+
                     var lineSpan = ctor.GetLocation().GetLineSpan();
 
                     methodMetricsList.Add(new MethodMetrics(
@@ -185,7 +193,9 @@ public sealed class SolutionAnalyzer
                         StartLine: lineSpan.StartLinePosition.Line + 1,
                         EndLine: lineSpan.EndLinePosition.Line + 1,
                         CyclomaticComplexity: cc,
-                        LinesOfExecutableCode: loc));
+                        LinesOfExecutableCode: loc,
+                        HalsteadVolume: halstead.Volume,
+                        MaintainabilityIndex: mi));
                 }
 
                 var lineSpanType = typeDecl.GetLocation().GetLineSpan();

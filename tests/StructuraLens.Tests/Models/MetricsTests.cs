@@ -13,7 +13,9 @@ public class MetricsTests
             StartLine: 10,
             EndLine: 20,
             CyclomaticComplexity: 5,
-            LinesOfExecutableCode: 15);
+            LinesOfExecutableCode: 15,
+            HalsteadVolume: 100.5,
+            MaintainabilityIndex: 75.2);
 
         await Assert.That(metrics.FullName).IsEqualTo("TestClass.TestMethod()");
         await Assert.That(metrics.FilePath).IsEqualTo("/path/to/file.cs");
@@ -21,6 +23,8 @@ public class MetricsTests
         await Assert.That(metrics.EndLine).IsEqualTo(20);
         await Assert.That(metrics.CyclomaticComplexity).IsEqualTo(5);
         await Assert.That(metrics.LinesOfExecutableCode).IsEqualTo(15);
+        await Assert.That(metrics.HalsteadVolume).IsEqualTo(100.5);
+        await Assert.That(metrics.MaintainabilityIndex).IsEqualTo(75.2);
     }
 
     [Test]
@@ -28,9 +32,9 @@ public class MetricsTests
     {
         var methods = new List<MethodMetrics>
         {
-            new("Method1", "/file.cs", 1, 5, CyclomaticComplexity: 3, LinesOfExecutableCode: 10),
-            new("Method2", "/file.cs", 6, 10, CyclomaticComplexity: 5, LinesOfExecutableCode: 8),
-            new("Method3", "/file.cs", 11, 15, CyclomaticComplexity: 2, LinesOfExecutableCode: 5)
+            new("Method1", "/file.cs", 1, 5, CyclomaticComplexity: 3, LinesOfExecutableCode: 10, HalsteadVolume: 50, MaintainabilityIndex: 80),
+            new("Method2", "/file.cs", 6, 10, CyclomaticComplexity: 5, LinesOfExecutableCode: 8, HalsteadVolume: 60, MaintainabilityIndex: 70),
+            new("Method3", "/file.cs", 11, 15, CyclomaticComplexity: 2, LinesOfExecutableCode: 5, HalsteadVolume: 30, MaintainabilityIndex: 90)
         };
 
         var typeMetrics = new TypeMetrics(
@@ -47,9 +51,9 @@ public class MetricsTests
     {
         var methods = new List<MethodMetrics>
         {
-            new("Method1", "/file.cs", 1, 5, CyclomaticComplexity: 3, LinesOfExecutableCode: 10),
-            new("Method2", "/file.cs", 6, 10, CyclomaticComplexity: 5, LinesOfExecutableCode: 8),
-            new("Method3", "/file.cs", 11, 15, CyclomaticComplexity: 2, LinesOfExecutableCode: 5)
+            new("Method1", "/file.cs", 1, 5, CyclomaticComplexity: 3, LinesOfExecutableCode: 10, HalsteadVolume: 50, MaintainabilityIndex: 80),
+            new("Method2", "/file.cs", 6, 10, CyclomaticComplexity: 5, LinesOfExecutableCode: 8, HalsteadVolume: 60, MaintainabilityIndex: 70),
+            new("Method3", "/file.cs", 11, 15, CyclomaticComplexity: 2, LinesOfExecutableCode: 5, HalsteadVolume: 30, MaintainabilityIndex: 90)
         };
 
         var typeMetrics = new TypeMetrics(
@@ -81,11 +85,11 @@ public class MetricsTests
         {
             new("Class1", "/file1.cs", 0, new List<MethodMetrics>
             {
-                new("Method1", "/file1.cs", 1, 5, 3, 10)
+                new("Method1", "/file1.cs", 1, 5, 3, 10, 50, 80)
             }),
             new("Class2", "/file2.cs", 1, new List<MethodMetrics>
             {
-                new("Method2", "/file2.cs", 1, 5, 7, 20)
+                new("Method2", "/file2.cs", 1, 5, 7, 20, 100, 60)
             })
         };
 
@@ -179,15 +183,15 @@ public class MetricsTests
             {
                 new("Class1", "/f1.cs", 0, new List<MethodMetrics>
                 {
-                    new("M1", "/f1.cs", 1, 5, 1, 1),
-                    new("M2", "/f1.cs", 6, 10, 1, 1)
+                    new("M1", "/f1.cs", 1, 5, 1, 1, 10, 95),
+                    new("M2", "/f1.cs", 6, 10, 1, 1, 10, 95)
                 })
             }),
             new("Project2", "/p2.csproj", new List<TypeMetrics>
             {
                 new("Class2", "/f2.cs", 0, new List<MethodMetrics>
                 {
-                    new("M3", "/f2.cs", 1, 5, 1, 1)
+                    new("M3", "/f2.cs", 1, 5, 1, 1, 10, 95)
                 })
             })
         };

@@ -135,8 +135,15 @@ static void PrintSummary(AnalysisReport report)
         Console.WriteLine($"  Total LOC: {project.TotalLinesOfExecutableCode}");
         Console.WriteLine($"  Max DIT: {project.MaxDepthOfInheritance}");
 
-        var highComplexityMethods = project.Types
-            .SelectMany(t => t.Methods)
+        var allMethods = project.Types.SelectMany(t => t.Methods).ToList();
+
+        if (allMethods.Count > 0)
+        {
+            var avgMI = allMethods.Average(m => m.MaintainabilityIndex);
+            Console.WriteLine($"  Avg Maintainability Index: {avgMI:F1}");
+        }
+
+        var highComplexityMethods = allMethods
             .Where(m => m.CyclomaticComplexity > 10)
             .OrderByDescending(m => m.CyclomaticComplexity)
             .Take(5)
@@ -148,6 +155,21 @@ static void PrintSummary(AnalysisReport report)
             foreach (var method in highComplexityMethods)
             {
                 Console.WriteLine($"    - {method.FullName}: CC={method.CyclomaticComplexity}");
+            }
+        }
+
+        var lowMIMethods = allMethods
+            .Where(m => m.MaintainabilityIndex < 40)
+            .OrderBy(m => m.MaintainabilityIndex)
+            .Take(5)
+            .ToList();
+
+        if (lowMIMethods.Count > 0)
+        {
+            Console.WriteLine("  Low maintainability methods (MI < 40):");
+            foreach (var method in lowMIMethods)
+            {
+                Console.WriteLine($"    - {method.FullName}: MI={method.MaintainabilityIndex:F1}");
             }
         }
         Console.WriteLine();
