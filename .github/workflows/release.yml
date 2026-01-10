@@ -41,6 +41,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
@@ -55,12 +57,40 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Get latest tag
+        id: get_tag
+        run: |
+          echo "tag=$(git describe --tags --abbrev=0)" >> $GITHUB_OUTPUT
+
       - name: Build and push image
         env:
           IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/structura-lens
+          TAG: ${{ steps.get_tag.outputs.tag }}
         run: |
-          # semantic-release creates a git tag like v1.2.3; use it as image tag
-          TAG=$(git describe --tags --abbrev=0)
           docker build -t ${IMAGE_NAME}:${TAG} -t ${IMAGE_NAME}:latest -f Dockerfile .
           docker push ${IMAGE_NAME}:${TAG}
           docker push ${IMAGE_NAME}:latest
+
+      - name: Annotate GitHub Release with image info
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const tag = process.env.TAG;
+            const image = `${process.env.IMAGE_NAME}:${tag}`;
+            const release = await github.rest.repos.getReleaseByTag({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag
+            }).catch(() => null);
+            if (release) {
+              const body = (release.data.body || '') + `\n\nDocker image: ${image}`;
+              await github.rest.repos.updateRelease({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                release_id: release.data.id,
+                body
+              });
+            }
+        env:
+          TAG: ${{ steps.get_tag.outputs.tag }}
+          IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/structura-lens
