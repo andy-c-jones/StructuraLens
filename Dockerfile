@@ -8,7 +8,11 @@ RUN dotnet publish src/StructuraLens.Cli/StructuraLens.Cli.csproj \
     -c Release \
     -r linux-x64 \
     --self-contained true \
+    -p:PublishSingleFile=true \
     -o /app/publish
+
+# Manually copy BuildHost files from NuGet cache (required for MSBuildWorkspace)
+RUN find /root/.nuget/packages/microsoft.codeanalysis.workspaces.msbuild -name "BuildHost-*" -type d | head -1 | xargs -I {} cp -r {} /app/publish/ || true
 
 # Runtime stage - use SDK image since MSBuildWorkspace needs dotnet
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS runtime
