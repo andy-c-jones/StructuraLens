@@ -3,7 +3,7 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
 # Copy solution and project files for restore
-COPY StructuraLens.sln ./
+COPY StructuraLens.slnx ./
 COPY src/StructuraLens.Cli/StructuraLens.Cli.csproj src/StructuraLens.Cli/
 COPY src/StructuraLens.Core/StructuraLens.Core.csproj src/StructuraLens.Core/
 COPY tests/StructuraLens.Tests/StructuraLens.Tests.csproj tests/StructuraLens.Tests/
