@@ -64,6 +64,7 @@ public static class HtmlReportGenerator
         sb.AppendLine(GenerateTabs());
         sb.AppendLine(GenerateTabContents());
         sb.AppendLine("  </div>");
+        sb.AppendLine("  <footer class=\"copyright\">&copy; " + DateTime.UtcNow.Year + " Dark Peak Development. All rights reserved.</footer>");
         sb.AppendLine($"  <script>const reportData = {compactJson};</script>");
         sb.AppendLine($"  <script>const diagnosticsData = {diagnosticsJson};</script>");
         sb.AppendLine(GenerateJavaScript());
@@ -159,6 +160,7 @@ public static class HtmlReportGenerator
     .mi-good { background: var(--success); }
     .mi-medium { background: var(--warning); }
     .mi-poor { background: var(--error); }
+    .copyright { text-align: center; padding: 20px; color: var(--text-muted); font-size: 12px; border-top: 1px solid var(--border); margin-top: 30px; }
     @media (max-width: 768px) {
       .cards { grid-template-columns: repeat(2, 1fr); }
       .header { flex-direction: column; align-items: flex-start; gap: 10px; }
@@ -427,6 +429,16 @@ public static class HtmlReportGenerator
             <option value="loc">Lines of Code</option>
             <option value="maintainability">Maintainability Index</option>
           </select>
+          <label>Size by:</label>
+          <select id="sizeMetric">
+            <option value="dependencies">Dependencies</option>
+            <option value="diagnostics">Diagnostics Count</option>
+            <option value="linting">Linting Violations</option>
+            <option value="coupling">Coupling (Ce)</option>
+            <option value="complexity">Cyclomatic Complexity</option>
+            <option value="loc">Lines of Code</option>
+            <option value="maintainability">Maintainability Index</option>
+          </select>
         </div>
         <div id="graphContainer" class="graph-container graph-fullpage"></div>
       `;
@@ -436,15 +448,19 @@ public static class HtmlReportGenerator
       document.getElementById('colorMetric').addEventListener('change', () => {
         renderCurrentGraph();
       });
+      document.getElementById('sizeMetric').addEventListener('change', () => {
+        renderCurrentGraph();
+      });
     }
 
     function renderCurrentGraph() {
       const container = document.getElementById('graphContainer');
       const selector = document.getElementById('graphSelector');
       const colorMetric = document.getElementById('colorMetric').value;
+      const sizeMetric = document.getElementById('sizeMetric').value;
       const graphData = selector.value === 'project' ? reportData.g.p : reportData.g.ns;
       container.innerHTML = '';
-      renderGraph('graphContainer', graphData, colorMetric, selector.value);
+      renderGraph('graphContainer', graphData, colorMetric, selector.value, sizeMetric);
     }
 
     // Get color on green-yellow-red scale with muted saturation
@@ -548,7 +564,41 @@ public static class HtmlReportGenerator
       return getHeatColor(ratio);
     }
 
-    function renderGraph(containerId, graphData, colorMetric = 'none', graphType = 'project') {
+    function getNodeSizeValue(node, sizeMetric, graphType, outboundCount) {
+      if (sizeMetric === 'dependencies') return outboundCount;
+      
+      // For namespace view, try to find project by prefix match
+      let metrics = null;
+      if (graphType === 'project') {
+        metrics = getProjectMetrics(node.name);
+      } else {
+        const matchingProjects = reportData.prj.filter(p => node.name.startsWith(p.n.replace('.', '')));
+        if (matchingProjects.length > 0) {
+          metrics = matchingProjects.reduce((a, b) => a.n.length > b.n.length ? a : b);
+        }
+      }
+      
+      if (!metrics) return outboundCount; // Fallback to dependencies
+      
+      switch (sizeMetric) {
+        case 'diagnostics':
+          return (metrics.err || 0) * 5 + (metrics.warn || 0);
+        case 'linting':
+          return reportData.l?.v?.filter(v => v[2] === metrics.n || v[3]?.startsWith(metrics.n))?.length || 0;
+        case 'coupling':
+          return metrics.ce || 0;
+        case 'complexity':
+          return metrics.cc || 0;
+        case 'loc':
+          return metrics.loc || 0;
+        case 'maintainability':
+          return 100 - (metrics.mi || 100); // Lower MI = bigger node
+        default:
+          return outboundCount;
+      }
+    }
+
+    function renderGraph(containerId, graphData, colorMetric = 'none', graphType = 'project', sizeMetric = 'dependencies') {
       const container = document.getElementById(containerId);
       const width = container.clientWidth || 800;
       const height = container.clientHeight || 600;
@@ -566,25 +616,21 @@ public static class HtmlReportGenerator
         outboundCounts[l.source] = (outboundCounts[l.source] || 0) + l.weight;
       });
       
-      // Calculate min/max for relative sizing
-      const counts = Object.values(outboundCounts);
-      const minCount = Math.min(...counts, 0);
-      const maxCount = Math.max(...counts, 1);
+      // Build preliminary nodes to compute size values
+      const prelimNodes = graphData.n.map(([id, name, size]) => ({ id, name, size, depCount: outboundCounts[id] || 0 }));
+      
+      // Calculate size values based on selected metric
+      const sizeValues = prelimNodes.map(n => getNodeSizeValue(n, sizeMetric, graphType, n.depCount));
+      const minValue = Math.min(...sizeValues, 0);
+      const maxValue = Math.max(...sizeValues, 1);
       const minRadius = 15;
       const maxRadius = 200;
       
-      const getRadius = (nodeId) => {
-        const count = outboundCounts[nodeId] || 0;
-        if (maxCount === minCount) return (minRadius + maxRadius) / 2;
-        const ratio = (count - minCount) / (maxCount - minCount);
-        return minRadius + ratio * (maxRadius - minRadius);
-      };
-
-      const nodes = graphData.n.map(([id, name, size]) => ({ 
-        id, name, size, 
-        radius: getRadius(id),
-        depCount: outboundCounts[id] || 0
-      }));
+      const nodes = prelimNodes.map((n, i) => {
+        const value = sizeValues[i];
+        const ratio = maxValue === minValue ? 0.5 : (value - minValue) / (maxValue - minValue);
+        return { ...n, radius: minRadius + ratio * (maxRadius - minRadius), sizeValue: value };
+      });
 
       const svg = d3.select(`#${containerId}`).append('svg')
         .attr('width', width)
@@ -659,7 +705,7 @@ public static class HtmlReportGenerator
         .attr('font-size', d => Math.max(9, Math.min(12, d.radius / 3)))
         .text(d => d.name);
 
-      node.append('title').text(d => `${d.name}\nOutbound deps: ${d.depCount}\nLOC: ${d.size}`);
+      node.append('title').text(d => `${d.name}\nOutbound deps: ${d.depCount}\nSize metric: ${d.sizeValue}\nLOC: ${d.size}`);
 
       // Position arrows at edge of target circle
       simulation.on('tick', () => {

@@ -52,6 +52,7 @@ jobs:
           docker build -t structura-lens:${{ github.sha }} -t structura-lens:latest -f Dockerfile .
 
       - name: Run StructuraLens analysis
+        if: ${{ github.event_name == 'pull_request' }}
         uses: ./.github/actions/analyze
         with:
           solution: 'StructuraLens.slnx'
@@ -60,6 +61,7 @@ jobs:
           image: 'structura-lens:latest'
 
       - name: Upload analysis report
+        if: ${{ github.event_name == 'pull_request' }}
         uses: actions/upload-artifact@v4
         id: upload-report
         with:
@@ -67,7 +69,7 @@ jobs:
           path: structuralens-report.html
 
       - name: Comment on PR
-        if: github.event_name == 'pull_request'
+        if: ${{ github.event_name == 'pull_request' }}
         uses: actions/github-script@v7
         with:
           script: |
