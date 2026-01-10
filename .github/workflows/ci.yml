@@ -7,6 +7,10 @@ on:
     branches: [ main ]
   workflow_dispatch: {}
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -43,27 +47,37 @@ jobs:
             --self-contained true \
             -o ./artifacts/publish/linux-x64
 
-      - name: Run tool against own codebase
-        run: |
-          chmod +x ./artifacts/publish/linux-x64/StructuraLens.Cli
-          ./artifacts/publish/linux-x64/StructuraLens.Cli analyze . --out ./artifacts/self-analysis-report.json || true
-
- #     - name: Upload published artifacts
- #       uses: actions/upload-artifact@v4
- #       with:
- #         name: structuralens-linux-x64
- #         path: ./artifacts/publish/linux-x64
- #
-      - name: Upload self-analysis report
-        uses: actions/upload-artifact@v4
-        with:
-          name: self-analysis-report
-          path: ./artifacts/self-analysis-report.json
-          if-no-files-found: ignore
-
       - name: Build Docker image
         run: |
-          docker build -t structura-lens:${{ github.sha }} -f Dockerfile .
+          docker build -t structura-lens:${{ github.sha }} -t structura-lens:latest -f Dockerfile .
+
+      - name: Run StructuraLens analysis
+        uses: ./.github/actions/analyze
+        with:
+          solution: 'StructuraLens.slnx'
+          format: 'html'
+          output: 'structuralens-report.html'
+          image: 'structura-lens:latest'
+
+      - name: Upload analysis report
+        uses: actions/upload-artifact@v4
+        id: upload-report
+        with:
+          name: structuralens-report
+          path: structuralens-report.html
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const artifactUrl = `https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts/${{ steps.upload-report.outputs.artifact-id }}`;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `📊 Analysis complete. Report available [here](${artifactUrl}).`
+            });
 
       - name: Save Docker image to tar
         run: |

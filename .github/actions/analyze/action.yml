@@ -1,0 +1,38 @@
+name: 'StructuraLens Analyze'
+description: 'Run StructuraLens analysis using Docker container'
+
+inputs:
+  solution:
+    description: 'Path to solution file (.sln/.slnx) or project (.csproj)'
+    required: true
+  format:
+    description: 'Output format: json, compact, html, summary'
+    required: false
+    default: 'html'
+  output:
+    description: 'Output file path'
+    required: false
+    default: 'structuralens-report.html'
+  image:
+    description: 'Docker image to use'
+    required: false
+    default: 'structura-lens:latest'
+
+outputs:
+  report-path:
+    description: 'Path to the generated report'
+    value: ${{ inputs.output }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Run StructuraLens analysis
+      shell: bash
+      run: |
+        docker run --rm \
+          -v "${{ github.workspace }}:/workspace" \
+          -w /workspace \
+          ${{ inputs.image }} \
+          analyze "${{ inputs.solution }}" \
+          --format ${{ inputs.format }} \
+          --out "${{ inputs.output }}"
