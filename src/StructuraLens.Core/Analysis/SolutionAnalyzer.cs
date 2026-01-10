@@ -48,11 +48,11 @@ public sealed class SolutionAnalyzer
         }
 
         using var workspace = MSBuildWorkspace.Create();
-        workspace.WorkspaceFailed += (_, e) =>
+        workspace.RegisterWorkspaceFailedHandler(e =>
         {
             if (e.Diagnostic.Kind == WorkspaceDiagnosticKind.Warning)
                 _warnings.Add($"Workspace warning: {e.Diagnostic.Message}");
-        };
+        });
 
         var solution = await workspace.OpenSolutionAsync(fullPath, cancellationToken: cancellationToken);
         var projectMetricsList = new List<ProjectMetrics>();
@@ -84,11 +84,11 @@ public sealed class SolutionAnalyzer
         }
 
         using var workspace = MSBuildWorkspace.Create();
-        workspace.WorkspaceFailed += (_, e) =>
+        workspace.RegisterWorkspaceFailedHandler(e =>
         {
             if (e.Diagnostic.Kind == WorkspaceDiagnosticKind.Warning)
                 _warnings.Add($"Workspace warning: {e.Diagnostic.Message}");
-        };
+        });
 
         var project = await workspace.OpenProjectAsync(fullPath, cancellationToken: cancellationToken);
         var projectMetrics = await AnalyzeProjectAsync(project, cancellationToken);
