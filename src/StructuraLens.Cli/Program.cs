@@ -1,10 +1,24 @@
 using System.CommandLine;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.Extensions.Logging;
 using StructuraLens.Core.Analysis;
 using StructuraLens.Core.Configuration;
 using StructuraLens.Core.Export;
 using StructuraLens.Core.Models;
+
+// Configure logging
+using var loggerFactory = LoggerFactory.Create(builder =>
+{
+    builder
+        .AddConsole(options =>
+        {
+            options.FormatterName = "simple";
+        })
+        .SetMinimumLevel(LogLevel.Information);
+});
+
+var logger = loggerFactory.CreateLogger("StructuraLens");
 
 // Create options
 var outputOption = new Option<string?>("--out", "-o")
@@ -28,6 +42,11 @@ var configOption = new Option<string?>("--config")
     Description = "Path to structuralens.json configuration file"
 };
 
+var verboseOption = new Option<bool>("--verbose", "-v")
+{
+    Description = "Enable verbose logging output"
+};
+
 // Create path argument
 var pathArgument = new Argument<string>("path")
 {
@@ -41,6 +60,7 @@ analyzeCommand.Options.Add(outputOption);
 analyzeCommand.Options.Add(formatOption);
 analyzeCommand.Options.Add(couplingModeOption);
 analyzeCommand.Options.Add(configOption);
+analyzeCommand.Options.Add(verboseOption);
 
 analyzeCommand.SetAction(async (parseResult, cancellationToken) =>
 {
@@ -49,7 +69,37 @@ analyzeCommand.SetAction(async (parseResult, cancellationToken) =>
     var format = parseResult.GetValue(formatOption) ?? "json";
     var couplingMode = parseResult.GetValue(couplingModeOption);
     var configPath = parseResult.GetValue(configOption);
+    var verbose = parseResult.GetValue(verboseOption);
 
+    // Adjust logging level based on verbose flag
+    if (verbose)
+    {
+        loggerFactory.Dispose();
+        using var verboseLoggerFactory = LoggerFactory.Create(builder =>
+        {
+            builder
+                .AddConsole(options =>
+                {
+                    options.FormatterName = "simple";
+                })
+                .SetMinimumLevel(LogLevel.Debug);
+        });
+        var verboseLogger = verboseLoggerFactory.CreateLogger("StructuraLens");
+        return await ExecuteAnalysisAsync(path, output, format, couplingMode, configPath, verboseLogger, cancellationToken);
+    }
+
+    return await ExecuteAnalysisAsync(path, output, format, couplingMode, configPath, logger, cancellationToken);
+});
+
+static async Task<int> ExecuteAnalysisAsync(
+    string path,
+    string? output,
+    string format,
+    string? couplingMode,
+    string? configPath,
+    ILogger logger,
+    CancellationToken cancellationToken)
+{
     try
     {
         Console.WriteLine("StructuraLens v0.1.0");
@@ -95,7 +145,7 @@ analyzeCommand.SetAction(async (parseResult, cancellationToken) =>
         }
         Console.WriteLine();
 
-        var analyzer = new SolutionAnalyzer();
+        var analyzer = new SolutionAnalyzer(logger);
         var report = path.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)
             ? await analyzer.AnalyzeProjectAsync(path, config, cancellationToken)
             : await analyzer.AnalyzeSolutionAsync(path, config, cancellationToken);
@@ -191,7 +241,7 @@ analyzeCommand.SetAction(async (parseResult, cancellationToken) =>
         Console.ResetColor();
         return 1;
     }
-});
+}
 
 // Create init subcommand
 var initPathArgument = new Argument<string?>("path")

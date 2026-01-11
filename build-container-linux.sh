@@ -1,0 +1,52 @@
+#!/bin/bash
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+IMAGE_NAME="structura-lens:local"
+
+echo "Building Docker container image: $IMAGE_NAME"
+echo "================================================"
+
+# Try docker first, fall back to podman
+if command -v docker &> /dev/null; then
+  CONTAINER_CMD="docker"
+elif command -v podman &> /dev/null; then
+  CONTAINER_CMD="podman"
+else
+  echo "Error: Neither docker nor podman found. Please install one of them."
+  exit 1
+fi
+
+echo "Using container runtime: $CONTAINER_CMD"
+$CONTAINER_CMD build -t "$IMAGE_NAME" -f "$SCRIPT_DIR/Dockerfile" "$SCRIPT_DIR"
+
+echo ""
+echo "✓ Build complete! Image tagged as: $IMAGE_NAME"
+echo ""
+echo "================================================"
+echo "USAGE GUIDE: Running StructuraLens with Docker"
+echo "================================================"
+echo ""
+echo "1. Initialize a new .slnx file from existing solutions:"
+echo "   $CONTAINER_CMD run --rm -v \"\$PWD:/workspace:Z\" -w /workspace $IMAGE_NAME init"
+echo ""
+echo "2. Analyze a solution and generate HTML report:"
+echo "   $CONTAINER_CMD run --rm -v \"\$PWD:/workspace:Z\" -w /workspace $IMAGE_NAME analyze YourSolution.slnx --format html --out report.html"
+echo ""
+echo "3. Analyze with JSON output:"
+echo "   $CONTAINER_CMD run --rm -v \"\$PWD:/workspace:Z\" -w /workspace $IMAGE_NAME analyze YourSolution.slnx --format json --out report.json"
+echo ""
+echo "4. With NuGet cache mounting (faster restores):"
+echo "   $CONTAINER_CMD run --rm \\"
+echo "     -v \"\$PWD:/workspace:Z\" \\"
+echo "     -v \"\$HOME/.nuget/packages:/root/.nuget/packages:ro,Z\" \\"
+echo "     -w /workspace \\"
+echo "     $IMAGE_NAME analyze YourSolution.slnx --format html --out report.html"
+echo ""
+echo "================================================"
+echo "NOTES:"
+echo "- The ':Z' suffix on volume mounts is for SELinux compatibility (Podman/Fedora)"
+echo "- Remove ':Z' if using Docker on non-SELinux systems"
+echo "- Current directory is mounted to /workspace in the container"
+echo "- All paths should be relative to your current directory"
+echo "================================================"

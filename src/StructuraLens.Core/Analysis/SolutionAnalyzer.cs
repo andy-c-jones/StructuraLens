@@ -2,6 +2,8 @@ using Microsoft.Build.Locator;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.MSBuild;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using StructuraLens.Core.Configuration;
 using StructuraLens.Core.Models;
 
@@ -16,6 +18,12 @@ public sealed class SolutionAnalyzer
     private static readonly object _lock = new();
 
     private readonly List<string> _warnings = [];
+    private readonly ILogger _logger;
+
+    public SolutionAnalyzer(ILogger? logger = null)
+    {
+        _logger = logger ?? NullLogger.Instance;
+    }
 
     public static void EnsureMSBuildRegistered()
     {
@@ -51,6 +59,7 @@ public sealed class SolutionAnalyzer
     /// </summary>
     public async Task<AnalysisReport> AnalyzeSolutionAsync(string solutionPath, StructuraLensConfig config, CancellationToken cancellationToken = default)
     {
+        _logger.LogInformation("Starting solution analysis: {SolutionPath}", solutionPath);
         EnsureMSBuildRegistered();
 
         var fullPath = Path.GetFullPath(solutionPath);
@@ -60,34 +69,60 @@ public sealed class SolutionAnalyzer
         }
 
         // Restore NuGet packages to ensure all references are available
+        _logger.LogInformation("Restoring NuGet packages...");
         await RestorePackagesAsync(fullPath, cancellationToken);
 
+        _logger.LogInformation("Loading solution into MSBuild workspace...");
         using var workspace = MSBuildWorkspace.Create();
         workspace.RegisterWorkspaceFailedHandler(e =>
         {
             if (e.Diagnostic.Kind == WorkspaceDiagnosticKind.Warning)
+            {
                 _warnings.Add($"Workspace warning: {e.Diagnostic.Message}");
+                _logger.LogWarning("Workspace warning: {Message}", e.Diagnostic.Message);
+            }
         });
 
         var solution = await workspace.OpenSolutionAsync(fullPath, cancellationToken: cancellationToken);
+        var csharpProjects = solution.Projects.Where(p => p.Language == LanguageNames.CSharp).ToList();
+        _logger.LogInformation("Loaded solution with {ProjectCount} C# projects", csharpProjects.Count);
+
         var projectMetricsList = new List<ProjectMetrics>();
+        var projectIndex = 0;
 
-        foreach (var project in solution.Projects)
+        foreach (var project in csharpProjects)
         {
-            if (project.Language != LanguageNames.CSharp)
-                continue;
-
+            projectIndex++;
+            _logger.LogInformation("Analyzing project {Index}/{Total}: {ProjectName}", projectIndex, csharpProjects.Count, project.Name);
+            
             var projectMetrics = await AnalyzeProjectAsync(project, cancellationToken);
             projectMetricsList.Add(projectMetrics);
+            
+            _logger.LogInformation("Completed {ProjectName}: {TypeCount} types, {MethodCount} methods", 
+                project.Name, 
+                projectMetrics.Types.Count, 
+                projectMetrics.TotalMethods);
         }
 
         // Analyze coupling across the entire solution with configuration
-        var couplingAnalysis = await CouplingAnalyzer.AnalyzeSolutionAsync(solution, config, cancellationToken);
+        _logger.LogInformation("Analyzing solution-wide coupling with mode: {CouplingMode}", config.Coupling.Mode);
+        var couplingAnalysis = await CouplingAnalyzer.AnalyzeSolutionAsync(solution, config, _logger, cancellationToken);
 
         // Run architecture linting if rules are configured
-        var lintingResults = config.Rules.Count > 0
-            ? ArchitectureLinter.Evaluate(couplingAnalysis, config.Rules)
-            : null;
+        LintingResults? lintingResults = null;
+        if (config.Rules.Count > 0)
+        {
+            _logger.LogInformation("Evaluating {RuleCount} architecture rules...", config.Rules.Count);
+            lintingResults = ArchitectureLinter.Evaluate(couplingAnalysis, config.Rules);
+            _logger.LogInformation("Linting complete: {ErrorCount} errors, {WarningCount} warnings", 
+                lintingResults.ErrorCount, 
+                lintingResults.WarningCount);
+        }
+
+        _logger.LogInformation("Analysis complete. Total: {ProjectCount} projects, {TypeCount} types, {MethodCount} methods",
+            projectMetricsList.Count,
+            projectMetricsList.Sum(p => p.Types.Count),
+            projectMetricsList.Sum(p => p.TotalMethods));
 
         return new AnalysisReport(
             SolutionPath: fullPath,
@@ -113,6 +148,7 @@ public sealed class SolutionAnalyzer
     /// </summary>
     public async Task<AnalysisReport> AnalyzeProjectAsync(string projectPath, StructuraLensConfig config, CancellationToken cancellationToken = default)
     {
+        _logger.LogInformation("Starting project analysis: {ProjectPath}", projectPath);
         EnsureMSBuildRegistered();
 
         var fullPath = Path.GetFullPath(projectPath);
@@ -122,25 +158,39 @@ public sealed class SolutionAnalyzer
         }
 
         // Restore NuGet packages to ensure all references are available
+        _logger.LogInformation("Restoring NuGet packages...");
         await RestorePackagesAsync(fullPath, cancellationToken);
 
+        _logger.LogInformation("Loading project into MSBuild workspace...");
         using var workspace = MSBuildWorkspace.Create();
         workspace.RegisterWorkspaceFailedHandler(e =>
         {
             if (e.Diagnostic.Kind == WorkspaceDiagnosticKind.Warning)
+            {
                 _warnings.Add($"Workspace warning: {e.Diagnostic.Message}");
+                _logger.LogWarning("Workspace warning: {Message}", e.Diagnostic.Message);
+            }
         });
 
         var project = await workspace.OpenProjectAsync(fullPath, cancellationToken: cancellationToken);
+        _logger.LogInformation("Analyzing project: {ProjectName}", project.Name);
+        
         var projectMetrics = await AnalyzeProjectAsync(project, cancellationToken);
 
         // Analyze internal coupling within the project with configuration
-        var couplingAnalysis = await CouplingAnalyzer.AnalyzeProjectCouplingAsync(project, config, cancellationToken);
+        _logger.LogInformation("Analyzing project coupling with mode: {CouplingMode}", config.Coupling.Mode);
+        var couplingAnalysis = await CouplingAnalyzer.AnalyzeProjectCouplingAsync(project, config, _logger, cancellationToken);
 
         // Run architecture linting if rules are configured
-        var lintingResults = config.Rules.Count > 0
-            ? ArchitectureLinter.Evaluate(couplingAnalysis, config.Rules)
-            : null;
+        LintingResults? lintingResults = null;
+        if (config.Rules.Count > 0)
+        {
+            _logger.LogInformation("Evaluating {RuleCount} architecture rules...", config.Rules.Count);
+            lintingResults = ArchitectureLinter.Evaluate(couplingAnalysis, config.Rules);
+            _logger.LogInformation("Linting complete: {ErrorCount} errors, {WarningCount} warnings", 
+                lintingResults.ErrorCount, 
+                lintingResults.WarningCount);
+        }
 
         return new AnalysisReport(
             SolutionPath: fullPath,
@@ -155,10 +205,12 @@ public sealed class SolutionAnalyzer
 
     private async Task<ProjectMetrics> AnalyzeProjectAsync(Project project, CancellationToken cancellationToken)
     {
+        _logger.LogDebug("Getting compilation for project: {ProjectName}", project.Name);
         var compilation = await project.GetCompilationAsync(cancellationToken);
         if (compilation == null)
         {
             _warnings.Add($"Could not get compilation for project: {project.Name}");
+            _logger.LogWarning("Could not get compilation for project: {ProjectName}", project.Name);
             return new ProjectMetrics(project.Name, project.FilePath ?? "", []);
         }
 
@@ -166,11 +218,22 @@ public sealed class SolutionAnalyzer
         var diagnosticSummary = CollectDiagnostics(compilation);
 
         var typeMetricsList = new List<TypeMetrics>();
+        var documentCount = project.Documents.Count();
+        var documentIndex = 0;
+
+        _logger.LogDebug("Analyzing {DocumentCount} documents in project {ProjectName}", documentCount, project.Name);
 
         foreach (var document in project.Documents)
         {
+            documentIndex++;
             if (document.SourceCodeKind != SourceCodeKind.Regular)
                 continue;
+
+            if (documentIndex % 50 == 0)
+            {
+                _logger.LogDebug("Progress: {DocumentIndex}/{DocumentCount} documents processed in {ProjectName}", 
+                    documentIndex, documentCount, project.Name);
+            }
 
             var syntaxTree = await document.GetSyntaxTreeAsync(cancellationToken);
             var semanticModel = await document.GetSemanticModelAsync(cancellationToken);
@@ -416,7 +479,7 @@ public sealed class SolutionAnalyzer
             MaintainabilityIndex: mi);
     }
 
-    private static async Task RestorePackagesAsync(string projectOrSolutionPath, CancellationToken cancellationToken)
+    private async Task RestorePackagesAsync(string projectOrSolutionPath, CancellationToken cancellationToken)
     {
         var startInfo = new System.Diagnostics.ProcessStartInfo
         {
@@ -429,8 +492,22 @@ public sealed class SolutionAnalyzer
         };
 
         using var process = System.Diagnostics.Process.Start(startInfo);
-        if (process == null) return;
+        if (process == null)
+        {
+            _logger.LogWarning("Failed to start dotnet restore process");
+            return;
+        }
 
         await process.WaitForExitAsync(cancellationToken);
+        
+        if (process.ExitCode != 0)
+        {
+            var error = await process.StandardError.ReadToEndAsync(cancellationToken);
+            _logger.LogWarning("Package restore completed with exit code {ExitCode}: {Error}", process.ExitCode, error);
+        }
+        else
+        {
+            _logger.LogDebug("Package restore completed successfully");
+        }
     }
 }

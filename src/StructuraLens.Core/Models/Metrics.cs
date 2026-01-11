@@ -37,6 +37,7 @@ public record ProjectMetrics(
     public int TotalCyclomaticComplexity => Types.Sum(t => t.TotalCyclomaticComplexity);
     public int TotalLinesOfExecutableCode => Types.Sum(t => t.TotalLinesOfExecutableCode);
     public int MaxDepthOfInheritance => Types.Count > 0 ? Types.Max(t => t.DepthOfInheritance) : 0;
+    public int TotalMethods => Types.Sum(t => t.Methods.Count);
 
     /// <summary>Compiler diagnostics for this project.</summary>
     public DiagnosticSummary? Diagnostics { get; init; }
