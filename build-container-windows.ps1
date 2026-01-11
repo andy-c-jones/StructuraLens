@@ -49,7 +49,15 @@ Write-Host "     -v `"`${env:APPDATA}\NuGet:/root/.nuget/NuGet:ro`" ``"
 Write-Host "     -w /workspace ``"
 Write-Host "     $ImageName analyze YourSolution.slnx --format html --out report.html"
 Write-Host ""
-Write-Host "6. With Azure Artifacts / credential provider (using PAT):" -ForegroundColor Yellow
+Write-Host "6. With host credential provider plugins (e.g., Azure Artifacts Credential Provider):" -ForegroundColor Yellow
+Write-Host "   docker run --rm ``"
+Write-Host "     -v `"`${PWD}:/workspace`" ``"
+Write-Host "     -v `"`${env:USERPROFILE}\.nuget\packages:/root/.nuget/packages:ro`" ``"
+Write-Host "     -v `"`${env:USERPROFILE}\.nuget\plugins:/root/.nuget/plugins:ro`" ``"
+Write-Host "     -w /workspace ``"
+Write-Host "     $ImageName analyze YourSolution.slnx --format html --out report.html"
+Write-Host ""
+Write-Host "7. With Azure Artifacts using PAT (for CI/non-interactive):" -ForegroundColor Yellow
 Write-Host "   docker run --rm ``"
 Write-Host "     -v `"`${PWD}:/workspace`" ``"
 Write-Host "     -v `"`${env:USERPROFILE}\.nuget\packages:/root/.nuget/packages:ro`" ``"

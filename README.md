@@ -41,7 +41,14 @@ Configure credentials on your host:
 dotnet nuget add source <url> -n <name> -u <user> -p <password> --store-password-in-clear-text
 ```
 
-**Option 2: Azure Artifacts / credential provider with PAT (recommended for CI)**
+**Option 2: Mount host credential provider plugins (recommended for interactive use)**
+If you have credential providers installed on your host (e.g., Azure Artifacts Credential Provider), the scripts automatically mount them:
+- Linux/macOS: Mounts `~/.nuget/plugins/`
+- Windows: Mounts `%USERPROFILE%\.nuget\plugins\`
+
+This allows the container to use your existing authenticated sessions.
+
+**Option 3: PAT via environment variables (recommended for CI)**
 Set environment variables before running the scripts:
 ```bash
 # Linux/macOS
@@ -55,7 +62,7 @@ $env:NUGET_PAT = "your-personal-access-token"
 .\run-local-windows.ps1 -SolutionPath MySolution.sln
 ```
 
-**Option 3: Manual docker run with credentials**
+**Option 4: Manual docker run with credentials**
 ```bash
 docker run --rm \
   -v "$PWD:/workspace:Z" \

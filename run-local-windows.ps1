@@ -22,6 +22,14 @@ if (Test-Path $nugetConfigDir) {
   Write-Host "Mounting NuGet config: $nugetConfigDir"
 }
 
+# Mount credential provider plugins from host if available
+$credProviderMount = ""
+$credProviderDir = "$env:USERPROFILE\.nuget\plugins"
+if (Test-Path $credProviderDir) {
+  $credProviderMount = "-v `"$credProviderDir`":/root/.nuget/plugins:ro"
+  Write-Host "Mounting NuGet credential providers: $credProviderDir"
+}
+
 # Pass credentials for Azure Artifacts Credential Provider if set
 $credentialEnv = ""
 if ($env:NUGET_PAT) {
@@ -33,7 +41,7 @@ if ($env:NUGET_PAT) {
 }
 
 # Run the analysis container
-$cmd = "docker run --rm -v `"$pwd`":/workspace -w /workspace $nugetMount $nugetConfigMount $credentialEnv structura-lens:local /app/StructuraLens.Cli analyze `"$SolutionPath`" -f html -o `"$Output`""
+$cmd = "docker run --rm -v `"$pwd`":/workspace -w /workspace $nugetMount $nugetConfigMount $credProviderMount $credentialEnv structura-lens:local /app/StructuraLens.Cli analyze `"$SolutionPath`" -f html -o `"$Output`""
 Write-Host "Running: $cmd"
 Invoke-Expression $cmd
 

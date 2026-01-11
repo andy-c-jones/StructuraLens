@@ -27,6 +27,13 @@ elif [ -f "$HOME/.nuget/NuGet.Config" ]; then
   echo "Mounting NuGet config: $HOME/.nuget/NuGet.Config"
 fi
 
+# Mount credential provider plugins from host if available
+CREDPROVIDER_MOUNT=""
+if [ -d "$HOME/.nuget/plugins" ]; then
+  CREDPROVIDER_MOUNT="-v $HOME/.nuget/plugins:/root/.nuget/plugins:ro,Z"
+  echo "Mounting NuGet credential providers: $HOME/.nuget/plugins"
+fi
+
 # Pass credentials for Azure Artifacts Credential Provider if set
 CREDENTIAL_ENV=""
 if [ -n "$NUGET_PAT" ]; then
@@ -43,6 +50,7 @@ podman run --rm \
   -v "$SCRIPT_DIR:/workspace:Z" \
   $NUGET_MOUNT \
   $NUGET_CONFIG_MOUNT \
+  $CREDPROVIDER_MOUNT \
   $CREDENTIAL_ENV \
   -w /workspace \
   "$IMAGE_NAME" \
