@@ -300,6 +300,11 @@ internal sealed class DocumentCouplingAnalyzer : CSharpSyntaxWalker
     private readonly string _filePath;
     private readonly List<DependencyEdge> _dependencies = [];
     private readonly string? _primaryNamespace;
+    
+    // Cache for ToDisplayString() results to avoid repeated expensive calls
+    private readonly Dictionary<ISymbol, string> _symbolDisplayCache = new(SymbolEqualityComparer.Default);
+    // Cache containing type per TypeDeclarationSyntax to avoid repeated lookups
+    private readonly Dictionary<TypeDeclarationSyntax, string?> _containingTypeCache = [];
 
     public IReadOnlyList<DependencyEdge> Dependencies => _dependencies;
 
@@ -315,6 +320,19 @@ internal sealed class DocumentCouplingAnalyzer : CSharpSyntaxWalker
             ?? root.DescendantNodes()
                 .OfType<NamespaceDeclarationSyntax>()
                 .FirstOrDefault()?.Name.ToString();
+    }
+
+    /// <summary>
+    /// Gets cached display string for a symbol, or computes and caches it.
+    /// </summary>
+    private string GetDisplayString(ISymbol symbol)
+    {
+        if (_symbolDisplayCache.TryGetValue(symbol, out var cached))
+            return cached;
+        
+        var displayString = symbol.ToDisplayString();
+        _symbolDisplayCache[symbol] = displayString;
+        return displayString;
     }
 
     public override void VisitUsingDirective(UsingDirectiveSyntax node)
@@ -365,7 +383,7 @@ internal sealed class DocumentCouplingAnalyzer : CSharpSyntaxWalker
     private void AnalyzeTypeReference(SyntaxNode node, ITypeSymbol typeSymbol)
     {
         var fromType = GetContainingType(node);
-        var toType = typeSymbol.ToDisplayString();
+        var toType = GetDisplayString(typeSymbol);
 
         if (fromType != null && fromType != toType)
         {
@@ -380,7 +398,9 @@ internal sealed class DocumentCouplingAnalyzer : CSharpSyntaxWalker
             });
 
             var fromNamespace = GetNamespace(fromType);
-            var toNamespace = typeSymbol.ContainingNamespace?.ToDisplayString() ?? "";
+            var toNamespace = typeSymbol.ContainingNamespace != null 
+                ? GetDisplayString(typeSymbol.ContainingNamespace) 
+                : "";
             
             if (fromNamespace != toNamespace && !string.IsNullOrEmpty(toNamespace))
             {
@@ -415,8 +435,14 @@ internal sealed class DocumentCouplingAnalyzer : CSharpSyntaxWalker
         var typeDecl = node.Ancestors().OfType<TypeDeclarationSyntax>().FirstOrDefault();
         if (typeDecl == null) return null;
 
+        // Check cache first
+        if (_containingTypeCache.TryGetValue(typeDecl, out var cached))
+            return cached;
+
         var typeSymbol = _semanticModel.GetDeclaredSymbol(typeDecl) as ITypeSymbol;
-        return typeSymbol?.ToDisplayString();
+        var result = typeSymbol != null ? GetDisplayString(typeSymbol) : null;
+        _containingTypeCache[typeDecl] = result;
+        return result;
     }
 
     private string GetNamespace(string fullTypeName)

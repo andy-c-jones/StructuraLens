@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
 using Microsoft.CodeAnalysis;
 using StructuraLens.Core.Configuration;
@@ -10,6 +11,9 @@ namespace StructuraLens.Core.Analysis;
 /// </summary>
 public static class DependencyFilter
 {
+    // Cache compiled regex patterns for performance
+    private static readonly ConcurrentDictionary<string, Regex?> _regexCache = new();
+
     /// <summary>
     /// Filters a list of dependency edges based on the coupling configuration.
     /// </summary>
@@ -145,20 +149,13 @@ public static class DependencyFilter
     /// </summary>
     private static bool MatchesWildcard(string input, string pattern)
     {
-        // Convert wildcard to regex
+        // Convert wildcard to regex pattern
         var regexPattern = "^" + Regex.Escape(pattern)
             .Replace(@"\*", ".*")
             .Replace(@"\?", ".") + "$";
 
-        try
-        {
-            return Regex.IsMatch(input, regexPattern, RegexOptions.IgnoreCase);
-        }
-        catch (RegexParseException)
-        {
-            // If regex is invalid, fall back to exact match
-            return string.Equals(input, pattern, StringComparison.OrdinalIgnoreCase);
-        }
+        var regex = GetOrCreateRegex(regexPattern);
+        return regex?.IsMatch(input) ?? string.Equals(input, pattern, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -166,15 +163,27 @@ public static class DependencyFilter
     /// </summary>
     private static bool MatchesRegex(string input, string pattern)
     {
-        try
+        var regex = GetOrCreateRegex(pattern);
+        return regex?.IsMatch(input) ?? false;
+    }
+
+    /// <summary>
+    /// Gets a cached compiled regex or creates and caches a new one.
+    /// Returns null if the pattern is invalid.
+    /// </summary>
+    private static Regex? GetOrCreateRegex(string pattern)
+    {
+        return _regexCache.GetOrAdd(pattern, p =>
         {
-            return Regex.IsMatch(input, pattern, RegexOptions.IgnoreCase);
-        }
-        catch (RegexParseException)
-        {
-            // If regex is invalid, exclude the dependency for safety
-            return false;
-        }
+            try
+            {
+                return new Regex(p, RegexOptions.IgnoreCase | RegexOptions.Compiled, TimeSpan.FromMilliseconds(100));
+            }
+            catch (RegexParseException)
+            {
+                return null;
+            }
+        });
     }
 
     /// <summary>
