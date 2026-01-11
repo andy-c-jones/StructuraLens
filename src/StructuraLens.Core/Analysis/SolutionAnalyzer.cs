@@ -17,7 +17,7 @@ public sealed class SolutionAnalyzer
     private static bool _msBuildRegistered;
     private static readonly object _lock = new();
 
-    private readonly List<string> _warnings = [];
+    private readonly System.Collections.Concurrent.ConcurrentBag<string> _warnings = [];
     private readonly ILogger _logger;
 
     public SolutionAnalyzer(ILogger? logger = null)
@@ -87,22 +87,30 @@ public sealed class SolutionAnalyzer
         var csharpProjects = solution.Projects.Where(p => p.Language == LanguageNames.CSharp).ToList();
         _logger.LogInformation("Loaded solution with {ProjectCount} C# projects", csharpProjects.Count);
 
-        var projectMetricsList = new List<ProjectMetrics>();
-        var projectIndex = 0;
+        // Analyze projects in parallel for performance on large solutions
+        var projectMetricsBag = new System.Collections.Concurrent.ConcurrentBag<ProjectMetrics>();
+        var completedCount = 0;
+        var totalProjects = csharpProjects.Count;
 
-        foreach (var project in csharpProjects)
+        await Parallel.ForEachAsync(csharpProjects, new ParallelOptions
         {
-            projectIndex++;
-            _logger.LogInformation("Analyzing project {Index}/{Total}: {ProjectName}", projectIndex, csharpProjects.Count, project.Name);
+            MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount),
+            CancellationToken = cancellationToken
+        }, async (project, ct) =>
+        {
+            var currentIndex = Interlocked.Increment(ref completedCount);
+            _logger.LogInformation("Analyzing project {Index}/{Total}: {ProjectName}", currentIndex, totalProjects, project.Name);
             
-            var projectMetrics = await AnalyzeProjectAsync(project, cancellationToken);
-            projectMetricsList.Add(projectMetrics);
+            var projectMetrics = await AnalyzeProjectAsync(project, ct);
+            projectMetricsBag.Add(projectMetrics);
             
             _logger.LogInformation("Completed {ProjectName}: {TypeCount} types, {MethodCount} methods", 
                 project.Name, 
                 projectMetrics.Types.Count, 
                 projectMetrics.TotalMethods);
-        }
+        });
+
+        var projectMetricsList = projectMetricsBag.ToList();
 
         // Analyze coupling across the entire solution with configuration
         _logger.LogInformation("Analyzing solution-wide coupling with mode: {CouplingMode}", config.Coupling.Mode);
@@ -128,7 +136,7 @@ public sealed class SolutionAnalyzer
             SolutionPath: fullPath,
             AnalyzedAt: DateTime.UtcNow,
             Projects: projectMetricsList,
-            Warnings: _warnings)
+            Warnings: _warnings.ToList())
         {
             CouplingAnalysis = couplingAnalysis,
             LintingResults = lintingResults
@@ -196,7 +204,7 @@ public sealed class SolutionAnalyzer
             SolutionPath: fullPath,
             AnalyzedAt: DateTime.UtcNow,
             Projects: [projectMetrics],
-            Warnings: _warnings)
+            Warnings: _warnings.ToList())
         {
             CouplingAnalysis = couplingAnalysis,
             LintingResults = lintingResults

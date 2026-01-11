@@ -26,26 +26,37 @@ public static class CouplingAnalyzer
     /// </summary>
     public static async Task<CouplingAnalysis> AnalyzeSolutionAsync(Solution solution, StructuraLensConfig config, ILogger logger, CancellationToken cancellationToken = default)
     {
-        var allDependencies = new List<DependencyEdge>();
         var projectNames = solution.Projects.Select(p => p.Name).ToList();
 
         // Analyze project-to-project dependencies
         var projectDependencies = AnalyzeProjectDependencies(solution);
-        allDependencies.AddRange(projectDependencies);
 
-        // Analyze each project for internal coupling
+        // Analyze each project for internal coupling in parallel
         var csharpProjects = solution.Projects.Where(p => p.Language == LanguageNames.CSharp).ToList();
-        var projectIndex = 0;
-        
-        foreach (var project in csharpProjects)
+        var dependenciesBag = new System.Collections.Concurrent.ConcurrentBag<List<DependencyEdge>>();
+        var completedCount = 0;
+        var totalProjects = csharpProjects.Count;
+
+        await Parallel.ForEachAsync(csharpProjects, new ParallelOptions
         {
-            projectIndex++;
-            logger.LogDebug("Analyzing coupling in project {Index}/{Total}: {ProjectName}", projectIndex, csharpProjects.Count, project.Name);
+            MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount),
+            CancellationToken = cancellationToken
+        }, async (project, ct) =>
+        {
+            var currentIndex = Interlocked.Increment(ref completedCount);
+            logger.LogDebug("Analyzing coupling in project {Index}/{Total}: {ProjectName}", currentIndex, totalProjects, project.Name);
             
-            var projectCoupling = await AnalyzeProjectInternalCouplingAsync(project, logger, cancellationToken);
-            allDependencies.AddRange(projectCoupling.dependencies);
+            var projectCoupling = await AnalyzeProjectInternalCouplingAsync(project, logger, ct);
+            dependenciesBag.Add(projectCoupling.dependencies);
             
             logger.LogDebug("Project {ProjectName}: {DependencyCount} dependencies found", project.Name, projectCoupling.dependencies.Count);
+        });
+
+        // Merge all dependencies
+        var allDependencies = new List<DependencyEdge>(projectDependencies);
+        foreach (var deps in dependenciesBag)
+        {
+            allDependencies.AddRange(deps);
         }
 
         // Apply filtering based on configuration
