@@ -584,10 +584,12 @@ public sealed class SolutionAnalyzer
 
     private async Task RestorePackagesAsync(string projectOrSolutionPath, CancellationToken cancellationToken)
     {
+        _logger.LogDebug("Starting package restore for {Path}", projectOrSolutionPath);
+        
         var startInfo = new System.Diagnostics.ProcessStartInfo
         {
             FileName = "dotnet",
-            Arguments = $"restore \"{projectOrSolutionPath}\" --verbosity quiet",
+            Arguments = $"restore \"{projectOrSolutionPath}\" --verbosity normal --interactive",
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
@@ -597,20 +599,46 @@ public sealed class SolutionAnalyzer
         using var process = System.Diagnostics.Process.Start(startInfo);
         if (process == null)
         {
-            _logger.LogWarning("Failed to start dotnet restore process");
+            _logger.LogError("Failed to start dotnet restore process. Ensure the .NET SDK is installed and 'dotnet' is available in PATH.");
             return;
         }
 
+        // Read stdout and stderr concurrently to avoid deadlocks
+        var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
+        var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
+        
         await process.WaitForExitAsync(cancellationToken);
+        
+        var stdout = await stdoutTask;
+        var stderr = await stderrTask;
         
         if (process.ExitCode != 0)
         {
-            var error = await process.StandardError.ReadToEndAsync(cancellationToken);
-            _logger.LogWarning("Package restore completed with exit code {ExitCode}: {Error}", process.ExitCode, error);
+            _logger.LogError("Package restore failed with exit code {ExitCode} for {Path}", process.ExitCode, projectOrSolutionPath);
+            
+            if (!string.IsNullOrWhiteSpace(stderr))
+            {
+                _logger.LogError("Restore stderr: {Error}", stderr);
+            }
+            
+            if (!string.IsNullOrWhiteSpace(stdout))
+            {
+                _logger.LogError("Restore stdout: {Output}", stdout);
+            }
+            
+            // Log common troubleshooting hints
+            if (stderr.Contains("401") || stdout.Contains("401") || 
+                stderr.Contains("Unable to load the service index") || stdout.Contains("Unable to load the service index"))
+            {
+                _logger.LogError("Authentication failure detected. For private NuGet feeds, ensure credentials are configured. " +
+                    "Options: (1) Use 'dotnet nuget add source' with credentials, (2) Configure nuget.config with credentials, " +
+                    "(3) Use Azure Artifacts Credential Provider or similar for your feed type. " +
+                    "See: https://learn.microsoft.com/en-us/nuget/consume-packages/consuming-packages-authenticated-feeds");
+            }
         }
         else
         {
-            _logger.LogDebug("Package restore completed successfully");
+            _logger.LogDebug("Package restore completed successfully for {Path}", projectOrSolutionPath);
         }
     }
 }
