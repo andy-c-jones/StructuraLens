@@ -167,37 +167,50 @@ public static class CouplingAnalyzer
     private static async Task<(List<DependencyEdge> dependencies, List<CouplingMetrics> namespaceCoupling, List<CouplingMetrics> typeCoupling)>
         AnalyzeProjectInternalCouplingAsync(Project project, ILogger logger, CancellationToken cancellationToken)
     {
-        var dependencies = new List<DependencyEdge>();
         var compilation = await project.GetCompilationAsync(cancellationToken);
         if (compilation == null)
         {
             logger.LogWarning("Could not get compilation for project: {ProjectName}", project.Name);
-            return (dependencies, [], []);
+            return ([], [], []);
         }
 
         var documents = project.Documents.Where(d => d.SourceCodeKind == SourceCodeKind.Regular).ToList();
-        var documentIndex = 0;
+        var documentCount = documents.Count;
         
-        logger.LogDebug("Analyzing {DocumentCount} documents for coupling in {ProjectName}", documents.Count, project.Name);
+        logger.LogDebug("Analyzing {DocumentCount} documents for coupling in {ProjectName}", documentCount, project.Name);
 
-        foreach (var document in documents)
+        // Analyze documents in parallel for performance
+        var dependenciesBag = new System.Collections.Concurrent.ConcurrentBag<List<DependencyEdge>>();
+        var processedCount = 0;
+
+        await Parallel.ForEachAsync(documents, new ParallelOptions
         {
-            documentIndex++;
-            
-            if (documentIndex % 100 == 0)
+            MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount),
+            CancellationToken = cancellationToken
+        }, async (document, ct) =>
+        {
+            var currentCount = Interlocked.Increment(ref processedCount);
+            if (currentCount % 100 == 0)
             {
                 logger.LogDebug("Coupling analysis progress: {DocumentIndex}/{DocumentCount} documents in {ProjectName}", 
-                    documentIndex, documents.Count, project.Name);
+                    currentCount, documentCount, project.Name);
             }
 
-            var syntaxTree = await document.GetSyntaxTreeAsync(cancellationToken);
-            var semanticModel = await document.GetSemanticModelAsync(cancellationToken);
-            if (syntaxTree == null || semanticModel == null) continue;
+            var syntaxTree = await document.GetSyntaxTreeAsync(ct);
+            var semanticModel = await document.GetSemanticModelAsync(ct);
+            if (syntaxTree == null || semanticModel == null) return;
 
-            var root = await syntaxTree.GetRootAsync(cancellationToken);
+            var root = await syntaxTree.GetRootAsync(ct);
             var analyzer = new DocumentCouplingAnalyzer(semanticModel, document.FilePath ?? "", root);
             analyzer.Visit(root);
-            dependencies.AddRange(analyzer.Dependencies);
+            dependenciesBag.Add(analyzer.Dependencies.ToList());
+        });
+
+        // Merge all dependencies
+        var dependencies = new List<DependencyEdge>();
+        foreach (var deps in dependenciesBag)
+        {
+            dependencies.AddRange(deps);
         }
 
         // Group and build metrics at namespace and type level

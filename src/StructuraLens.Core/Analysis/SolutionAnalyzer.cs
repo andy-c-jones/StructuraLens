@@ -225,31 +225,35 @@ public sealed class SolutionAnalyzer
         // Collect diagnostics from compilation
         var diagnosticSummary = CollectDiagnostics(compilation);
 
-        var typeMetricsList = new List<TypeMetrics>();
-        var documentCount = project.Documents.Count();
-        var documentIndex = 0;
+        var documents = project.Documents.Where(d => d.SourceCodeKind == SourceCodeKind.Regular).ToList();
+        var documentCount = documents.Count;
 
         _logger.LogDebug("Analyzing {DocumentCount} documents in project {ProjectName}", documentCount, project.Name);
 
-        foreach (var document in project.Documents)
-        {
-            documentIndex++;
-            if (document.SourceCodeKind != SourceCodeKind.Regular)
-                continue;
+        // Analyze documents in parallel for performance
+        var typeMetricsBag = new System.Collections.Concurrent.ConcurrentBag<TypeMetrics>();
+        var processedCount = 0;
 
-            if (documentIndex % 50 == 0)
+        await Parallel.ForEachAsync(documents, new ParallelOptions
+        {
+            MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount),
+            CancellationToken = cancellationToken
+        }, async (document, ct) =>
+        {
+            var currentCount = Interlocked.Increment(ref processedCount);
+            if (currentCount % 50 == 0)
             {
                 _logger.LogDebug("Progress: {DocumentIndex}/{DocumentCount} documents processed in {ProjectName}", 
-                    documentIndex, documentCount, project.Name);
+                    currentCount, documentCount, project.Name);
             }
 
-            var syntaxTree = await document.GetSyntaxTreeAsync(cancellationToken);
-            var semanticModel = await document.GetSemanticModelAsync(cancellationToken);
+            var syntaxTree = await document.GetSyntaxTreeAsync(ct);
+            var semanticModel = await document.GetSemanticModelAsync(ct);
 
             if (syntaxTree == null || semanticModel == null)
-                continue;
+                return;
 
-            var root = await syntaxTree.GetRootAsync(cancellationToken);
+            var root = await syntaxTree.GetRootAsync(ct);
             
             // Analyze traditional type declarations
             var typeDeclarations = root.DescendantNodes()
@@ -258,7 +262,7 @@ public sealed class SolutionAnalyzer
             foreach (var typeDecl in typeDeclarations)
             {
                 var typeMetrics = AnalyzeTypeDeclaration(typeDecl, semanticModel, document.FilePath ?? "");
-                typeMetricsList.Add(typeMetrics);
+                typeMetricsBag.Add(typeMetrics);
             }
 
             // Analyze top-level statements (C# 9+ feature)
@@ -271,10 +275,12 @@ public sealed class SolutionAnalyzer
                 var topLevelMetrics = AnalyzeTopLevelStatements(root, topLevelStatements, semanticModel, document.FilePath ?? "");
                 if (topLevelMetrics != null)
                 {
-                    typeMetricsList.Add(topLevelMetrics);
+                    typeMetricsBag.Add(topLevelMetrics);
                 }
             }
-        }
+        });
+
+        var typeMetricsList = typeMetricsBag.ToList();
 
         return new ProjectMetrics(
             Name: project.Name,
