@@ -49,15 +49,7 @@ Write-Host "     -v `"`${env:APPDATA}\NuGet:/root/.nuget/NuGet:ro`" ``"
 Write-Host "     -w /workspace ``"
 Write-Host "     $ImageName analyze YourSolution.slnx --format html --out report.html"
 Write-Host ""
-Write-Host "6. With host credential provider plugins (e.g., Azure Artifacts Credential Provider):" -ForegroundColor Yellow
-Write-Host "   docker run --rm ``"
-Write-Host "     -v `"`${PWD}:/workspace`" ``"
-Write-Host "     -v `"`${env:USERPROFILE}\.nuget\packages:/root/.nuget/packages:ro`" ``"
-Write-Host "     -v `"`${env:USERPROFILE}\.nuget\plugins:/root/.nuget/plugins:ro`" ``"
-Write-Host "     -w /workspace ``"
-Write-Host "     $ImageName analyze YourSolution.slnx --format html --out report.html"
-Write-Host ""
-Write-Host "7. With Azure Artifacts using PAT (for CI/non-interactive):" -ForegroundColor Yellow
+Write-Host "6. With Azure Artifacts using PAT (recommended for Windows hosts):" -ForegroundColor Yellow
 Write-Host "   docker run --rm ``"
 Write-Host "     -v `"`${PWD}:/workspace`" ``"
 Write-Host "     -v `"`${env:USERPROFILE}\.nuget\packages:/root/.nuget/packages:ro`" ``"
@@ -71,4 +63,11 @@ Write-Host "- Current directory is mounted to /workspace in the container"
 Write-Host "- NuGet cache is mounted read-only to speed up package restores"
 Write-Host "- All paths should be relative to your current directory"
 Write-Host "- Use PowerShell variable `${PWD} for current directory"
+Write-Host "- Mounting NuGet cache speeds up package restores"
+Write-Host ""
+Write-Host "PRIVATE NUGET FEEDS:" -ForegroundColor Yellow
+Write-Host "- Option A: Mount %APPDATA%\NuGet for static credentials in nuget.config"
+Write-Host "- Option B: Use VSS_NUGET_EXTERNAL_FEED_ENDPOINTS env var with PAT"
+Write-Host "- Or use NUGET_FEED_URL and NUGET_PAT env vars with run-local-windows.ps1"
+Write-Host "- Note: Windows credential provider plugins (.exe) won't work in Alpine container"
 Write-Host "================================================" -ForegroundColor Cyan

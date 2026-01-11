@@ -41,14 +41,13 @@ Configure credentials on your host:
 dotnet nuget add source <url> -n <name> -u <user> -p <password> --store-password-in-clear-text
 ```
 
-**Option 2: Mount host credential provider plugins (recommended for interactive use)**
-If you have credential providers installed on your host (e.g., Azure Artifacts Credential Provider), the scripts automatically mount them:
+**Option 2: Mount host credential provider plugins (Linux host only)**
+If you have credential providers installed on a Linux host, the scripts automatically mount them:
 - Linux/macOS: Mounts `~/.nuget/plugins/`
-- Windows: Mounts `%USERPROFILE%\.nuget\plugins\`
 
-This allows the container to use your existing authenticated sessions.
+Note: This only works when the host OS matches the container (Linux). Windows credential provider plugins are native `.exe` files and won't run in the Alpine Linux container.
 
-**Option 3: PAT via environment variables (recommended for CI)**
+**Option 3: PAT via environment variables (recommended for CI and Windows hosts)**
 Set environment variables before running the scripts:
 ```bash
 # Linux/macOS
