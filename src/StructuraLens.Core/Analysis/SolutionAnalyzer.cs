@@ -367,14 +367,15 @@ public sealed class SolutionAnalyzer
     {
         var methodMetricsList = new List<MethodMetrics>();
 
-        // Analyze the top-level code as a single "Main" method
+        // Analyze the top-level code as a single "Main" method using unified calculator
         var firstStatement = topLevelStatements.First();
         var lastStatement = topLevelStatements.Last();
 
-        var cc = CyclomaticComplexityCalculator.Calculate(root);
-        var loc = topLevelStatements.Sum(s => LinesOfCodeCalculator.Calculate(s));
-        var halstead = HalsteadCalculator.Calculate(root);
-        var mi = MaintainabilityIndexCalculator.Calculate(halstead.Volume, cc, loc);
+        var metrics = UnifiedMetricsCalculator.Calculate(root);
+        var cc = metrics.CyclomaticComplexity;
+        var loc = metrics.LinesOfCode;
+        var halsteadVolume = metrics.HalsteadVolume;
+        var mi = metrics.MaintainabilityIndex;
 
         var startLine = firstStatement.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
         var endLine = lastStatement.GetLocation().GetLineSpan().EndLinePosition.Line + 1;
@@ -386,7 +387,7 @@ public sealed class SolutionAnalyzer
             EndLine: endLine,
             CyclomaticComplexity: cc,
             LinesOfExecutableCode: loc,
-            HalsteadVolume: halstead.Volume,
+            HalsteadVolume: halsteadVolume,
             MaintainabilityIndex: mi));
 
         // Analyze local functions defined in top-level code
@@ -396,8 +397,8 @@ public sealed class SolutionAnalyzer
 
         foreach (var localFunc in localFunctions)
         {
-            var metrics = AnalyzeLocalFunction(localFunc, filePath);
-            methodMetricsList.Add(metrics);
+            var localMetrics = AnalyzeLocalFunction(localFunc, filePath);
+            methodMetricsList.Add(localMetrics);
         }
 
         return new TypeMetrics(
@@ -412,16 +413,24 @@ public sealed class SolutionAnalyzer
         var methodSymbol = semanticModel.GetDeclaredSymbol(method);
         var fullName = methodSymbol?.ToDisplayString() ?? method.Identifier.Text;
 
-        var cc = method.Body != null || method.ExpressionBody != null
-            ? CyclomaticComplexityCalculator.Calculate(method)
-            : 1;
+        int cc, loc;
+        double halsteadVolume, mi;
 
-        var loc = method.Body != null
-            ? LinesOfCodeCalculator.Calculate(method.Body)
-            : (method.ExpressionBody != null ? 1 : 0);
-
-        var halstead = HalsteadCalculator.Calculate(method);
-        var mi = MaintainabilityIndexCalculator.Calculate(halstead.Volume, cc, loc);
+        if (method.Body != null || method.ExpressionBody != null)
+        {
+            var metrics = UnifiedMetricsCalculator.Calculate(method);
+            cc = metrics.CyclomaticComplexity;
+            loc = method.Body != null ? metrics.LinesOfCode : 1;
+            halsteadVolume = metrics.HalsteadVolume;
+            mi = metrics.MaintainabilityIndex;
+        }
+        else
+        {
+            cc = 1;
+            loc = 0;
+            halsteadVolume = 0;
+            mi = 100.0;
+        }
 
         var lineSpan = method.GetLocation().GetLineSpan();
 
@@ -432,7 +441,7 @@ public sealed class SolutionAnalyzer
             EndLine: lineSpan.EndLinePosition.Line + 1,
             CyclomaticComplexity: cc,
             LinesOfExecutableCode: loc,
-            HalsteadVolume: halstead.Volume,
+            HalsteadVolume: halsteadVolume,
             MaintainabilityIndex: mi);
     }
 
@@ -441,16 +450,24 @@ public sealed class SolutionAnalyzer
         var ctorSymbol = semanticModel.GetDeclaredSymbol(ctor);
         var fullName = ctorSymbol?.ToDisplayString() ?? $"{typeDecl.Identifier.Text}.ctor";
 
-        var cc = ctor.Body != null || ctor.ExpressionBody != null
-            ? CyclomaticComplexityCalculator.Calculate(ctor)
-            : 1;
+        int cc, loc;
+        double halsteadVolume, mi;
 
-        var loc = ctor.Body != null
-            ? LinesOfCodeCalculator.Calculate(ctor.Body)
-            : (ctor.ExpressionBody != null ? 1 : 0);
-
-        var halstead = HalsteadCalculator.Calculate(ctor);
-        var mi = MaintainabilityIndexCalculator.Calculate(halstead.Volume, cc, loc);
+        if (ctor.Body != null || ctor.ExpressionBody != null)
+        {
+            var metrics = UnifiedMetricsCalculator.Calculate(ctor);
+            cc = metrics.CyclomaticComplexity;
+            loc = ctor.Body != null ? metrics.LinesOfCode : 1;
+            halsteadVolume = metrics.HalsteadVolume;
+            mi = metrics.MaintainabilityIndex;
+        }
+        else
+        {
+            cc = 1;
+            loc = 0;
+            halsteadVolume = 0;
+            mi = 100.0;
+        }
 
         var lineSpan = ctor.GetLocation().GetLineSpan();
 
@@ -461,7 +478,7 @@ public sealed class SolutionAnalyzer
             EndLine: lineSpan.EndLinePosition.Line + 1,
             CyclomaticComplexity: cc,
             LinesOfExecutableCode: loc,
-            HalsteadVolume: halstead.Volume,
+            HalsteadVolume: halsteadVolume,
             MaintainabilityIndex: mi);
     }
 
@@ -469,16 +486,24 @@ public sealed class SolutionAnalyzer
     {
         var fullName = $"<Program>$.{localFunc.Identifier.Text}()";
 
-        var cc = localFunc.Body != null || localFunc.ExpressionBody != null
-            ? CyclomaticComplexityCalculator.Calculate(localFunc)
-            : 1;
+        int cc, loc;
+        double halsteadVolume, mi;
 
-        var loc = localFunc.Body != null
-            ? LinesOfCodeCalculator.Calculate(localFunc.Body)
-            : (localFunc.ExpressionBody != null ? 1 : 0);
-
-        var halstead = HalsteadCalculator.Calculate(localFunc);
-        var mi = MaintainabilityIndexCalculator.Calculate(halstead.Volume, cc, loc);
+        if (localFunc.Body != null || localFunc.ExpressionBody != null)
+        {
+            var metrics = UnifiedMetricsCalculator.Calculate(localFunc);
+            cc = metrics.CyclomaticComplexity;
+            loc = localFunc.Body != null ? metrics.LinesOfCode : 1;
+            halsteadVolume = metrics.HalsteadVolume;
+            mi = metrics.MaintainabilityIndex;
+        }
+        else
+        {
+            cc = 1;
+            loc = 0;
+            halsteadVolume = 0;
+            mi = 100.0;
+        }
 
         var lineSpan = localFunc.GetLocation().GetLineSpan();
 
@@ -489,7 +514,7 @@ public sealed class SolutionAnalyzer
             EndLine: lineSpan.EndLinePosition.Line + 1,
             CyclomaticComplexity: cc,
             LinesOfExecutableCode: loc,
-            HalsteadVolume: halstead.Volume,
+            HalsteadVolume: halsteadVolume,
             MaintainabilityIndex: mi);
     }
 
