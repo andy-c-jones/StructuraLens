@@ -33,25 +33,18 @@ Write-Host "USAGE GUIDE: Running StructuraLens with Docker" -ForegroundColor Cya
 Write-Host "================================================" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "1. Initialize a new .slnx file from existing solutions:" -ForegroundColor Yellow
-Write-Host "   docker run --rm -v `"`${PWD}:/workspace`" -w /workspace $ImageName init"
+Write-Host "   docker run --rm -v `"`${PWD}:/workspace`" -v `"`${env:USERPROFILE}\.nuget\packages:/root/.nuget/packages:ro`" -w /workspace $ImageName init"
 Write-Host ""
 Write-Host "2. Analyze a solution and generate HTML report:" -ForegroundColor Yellow
-Write-Host "   docker run --rm -v `"`${PWD}:/workspace`" -w /workspace $ImageName analyze YourSolution.slnx --format html --out report.html"
+Write-Host "   docker run --rm -v `"`${PWD}:/workspace`" -v `"`${env:USERPROFILE}\.nuget\packages:/root/.nuget/packages:ro`" -w /workspace $ImageName analyze YourSolution.slnx --format html --out report.html"
 Write-Host ""
 Write-Host "3. Analyze with JSON output:" -ForegroundColor Yellow
-Write-Host "   docker run --rm -v `"`${PWD}:/workspace`" -w /workspace $ImageName analyze YourSolution.slnx --format json --out report.json"
-Write-Host ""
-Write-Host "4. With NuGet cache mounting (faster restores):" -ForegroundColor Yellow
-Write-Host "   docker run --rm ``"
-Write-Host "     -v `"`${PWD}:/workspace`" ``"
-Write-Host "     -v `"`${env:USERPROFILE}\.nuget\packages:/root/.nuget/packages:ro`" ``"
-Write-Host "     -w /workspace ``"
-Write-Host "     $ImageName analyze YourSolution.slnx --format html --out report.html"
+Write-Host "   docker run --rm -v `"`${PWD}:/workspace`" -v `"`${env:USERPROFILE}\.nuget\packages:/root/.nuget/packages:ro`" -w /workspace $ImageName analyze YourSolution.slnx --format json --out report.json"
 Write-Host ""
 Write-Host "================================================" -ForegroundColor Cyan
 Write-Host "NOTES:" -ForegroundColor Cyan
 Write-Host "- Current directory is mounted to /workspace in the container"
+Write-Host "- NuGet cache is mounted read-only to speed up package restores"
 Write-Host "- All paths should be relative to your current directory"
 Write-Host "- Use PowerShell variable `${PWD} for current directory"
-Write-Host "- Mounting NuGet cache speeds up package restores"
 Write-Host "================================================" -ForegroundColor Cyan
