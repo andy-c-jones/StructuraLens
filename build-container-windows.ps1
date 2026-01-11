@@ -41,6 +41,22 @@ Write-Host ""
 Write-Host "3. Analyze with JSON output:" -ForegroundColor Yellow
 Write-Host "   docker run --rm -v `"`${PWD}:/workspace`" -v `"`${env:USERPROFILE}\.nuget\packages:/root/.nuget/packages:ro`" -w /workspace $ImageName analyze YourSolution.slnx --format json --out report.json"
 Write-Host ""
+Write-Host "5. With private NuGet feed (static credentials in nuget.config):" -ForegroundColor Yellow
+Write-Host "   docker run --rm ``"
+Write-Host "     -v `"`${PWD}:/workspace`" ``"
+Write-Host "     -v `"`${env:USERPROFILE}\.nuget\packages:/root/.nuget/packages:ro`" ``"
+Write-Host "     -v `"`${env:APPDATA}\NuGet:/root/.nuget/NuGet:ro`" ``"
+Write-Host "     -w /workspace ``"
+Write-Host "     $ImageName analyze YourSolution.slnx --format html --out report.html"
+Write-Host ""
+Write-Host "6. With Azure Artifacts / credential provider (using PAT):" -ForegroundColor Yellow
+Write-Host "   docker run --rm ``"
+Write-Host "     -v `"`${PWD}:/workspace`" ``"
+Write-Host "     -v `"`${env:USERPROFILE}\.nuget\packages:/root/.nuget/packages:ro`" ``"
+Write-Host "     -e VSS_NUGET_EXTERNAL_FEED_ENDPOINTS='{`"endpointCredentials`": [{`"endpoint`":`"<feed-url>`", `"username`":`"docker`", `"password`":`"<pat>`"}]}' ``"
+Write-Host "     -w /workspace ``"
+Write-Host "     $ImageName analyze YourSolution.slnx --format html --out report.html"
+Write-Host ""
 Write-Host "================================================" -ForegroundColor Cyan
 Write-Host "NOTES:" -ForegroundColor Cyan
 Write-Host "- Current directory is mounted to /workspace in the container"

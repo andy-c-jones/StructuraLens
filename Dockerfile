@@ -18,5 +18,9 @@ RUN find /root/.nuget/packages/microsoft.codeanalysis.workspaces.msbuild -name "
 FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS runtime
 WORKDIR /app
 
+# Install Azure Artifacts Credential Provider for private feed authentication
+RUN apk add --no-cache bash curl && \
+    curl -sSL https://aka.ms/install-artifacts-credprovider.sh | bash
+
 COPY --from=build /app/publish .
 ENTRYPOINT ["/app/StructuraLens.Cli"]
