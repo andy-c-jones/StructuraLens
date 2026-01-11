@@ -72,8 +72,26 @@ public static class CouplingAnalyzer
             allDependencies.AddRange(deps);
         }
 
+        return BuildCouplingAnalysisFromDependencies(solution, allDependencies, config);
+    }
+
+    /// <summary>
+    /// Builds coupling analysis from pre-collected dependencies (used when dependencies are collected during metrics analysis).
+    /// </summary>
+    public static CouplingAnalysis BuildCouplingAnalysisFromDependencies(
+        Solution solution,
+        IReadOnlyList<DependencyEdge> allDependencies,
+        StructuraLensConfig config)
+    {
+        var projectNames = solution.Projects.Select(p => p.Name).ToList();
+
+        // Add project-to-project dependencies if not already included
+        var projectDependencies = AnalyzeProjectDependencies(solution);
+        var combinedDependencies = new List<DependencyEdge>(projectDependencies);
+        combinedDependencies.AddRange(allDependencies);
+
         // Apply filtering based on configuration
-        var filteredDependencies = DependencyFilter.FilterDependencies(allDependencies, config.Coupling, projectNames);
+        var filteredDependencies = DependencyFilter.FilterDependencies(combinedDependencies, config.Coupling, projectNames);
 
         // Build coupling metrics from filtered dependencies
         var projectCouplingMetrics = BuildProjectCouplingMetrics(solution, filteredDependencies);
@@ -92,6 +110,16 @@ public static class CouplingAnalyzer
             AllDependencies = filteredDependencies,
             Summary = summary
         };
+    }
+
+    /// <summary>
+    /// Analyzes a single document for coupling dependencies. Can be called from external analyzers.
+    /// </summary>
+    public static IReadOnlyList<DependencyEdge> AnalyzeDocumentCoupling(SemanticModel semanticModel, string filePath, SyntaxNode root)
+    {
+        var analyzer = new DocumentCouplingAnalyzer(semanticModel, filePath, root);
+        analyzer.Visit(root);
+        return analyzer.Dependencies;
     }
 
     /// <summary>
