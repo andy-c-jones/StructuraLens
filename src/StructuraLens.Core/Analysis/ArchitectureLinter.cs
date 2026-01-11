@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
 using StructuraLens.Core.Configuration;
 using StructuraLens.Core.Models;
@@ -9,6 +10,9 @@ namespace StructuraLens.Core.Analysis;
 /// </summary>
 public static class ArchitectureLinter
 {
+    // Cache compiled regex patterns for performance
+    private static readonly ConcurrentDictionary<string, Regex?> _regexCache = new();
+
     /// <summary>
     /// Evaluates architecture rules against the provided coupling analysis.
     /// </summary>
@@ -100,11 +104,31 @@ public static class ArchitectureLinter
     {
         if (pattern == "*") return true;
 
-        // Convert wildcard to regex
+        // Convert wildcard to regex pattern
         var regexPattern = "^" + Regex.Escape(pattern)
             .Replace("\\*", ".*")
             .Replace("\\?", ".") + "$";
 
-        return Regex.IsMatch(value, regexPattern, RegexOptions.IgnoreCase);
+        var regex = GetOrCreateRegex(regexPattern);
+        return regex?.IsMatch(value) ?? string.Equals(value, pattern, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Gets a cached compiled regex or creates and caches a new one.
+    /// Returns null if the pattern is invalid.
+    /// </summary>
+    private static Regex? GetOrCreateRegex(string pattern)
+    {
+        return _regexCache.GetOrAdd(pattern, p =>
+        {
+            try
+            {
+                return new Regex(p, RegexOptions.IgnoreCase | RegexOptions.Compiled, TimeSpan.FromMilliseconds(100));
+            }
+            catch (RegexParseException)
+            {
+                return null;
+            }
+        });
     }
 }
