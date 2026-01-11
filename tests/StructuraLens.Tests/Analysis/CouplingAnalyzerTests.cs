@@ -1,6 +1,7 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Text;
+using Microsoft.Extensions.Logging.Abstractions;
 using StructuraLens.Core.Analysis;
 using StructuraLens.Core.Configuration;
 using StructuraLens.Core.Models;
@@ -19,7 +20,7 @@ public class CouplingAnalyzerTests
     {
         var project = CreateTestProject("EmptyProject", "");
         
-        var result = await CouplingAnalyzer.AnalyzeProjectCouplingAsync(project);
+        var result = await CouplingAnalyzer.AnalyzeProjectCouplingAsync(project, ConfigurationLoader.CreateDefaultConfig(), NullLogger.Instance);
 
         await Assert.That(result).IsNotNull();
         await Assert.That(result.AnalyzedEntity).Contains("EmptyProject");
@@ -51,7 +52,7 @@ namespace TestProject.Models
 
         var project = CreateTestProject("TestProject", code);
         
-        var result = await CouplingAnalyzer.AnalyzeProjectCouplingAsync(project);
+        var result = await CouplingAnalyzer.AnalyzeProjectCouplingAsync(project, ConfigurationLoader.CreateDefaultConfig(), NullLogger.Instance);
 
         await Assert.That(result).IsNotNull();
         await Assert.That(result.AllDependencies.Count).IsGreaterThan(0);
@@ -89,7 +90,7 @@ namespace TestProject.Models
 
         var project = CreateTestProject("TestProject", code);
         
-        var result = await CouplingAnalyzer.AnalyzeProjectCouplingAsync(project);
+        var result = await CouplingAnalyzer.AnalyzeProjectCouplingAsync(project, ConfigurationLoader.CreateDefaultConfig(), NullLogger.Instance);
 
         await Assert.That(result).IsNotNull();
         await Assert.That(result.NamespaceCoupling.Count).IsGreaterThanOrEqualTo(2);
@@ -227,7 +228,7 @@ public class MyService
 
         var project = CreateTestProject("TestProject", code);
         
-        var result = await CouplingAnalyzer.AnalyzeProjectCouplingAsync(project, AllModeCouplingConfig);
+        var result = await CouplingAnalyzer.AnalyzeProjectCouplingAsync(project, AllModeCouplingConfig, NullLogger.Instance);
 
         await Assert.That(result).IsNotNull();
         
@@ -261,7 +262,7 @@ namespace TestProject.Services
 
         var project = CreateTestProject("TestProject", code);
         
-        var result = await CouplingAnalyzer.AnalyzeProjectCouplingAsync(project);
+        var result = await CouplingAnalyzer.AnalyzeProjectCouplingAsync(project, ConfigurationLoader.CreateDefaultConfig(), NullLogger.Instance);
 
         await Assert.That(result).IsNotNull();
         
@@ -292,7 +293,7 @@ namespace TestProject.Services
 
         var project = CreateTestProject("TestProject", code);
         
-        var result = await CouplingAnalyzer.AnalyzeProjectCouplingAsync(project, AllModeCouplingConfig);
+        var result = await CouplingAnalyzer.AnalyzeProjectCouplingAsync(project, AllModeCouplingConfig, NullLogger.Instance);
 
         await Assert.That(result).IsNotNull();
         
@@ -317,7 +318,7 @@ namespace TestProject.Models
 
         var project = CreateTestProject("TestProject", code);
         
-        var result = await CouplingAnalyzer.AnalyzeProjectCouplingAsync(project);
+        var result = await CouplingAnalyzer.AnalyzeProjectCouplingAsync(project, ConfigurationLoader.CreateDefaultConfig(), NullLogger.Instance);
 
         await Assert.That(result).IsNotNull();
         

@@ -1,6 +1,8 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using StructuraLens.Core.Configuration;
 using StructuraLens.Core.Models;
 
@@ -16,13 +18,13 @@ public static class CouplingAnalyzer
     /// </summary>
     public static Task<CouplingAnalysis> AnalyzeSolutionAsync(Solution solution, CancellationToken cancellationToken = default)
     {
-        return AnalyzeSolutionAsync(solution, ConfigurationLoader.CreateDefaultConfig(), cancellationToken);
+        return AnalyzeSolutionAsync(solution, ConfigurationLoader.CreateDefaultConfig(), NullLogger.Instance, cancellationToken);
     }
 
     /// <summary>
     /// Analyzes coupling for an entire solution with specified configuration.
     /// </summary>
-    public static async Task<CouplingAnalysis> AnalyzeSolutionAsync(Solution solution, StructuraLensConfig config, CancellationToken cancellationToken = default)
+    public static async Task<CouplingAnalysis> AnalyzeSolutionAsync(Solution solution, StructuraLensConfig config, ILogger logger, CancellationToken cancellationToken = default)
     {
         var allDependencies = new List<DependencyEdge>();
         var projectNames = solution.Projects.Select(p => p.Name).ToList();
@@ -32,10 +34,18 @@ public static class CouplingAnalyzer
         allDependencies.AddRange(projectDependencies);
 
         // Analyze each project for internal coupling
-        foreach (var project in solution.Projects.Where(p => p.Language == LanguageNames.CSharp))
+        var csharpProjects = solution.Projects.Where(p => p.Language == LanguageNames.CSharp).ToList();
+        var projectIndex = 0;
+        
+        foreach (var project in csharpProjects)
         {
-            var projectCoupling = await AnalyzeProjectInternalCouplingAsync(project, cancellationToken);
+            projectIndex++;
+            logger.LogDebug("Analyzing coupling in project {Index}/{Total}: {ProjectName}", projectIndex, csharpProjects.Count, project.Name);
+            
+            var projectCoupling = await AnalyzeProjectInternalCouplingAsync(project, logger, cancellationToken);
             allDependencies.AddRange(projectCoupling.dependencies);
+            
+            logger.LogDebug("Project {ProjectName}: {DependencyCount} dependencies found", project.Name, projectCoupling.dependencies.Count);
         }
 
         // Apply filtering based on configuration
@@ -65,19 +75,19 @@ public static class CouplingAnalyzer
     /// </summary>
     public static Task<CouplingAnalysis> AnalyzeProjectCouplingAsync(Project project, CancellationToken cancellationToken = default)
     {
-        return AnalyzeProjectCouplingAsync(project, ConfigurationLoader.CreateDefaultConfig(), cancellationToken);
+        return AnalyzeProjectCouplingAsync(project, ConfigurationLoader.CreateDefaultConfig(), NullLogger.Instance, cancellationToken);
     }
 
     /// <summary>
     /// Analyzes coupling for a single project with specified configuration.
     /// </summary>
-    public static async Task<CouplingAnalysis> AnalyzeProjectCouplingAsync(Project project, StructuraLensConfig config, CancellationToken cancellationToken = default)
+    public static async Task<CouplingAnalysis> AnalyzeProjectCouplingAsync(Project project, StructuraLensConfig config, ILogger logger, CancellationToken cancellationToken = default)
     {
         var allDependencies = new List<DependencyEdge>();
         var projectNames = new List<string> { project.Name };
 
         // Analyze internal coupling within the project
-        var projectCoupling = await AnalyzeProjectInternalCouplingAsync(project, cancellationToken);
+        var projectCoupling = await AnalyzeProjectInternalCouplingAsync(project, logger, cancellationToken);
         allDependencies.AddRange(projectCoupling.dependencies);
 
         // Apply filtering based on configuration
@@ -144,15 +154,30 @@ public static class CouplingAnalyzer
     /// Analyzes internal coupling within a single project.
     /// </summary>
     private static async Task<(List<DependencyEdge> dependencies, List<CouplingMetrics> namespaceCoupling, List<CouplingMetrics> typeCoupling)>
-        AnalyzeProjectInternalCouplingAsync(Project project, CancellationToken cancellationToken)
+        AnalyzeProjectInternalCouplingAsync(Project project, ILogger logger, CancellationToken cancellationToken)
     {
         var dependencies = new List<DependencyEdge>();
         var compilation = await project.GetCompilationAsync(cancellationToken);
-        if (compilation == null) return (dependencies, [], []);
-
-        foreach (var document in project.Documents)
+        if (compilation == null)
         {
-            if (document.SourceCodeKind != SourceCodeKind.Regular) continue;
+            logger.LogWarning("Could not get compilation for project: {ProjectName}", project.Name);
+            return (dependencies, [], []);
+        }
+
+        var documents = project.Documents.Where(d => d.SourceCodeKind == SourceCodeKind.Regular).ToList();
+        var documentIndex = 0;
+        
+        logger.LogDebug("Analyzing {DocumentCount} documents for coupling in {ProjectName}", documents.Count, project.Name);
+
+        foreach (var document in documents)
+        {
+            documentIndex++;
+            
+            if (documentIndex % 100 == 0)
+            {
+                logger.LogDebug("Coupling analysis progress: {DocumentIndex}/{DocumentCount} documents in {ProjectName}", 
+                    documentIndex, documents.Count, project.Name);
+            }
 
             var syntaxTree = await document.GetSyntaxTreeAsync(cancellationToken);
             var semanticModel = await document.GetSemanticModelAsync(cancellationToken);
