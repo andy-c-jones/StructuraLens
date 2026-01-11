@@ -43,14 +43,18 @@ public static class CompactReportExporter
     {
         var projects = new List<CompactProject>();
 
+        // Pre-build lookup dictionary for O(1) access to project coupling metrics
+        var projectCouplingLookup = report.CouplingAnalysis?.ProjectCoupling
+            .ToDictionary(pc => pc.EntityName, pc => pc) 
+            ?? new Dictionary<string, CouplingMetrics>();
+
         foreach (var project in report.Projects)
         {
             var allMethods = project.Types.SelectMany(t => t.Methods).ToList();
             var avgMI = allMethods.Count > 0 ? allMethods.Average(m => m.MaintainabilityIndex) : 0;
 
-            // Get coupling metrics for this project
-            var projectCoupling = report.CouplingAnalysis?.ProjectCoupling
-                .FirstOrDefault(pc => pc.EntityName == project.Name);
+            // O(1) lookup instead of O(n) FirstOrDefault
+            projectCouplingLookup.TryGetValue(project.Name, out var projectCoupling);
 
             var compactProject = new CompactProject
             {

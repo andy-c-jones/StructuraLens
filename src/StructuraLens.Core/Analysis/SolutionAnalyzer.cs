@@ -17,7 +17,7 @@ public sealed class SolutionAnalyzer
     private static bool _msBuildRegistered;
     private static readonly object _lock = new();
 
-    private readonly List<string> _warnings = [];
+    private readonly System.Collections.Concurrent.ConcurrentBag<string> _warnings = [];
     private readonly ILogger _logger;
 
     public SolutionAnalyzer(ILogger? logger = null)
@@ -87,26 +87,68 @@ public sealed class SolutionAnalyzer
         var csharpProjects = solution.Projects.Where(p => p.Language == LanguageNames.CSharp).ToList();
         _logger.LogInformation("Loaded solution with {ProjectCount} C# projects", csharpProjects.Count);
 
-        var projectMetricsList = new List<ProjectMetrics>();
-        var projectIndex = 0;
-
-        foreach (var project in csharpProjects)
+        // Pre-fetch all compilations in parallel and cache them for reuse
+        _logger.LogInformation("Pre-fetching compilations for all projects...");
+        var compilationCache = new System.Collections.Concurrent.ConcurrentDictionary<string, Compilation>();
+        
+        await Parallel.ForEachAsync(csharpProjects, new ParallelOptions
         {
-            projectIndex++;
-            _logger.LogInformation("Analyzing project {Index}/{Total}: {ProjectName}", projectIndex, csharpProjects.Count, project.Name);
+            MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount),
+            CancellationToken = cancellationToken
+        }, async (project, ct) =>
+        {
+            var compilation = await project.GetCompilationAsync(ct);
+            if (compilation != null)
+            {
+                compilationCache[project.Name] = compilation;
+            }
+            else
+            {
+                _warnings.Add($"Could not get compilation for project: {project.Name}");
+                _logger.LogWarning("Could not get compilation for project: {ProjectName}", project.Name);
+            }
+        });
+
+        _logger.LogInformation("Cached {Count} compilations", compilationCache.Count);
+
+        // Analyze projects in parallel for performance on large solutions
+        // Collect both metrics AND coupling dependencies in a single pass
+        var projectResultsBag = new System.Collections.Concurrent.ConcurrentBag<(ProjectMetrics metrics, List<DependencyEdge> dependencies)>();
+        var completedCount = 0;
+        var totalProjects = csharpProjects.Count;
+
+        await Parallel.ForEachAsync(csharpProjects, new ParallelOptions
+        {
+            MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount),
+            CancellationToken = cancellationToken
+        }, async (project, ct) =>
+        {
+            var currentIndex = Interlocked.Increment(ref completedCount);
+            _logger.LogInformation("Analyzing project {Index}/{Total}: {ProjectName}", currentIndex, totalProjects, project.Name);
             
-            var projectMetrics = await AnalyzeProjectAsync(project, cancellationToken);
-            projectMetricsList.Add(projectMetrics);
+            var result = await AnalyzeProjectWithCouplingAsync(project, compilationCache, ct);
+            projectResultsBag.Add(result);
             
-            _logger.LogInformation("Completed {ProjectName}: {TypeCount} types, {MethodCount} methods", 
+            _logger.LogInformation("Completed {ProjectName}: {TypeCount} types, {MethodCount} methods, {DepCount} dependencies", 
                 project.Name, 
-                projectMetrics.Types.Count, 
-                projectMetrics.TotalMethods);
+                result.metrics.Types.Count, 
+                result.metrics.TotalMethods,
+                result.dependencies.Count);
+        });
+
+        // Extract metrics and dependencies from combined results
+        var projectMetricsList = new List<ProjectMetrics>();
+        var allDependencies = new List<DependencyEdge>();
+        foreach (var (metrics, dependencies) in projectResultsBag)
+        {
+            projectMetricsList.Add(metrics);
+            allDependencies.AddRange(dependencies);
         }
 
-        // Analyze coupling across the entire solution with configuration
-        _logger.LogInformation("Analyzing solution-wide coupling with mode: {CouplingMode}", config.Coupling.Mode);
-        var couplingAnalysis = await CouplingAnalyzer.AnalyzeSolutionAsync(solution, config, _logger, cancellationToken);
+        // Build coupling analysis from pre-collected dependencies (no separate document pass needed)
+        _logger.LogInformation("Building coupling analysis from {DepCount} dependencies with mode: {CouplingMode}", 
+            allDependencies.Count, config.Coupling.Mode);
+        var couplingAnalysis = CouplingAnalyzer.BuildCouplingAnalysisFromDependencies(solution, allDependencies, config);
 
         // Run architecture linting if rules are configured
         LintingResults? lintingResults = null;
@@ -128,7 +170,7 @@ public sealed class SolutionAnalyzer
             SolutionPath: fullPath,
             AnalyzedAt: DateTime.UtcNow,
             Projects: projectMetricsList,
-            Warnings: _warnings)
+            Warnings: _warnings.ToList())
         {
             CouplingAnalysis = couplingAnalysis,
             LintingResults = lintingResults
@@ -175,7 +217,9 @@ public sealed class SolutionAnalyzer
         var project = await workspace.OpenProjectAsync(fullPath, cancellationToken: cancellationToken);
         _logger.LogInformation("Analyzing project: {ProjectName}", project.Name);
         
-        var projectMetrics = await AnalyzeProjectAsync(project, cancellationToken);
+        // For single project, create an empty cache (compilation will be fetched on demand)
+        var compilationCache = new System.Collections.Concurrent.ConcurrentDictionary<string, Compilation>();
+        var projectMetrics = await AnalyzeProjectAsync(project, compilationCache, cancellationToken);
 
         // Analyze internal coupling within the project with configuration
         _logger.LogInformation("Analyzing project coupling with mode: {CouplingMode}", config.Coupling.Mode);
@@ -196,52 +240,69 @@ public sealed class SolutionAnalyzer
             SolutionPath: fullPath,
             AnalyzedAt: DateTime.UtcNow,
             Projects: [projectMetrics],
-            Warnings: _warnings)
+            Warnings: _warnings.ToList())
         {
             CouplingAnalysis = couplingAnalysis,
             LintingResults = lintingResults
         };
     }
 
-    private async Task<ProjectMetrics> AnalyzeProjectAsync(Project project, CancellationToken cancellationToken)
+    private async Task<(ProjectMetrics metrics, List<DependencyEdge> dependencies)> AnalyzeProjectWithCouplingAsync(
+        Project project, 
+        System.Collections.Concurrent.ConcurrentDictionary<string, Compilation> compilationCache, 
+        CancellationToken cancellationToken)
     {
-        _logger.LogDebug("Getting compilation for project: {ProjectName}", project.Name);
-        var compilation = await project.GetCompilationAsync(cancellationToken);
-        if (compilation == null)
+        // Use cached compilation if available
+        if (!compilationCache.TryGetValue(project.Name, out var compilation))
         {
-            _warnings.Add($"Could not get compilation for project: {project.Name}");
-            _logger.LogWarning("Could not get compilation for project: {ProjectName}", project.Name);
-            return new ProjectMetrics(project.Name, project.FilePath ?? "", []);
+            _logger.LogDebug("Getting compilation for project: {ProjectName}", project.Name);
+            compilation = await project.GetCompilationAsync(cancellationToken);
+            if (compilation == null)
+            {
+                _warnings.Add($"Could not get compilation for project: {project.Name}");
+                _logger.LogWarning("Could not get compilation for project: {ProjectName}", project.Name);
+                return (new ProjectMetrics(project.Name, project.FilePath ?? "", []), []);
+            }
         }
 
         // Collect diagnostics from compilation
         var diagnosticSummary = CollectDiagnostics(compilation);
 
-        var typeMetricsList = new List<TypeMetrics>();
-        var documentCount = project.Documents.Count();
-        var documentIndex = 0;
+        var documents = project.Documents.Where(d => d.SourceCodeKind == SourceCodeKind.Regular).ToList();
+        var documentCount = documents.Count;
 
         _logger.LogDebug("Analyzing {DocumentCount} documents in project {ProjectName}", documentCount, project.Name);
 
-        foreach (var document in project.Documents)
-        {
-            documentIndex++;
-            if (document.SourceCodeKind != SourceCodeKind.Regular)
-                continue;
+        // Analyze documents in parallel for performance - collect both metrics AND dependencies in single pass
+        var typeMetricsBag = new System.Collections.Concurrent.ConcurrentBag<TypeMetrics>();
+        var dependenciesBag = new System.Collections.Concurrent.ConcurrentBag<List<DependencyEdge>>();
+        var processedCount = 0;
 
-            if (documentIndex % 50 == 0)
+        await Parallel.ForEachAsync(documents, new ParallelOptions
+        {
+            MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount),
+            CancellationToken = cancellationToken
+        }, async (document, ct) =>
+        {
+            var currentCount = Interlocked.Increment(ref processedCount);
+            if (currentCount % 50 == 0)
             {
                 _logger.LogDebug("Progress: {DocumentIndex}/{DocumentCount} documents processed in {ProjectName}", 
-                    documentIndex, documentCount, project.Name);
+                    currentCount, documentCount, project.Name);
             }
 
-            var syntaxTree = await document.GetSyntaxTreeAsync(cancellationToken);
-            var semanticModel = await document.GetSemanticModelAsync(cancellationToken);
+            var syntaxTree = await document.GetSyntaxTreeAsync(ct);
+            var semanticModel = await document.GetSemanticModelAsync(ct);
 
             if (syntaxTree == null || semanticModel == null)
-                continue;
+                return;
 
-            var root = await syntaxTree.GetRootAsync(cancellationToken);
+            var root = await syntaxTree.GetRootAsync(ct);
+            var filePath = document.FilePath ?? "";
+            
+            // Analyze coupling dependencies in same pass
+            var docDependencies = CouplingAnalyzer.AnalyzeDocumentCoupling(semanticModel, filePath, root);
+            dependenciesBag.Add(docDependencies.ToList());
             
             // Analyze traditional type declarations
             var typeDeclarations = root.DescendantNodes()
@@ -249,8 +310,8 @@ public sealed class SolutionAnalyzer
 
             foreach (var typeDecl in typeDeclarations)
             {
-                var typeMetrics = AnalyzeTypeDeclaration(typeDecl, semanticModel, document.FilePath ?? "");
-                typeMetricsList.Add(typeMetrics);
+                var typeMetrics = AnalyzeTypeDeclaration(typeDecl, semanticModel, filePath);
+                typeMetricsBag.Add(typeMetrics);
             }
 
             // Analyze top-level statements (C# 9+ feature)
@@ -260,21 +321,38 @@ public sealed class SolutionAnalyzer
 
             if (topLevelStatements.Count > 0)
             {
-                var topLevelMetrics = AnalyzeTopLevelStatements(root, topLevelStatements, semanticModel, document.FilePath ?? "");
+                var topLevelMetrics = AnalyzeTopLevelStatements(root, topLevelStatements, semanticModel, filePath);
                 if (topLevelMetrics != null)
                 {
-                    typeMetricsList.Add(topLevelMetrics);
+                    typeMetricsBag.Add(topLevelMetrics);
                 }
             }
+        });
+
+        var typeMetricsList = typeMetricsBag.ToList();
+        
+        // Merge all dependencies from this project
+        var allDependencies = new List<DependencyEdge>();
+        foreach (var deps in dependenciesBag)
+        {
+            allDependencies.AddRange(deps);
         }
 
-        return new ProjectMetrics(
+        var projectMetrics = new ProjectMetrics(
             Name: project.Name,
             FilePath: project.FilePath ?? "",
             Types: typeMetricsList)
         {
             Diagnostics = diagnosticSummary
         };
+
+        return (projectMetrics, allDependencies);
+    }
+
+    private async Task<ProjectMetrics> AnalyzeProjectAsync(Project project, System.Collections.Concurrent.ConcurrentDictionary<string, Compilation> compilationCache, CancellationToken cancellationToken)
+    {
+        var (metrics, _) = await AnalyzeProjectWithCouplingAsync(project, compilationCache, cancellationToken);
+        return metrics;
     }
 
     private static DiagnosticSummary CollectDiagnostics(Compilation compilation)
@@ -353,14 +431,15 @@ public sealed class SolutionAnalyzer
     {
         var methodMetricsList = new List<MethodMetrics>();
 
-        // Analyze the top-level code as a single "Main" method
+        // Analyze the top-level code as a single "Main" method using unified calculator
         var firstStatement = topLevelStatements.First();
         var lastStatement = topLevelStatements.Last();
 
-        var cc = CyclomaticComplexityCalculator.Calculate(root);
-        var loc = topLevelStatements.Sum(s => LinesOfCodeCalculator.Calculate(s));
-        var halstead = HalsteadCalculator.Calculate(root);
-        var mi = MaintainabilityIndexCalculator.Calculate(halstead.Volume, cc, loc);
+        var metrics = UnifiedMetricsCalculator.Calculate(root);
+        var cc = metrics.CyclomaticComplexity;
+        var loc = metrics.LinesOfCode;
+        var halsteadVolume = metrics.HalsteadVolume;
+        var mi = metrics.MaintainabilityIndex;
 
         var startLine = firstStatement.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
         var endLine = lastStatement.GetLocation().GetLineSpan().EndLinePosition.Line + 1;
@@ -372,7 +451,7 @@ public sealed class SolutionAnalyzer
             EndLine: endLine,
             CyclomaticComplexity: cc,
             LinesOfExecutableCode: loc,
-            HalsteadVolume: halstead.Volume,
+            HalsteadVolume: halsteadVolume,
             MaintainabilityIndex: mi));
 
         // Analyze local functions defined in top-level code
@@ -382,8 +461,8 @@ public sealed class SolutionAnalyzer
 
         foreach (var localFunc in localFunctions)
         {
-            var metrics = AnalyzeLocalFunction(localFunc, filePath);
-            methodMetricsList.Add(metrics);
+            var localMetrics = AnalyzeLocalFunction(localFunc, filePath);
+            methodMetricsList.Add(localMetrics);
         }
 
         return new TypeMetrics(
@@ -398,16 +477,24 @@ public sealed class SolutionAnalyzer
         var methodSymbol = semanticModel.GetDeclaredSymbol(method);
         var fullName = methodSymbol?.ToDisplayString() ?? method.Identifier.Text;
 
-        var cc = method.Body != null || method.ExpressionBody != null
-            ? CyclomaticComplexityCalculator.Calculate(method)
-            : 1;
+        int cc, loc;
+        double halsteadVolume, mi;
 
-        var loc = method.Body != null
-            ? LinesOfCodeCalculator.Calculate(method.Body)
-            : (method.ExpressionBody != null ? 1 : 0);
-
-        var halstead = HalsteadCalculator.Calculate(method);
-        var mi = MaintainabilityIndexCalculator.Calculate(halstead.Volume, cc, loc);
+        if (method.Body != null || method.ExpressionBody != null)
+        {
+            var metrics = UnifiedMetricsCalculator.Calculate(method);
+            cc = metrics.CyclomaticComplexity;
+            loc = method.Body != null ? metrics.LinesOfCode : 1;
+            halsteadVolume = metrics.HalsteadVolume;
+            mi = metrics.MaintainabilityIndex;
+        }
+        else
+        {
+            cc = 1;
+            loc = 0;
+            halsteadVolume = 0;
+            mi = 100.0;
+        }
 
         var lineSpan = method.GetLocation().GetLineSpan();
 
@@ -418,7 +505,7 @@ public sealed class SolutionAnalyzer
             EndLine: lineSpan.EndLinePosition.Line + 1,
             CyclomaticComplexity: cc,
             LinesOfExecutableCode: loc,
-            HalsteadVolume: halstead.Volume,
+            HalsteadVolume: halsteadVolume,
             MaintainabilityIndex: mi);
     }
 
@@ -427,16 +514,24 @@ public sealed class SolutionAnalyzer
         var ctorSymbol = semanticModel.GetDeclaredSymbol(ctor);
         var fullName = ctorSymbol?.ToDisplayString() ?? $"{typeDecl.Identifier.Text}.ctor";
 
-        var cc = ctor.Body != null || ctor.ExpressionBody != null
-            ? CyclomaticComplexityCalculator.Calculate(ctor)
-            : 1;
+        int cc, loc;
+        double halsteadVolume, mi;
 
-        var loc = ctor.Body != null
-            ? LinesOfCodeCalculator.Calculate(ctor.Body)
-            : (ctor.ExpressionBody != null ? 1 : 0);
-
-        var halstead = HalsteadCalculator.Calculate(ctor);
-        var mi = MaintainabilityIndexCalculator.Calculate(halstead.Volume, cc, loc);
+        if (ctor.Body != null || ctor.ExpressionBody != null)
+        {
+            var metrics = UnifiedMetricsCalculator.Calculate(ctor);
+            cc = metrics.CyclomaticComplexity;
+            loc = ctor.Body != null ? metrics.LinesOfCode : 1;
+            halsteadVolume = metrics.HalsteadVolume;
+            mi = metrics.MaintainabilityIndex;
+        }
+        else
+        {
+            cc = 1;
+            loc = 0;
+            halsteadVolume = 0;
+            mi = 100.0;
+        }
 
         var lineSpan = ctor.GetLocation().GetLineSpan();
 
@@ -447,7 +542,7 @@ public sealed class SolutionAnalyzer
             EndLine: lineSpan.EndLinePosition.Line + 1,
             CyclomaticComplexity: cc,
             LinesOfExecutableCode: loc,
-            HalsteadVolume: halstead.Volume,
+            HalsteadVolume: halsteadVolume,
             MaintainabilityIndex: mi);
     }
 
@@ -455,16 +550,24 @@ public sealed class SolutionAnalyzer
     {
         var fullName = $"<Program>$.{localFunc.Identifier.Text}()";
 
-        var cc = localFunc.Body != null || localFunc.ExpressionBody != null
-            ? CyclomaticComplexityCalculator.Calculate(localFunc)
-            : 1;
+        int cc, loc;
+        double halsteadVolume, mi;
 
-        var loc = localFunc.Body != null
-            ? LinesOfCodeCalculator.Calculate(localFunc.Body)
-            : (localFunc.ExpressionBody != null ? 1 : 0);
-
-        var halstead = HalsteadCalculator.Calculate(localFunc);
-        var mi = MaintainabilityIndexCalculator.Calculate(halstead.Volume, cc, loc);
+        if (localFunc.Body != null || localFunc.ExpressionBody != null)
+        {
+            var metrics = UnifiedMetricsCalculator.Calculate(localFunc);
+            cc = metrics.CyclomaticComplexity;
+            loc = localFunc.Body != null ? metrics.LinesOfCode : 1;
+            halsteadVolume = metrics.HalsteadVolume;
+            mi = metrics.MaintainabilityIndex;
+        }
+        else
+        {
+            cc = 1;
+            loc = 0;
+            halsteadVolume = 0;
+            mi = 100.0;
+        }
 
         var lineSpan = localFunc.GetLocation().GetLineSpan();
 
@@ -475,7 +578,7 @@ public sealed class SolutionAnalyzer
             EndLine: lineSpan.EndLinePosition.Line + 1,
             CyclomaticComplexity: cc,
             LinesOfExecutableCode: loc,
-            HalsteadVolume: halstead.Volume,
+            HalsteadVolume: halsteadVolume,
             MaintainabilityIndex: mi);
     }
 
