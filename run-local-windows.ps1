@@ -14,8 +14,26 @@ if (Test-Path $nugetCache) {
   $nugetMount = "-v `"$nugetCache`":/root/.nuget/packages:ro"
 }
 
+# Mount NuGet config for private feed authentication
+$nugetConfigMount = ""
+$nugetConfigDir = "$env:APPDATA\NuGet"
+if (Test-Path $nugetConfigDir) {
+  $nugetConfigMount = "-v `"$nugetConfigDir`":/root/.nuget/NuGet:ro"
+  Write-Host "Mounting NuGet config: $nugetConfigDir"
+}
+
+# Pass credentials for Azure Artifacts Credential Provider if set
+$credentialEnv = ""
+if ($env:NUGET_PAT) {
+  Write-Host "Using NUGET_PAT for private feed authentication"
+  if ($env:NUGET_FEED_URL) {
+    $endpoints = "{`"endpointCredentials`": [{`"endpoint`":`"$env:NUGET_FEED_URL`", `"username`":`"docker`", `"password`":`"$env:NUGET_PAT`"}]}"
+    $credentialEnv = "-e VSS_NUGET_EXTERNAL_FEED_ENDPOINTS=`"$endpoints`""
+  }
+}
+
 # Run the analysis container
-$cmd = "docker run --rm -v `"$pwd`":/workspace -w /workspace $nugetMount structura-lens:local /app/StructuraLens.Cli analyze `"$SolutionPath`" -f html -o `"$Output`""
+$cmd = "docker run --rm -v `"$pwd`":/workspace -w /workspace $nugetMount $nugetConfigMount $credentialEnv structura-lens:local /app/StructuraLens.Cli analyze `"$SolutionPath`" -f html -o `"$Output`""
 Write-Host "Running: $cmd"
 Invoke-Expression $cmd
 
