@@ -225,15 +225,38 @@ public static class CouplingAnalyzer
         var projectNames = solution.Projects.Select(p => p.Name).ToHashSet();
         var metrics = new List<CouplingMetrics>();
 
+        // Pre-group dependencies by FromEntity and ToEntity for O(1) lookups
+        var outboundByFrom = allDependencies
+            .GroupBy(d => d.FromEntity)
+            .ToDictionary(g => g.Key, g => g.ToList());
+        var inboundByTo = allDependencies
+            .GroupBy(d => d.ToEntity)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
         foreach (var projectName in projectNames)
         {
-            var outbound = allDependencies
-                .Where(d => d.FromEntity == projectName || d.FromEntity.StartsWith($"{projectName}."))
-                .ToList();
-            
-            var inbound = allDependencies
-                .Where(d => d.ToEntity == projectName || d.ToEntity.StartsWith($"{projectName}."))
-                .ToList();
+            // Get direct matches
+            var outbound = new List<DependencyEdge>();
+            var inbound = new List<DependencyEdge>();
+
+            if (outboundByFrom.TryGetValue(projectName, out var directOutbound))
+                outbound.AddRange(directOutbound);
+
+            if (inboundByTo.TryGetValue(projectName, out var directInbound))
+                inbound.AddRange(directInbound);
+
+            // Also include dependencies where entity starts with project name (namespace/type level)
+            var projectPrefix = $"{projectName}.";
+            foreach (var kvp in outboundByFrom)
+            {
+                if (kvp.Key.StartsWith(projectPrefix))
+                    outbound.AddRange(kvp.Value);
+            }
+            foreach (var kvp in inboundByTo)
+            {
+                if (kvp.Key.StartsWith(projectPrefix))
+                    inbound.AddRange(kvp.Value);
+            }
 
             metrics.Add(new CouplingMetrics(projectName, DependencyType.ProjectReference)
             {
@@ -248,24 +271,42 @@ public static class CouplingAnalyzer
     private static List<CouplingMetrics> BuildNamespaceCouplingMetrics(List<DependencyEdge> allDependencies)
     {
         var namespaceDeps = allDependencies.Where(d => d.Type == DependencyType.NamespaceReference).ToList();
-        var namespaces = namespaceDeps.Select(d => d.FromEntity).Union(namespaceDeps.Select(d => d.ToEntity)).Distinct().ToList();
+        
+        // Pre-group by FromEntity and ToEntity for O(1) lookups
+        var outboundByEntity = namespaceDeps
+            .GroupBy(d => d.FromEntity)
+            .ToDictionary(g => g.Key, g => g.ToList());
+        var inboundByEntity = namespaceDeps
+            .GroupBy(d => d.ToEntity)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var namespaces = outboundByEntity.Keys.Union(inboundByEntity.Keys).ToList();
 
         return namespaces.Select(ns => new CouplingMetrics(ns, DependencyType.NamespaceReference)
         {
-            OutboundDependencies = namespaceDeps.Where(d => d.FromEntity == ns).ToList(),
-            InboundDependencies = namespaceDeps.Where(d => d.ToEntity == ns).ToList()
+            OutboundDependencies = outboundByEntity.GetValueOrDefault(ns, []),
+            InboundDependencies = inboundByEntity.GetValueOrDefault(ns, [])
         }).ToList();
     }
 
     private static List<CouplingMetrics> BuildTypeCouplingMetrics(List<DependencyEdge> allDependencies)
     {
         var typeDeps = allDependencies.Where(d => d.Type == DependencyType.TypeReference).ToList();
-        var types = typeDeps.Select(d => d.FromEntity).Union(typeDeps.Select(d => d.ToEntity)).Distinct().ToList();
+        
+        // Pre-group by FromEntity and ToEntity for O(1) lookups
+        var outboundByEntity = typeDeps
+            .GroupBy(d => d.FromEntity)
+            .ToDictionary(g => g.Key, g => g.ToList());
+        var inboundByEntity = typeDeps
+            .GroupBy(d => d.ToEntity)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var types = outboundByEntity.Keys.Union(inboundByEntity.Keys).ToList();
 
         return types.Select(type => new CouplingMetrics(type, DependencyType.TypeReference)
         {
-            OutboundDependencies = typeDeps.Where(d => d.FromEntity == type).ToList(),
-            InboundDependencies = typeDeps.Where(d => d.ToEntity == type).ToList()
+            OutboundDependencies = outboundByEntity.GetValueOrDefault(type, []),
+            InboundDependencies = inboundByEntity.GetValueOrDefault(type, [])
         }).ToList();
     }
 
