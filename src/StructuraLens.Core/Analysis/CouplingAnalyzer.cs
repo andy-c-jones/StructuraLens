@@ -18,13 +18,26 @@ public static class CouplingAnalyzer
     /// </summary>
     public static Task<CouplingAnalysis> AnalyzeSolutionAsync(Solution solution, CancellationToken cancellationToken = default)
     {
-        return AnalyzeSolutionAsync(solution, ConfigurationLoader.CreateDefaultConfig(), NullLogger.Instance, cancellationToken);
+        return AnalyzeSolutionAsync(solution, ConfigurationLoader.CreateDefaultConfig(), NullLogger.Instance, null, cancellationToken);
     }
 
     /// <summary>
     /// Analyzes coupling for an entire solution with specified configuration.
     /// </summary>
-    public static async Task<CouplingAnalysis> AnalyzeSolutionAsync(Solution solution, StructuraLensConfig config, ILogger logger, CancellationToken cancellationToken = default)
+    public static Task<CouplingAnalysis> AnalyzeSolutionAsync(Solution solution, StructuraLensConfig config, ILogger logger, CancellationToken cancellationToken = default)
+    {
+        return AnalyzeSolutionAsync(solution, config, logger, null, cancellationToken);
+    }
+
+    /// <summary>
+    /// Analyzes coupling for an entire solution with specified configuration and pre-cached compilations.
+    /// </summary>
+    public static async Task<CouplingAnalysis> AnalyzeSolutionAsync(
+        Solution solution, 
+        StructuraLensConfig config, 
+        ILogger logger, 
+        IReadOnlyDictionary<string, Compilation>? compilationCache,
+        CancellationToken cancellationToken = default)
     {
         var projectNames = solution.Projects.Select(p => p.Name).ToList();
 
@@ -46,7 +59,7 @@ public static class CouplingAnalyzer
             var currentIndex = Interlocked.Increment(ref completedCount);
             logger.LogDebug("Analyzing coupling in project {Index}/{Total}: {ProjectName}", currentIndex, totalProjects, project.Name);
             
-            var projectCoupling = await AnalyzeProjectInternalCouplingAsync(project, logger, ct);
+            var projectCoupling = await AnalyzeProjectInternalCouplingAsync(project, compilationCache, logger, ct);
             dependenciesBag.Add(projectCoupling.dependencies);
             
             logger.LogDebug("Project {ProjectName}: {DependencyCount} dependencies found", project.Name, projectCoupling.dependencies.Count);
@@ -97,8 +110,8 @@ public static class CouplingAnalyzer
         var allDependencies = new List<DependencyEdge>();
         var projectNames = new List<string> { project.Name };
 
-        // Analyze internal coupling within the project
-        var projectCoupling = await AnalyzeProjectInternalCouplingAsync(project, logger, cancellationToken);
+        // Analyze internal coupling within the project (no compilation cache for single project)
+        var projectCoupling = await AnalyzeProjectInternalCouplingAsync(project, null, logger, cancellationToken);
         allDependencies.AddRange(projectCoupling.dependencies);
 
         // Apply filtering based on configuration
@@ -165,9 +178,19 @@ public static class CouplingAnalyzer
     /// Analyzes internal coupling within a single project.
     /// </summary>
     private static async Task<(List<DependencyEdge> dependencies, List<CouplingMetrics> namespaceCoupling, List<CouplingMetrics> typeCoupling)>
-        AnalyzeProjectInternalCouplingAsync(Project project, ILogger logger, CancellationToken cancellationToken)
+        AnalyzeProjectInternalCouplingAsync(Project project, IReadOnlyDictionary<string, Compilation>? compilationCache, ILogger logger, CancellationToken cancellationToken)
     {
-        var compilation = await project.GetCompilationAsync(cancellationToken);
+        // Use cached compilation if available, otherwise fetch it
+        Compilation? compilation;
+        if (compilationCache != null && compilationCache.TryGetValue(project.Name, out var cachedCompilation))
+        {
+            compilation = cachedCompilation;
+        }
+        else
+        {
+            compilation = await project.GetCompilationAsync(cancellationToken);
+        }
+
         if (compilation == null)
         {
             logger.LogWarning("Could not get compilation for project: {ProjectName}", project.Name);

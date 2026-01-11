@@ -87,6 +87,30 @@ public sealed class SolutionAnalyzer
         var csharpProjects = solution.Projects.Where(p => p.Language == LanguageNames.CSharp).ToList();
         _logger.LogInformation("Loaded solution with {ProjectCount} C# projects", csharpProjects.Count);
 
+        // Pre-fetch all compilations in parallel and cache them for reuse
+        _logger.LogInformation("Pre-fetching compilations for all projects...");
+        var compilationCache = new System.Collections.Concurrent.ConcurrentDictionary<string, Compilation>();
+        
+        await Parallel.ForEachAsync(csharpProjects, new ParallelOptions
+        {
+            MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount),
+            CancellationToken = cancellationToken
+        }, async (project, ct) =>
+        {
+            var compilation = await project.GetCompilationAsync(ct);
+            if (compilation != null)
+            {
+                compilationCache[project.Name] = compilation;
+            }
+            else
+            {
+                _warnings.Add($"Could not get compilation for project: {project.Name}");
+                _logger.LogWarning("Could not get compilation for project: {ProjectName}", project.Name);
+            }
+        });
+
+        _logger.LogInformation("Cached {Count} compilations", compilationCache.Count);
+
         // Analyze projects in parallel for performance on large solutions
         var projectMetricsBag = new System.Collections.Concurrent.ConcurrentBag<ProjectMetrics>();
         var completedCount = 0;
@@ -101,7 +125,7 @@ public sealed class SolutionAnalyzer
             var currentIndex = Interlocked.Increment(ref completedCount);
             _logger.LogInformation("Analyzing project {Index}/{Total}: {ProjectName}", currentIndex, totalProjects, project.Name);
             
-            var projectMetrics = await AnalyzeProjectAsync(project, ct);
+            var projectMetrics = await AnalyzeProjectAsync(project, compilationCache, ct);
             projectMetricsBag.Add(projectMetrics);
             
             _logger.LogInformation("Completed {ProjectName}: {TypeCount} types, {MethodCount} methods", 
@@ -112,9 +136,9 @@ public sealed class SolutionAnalyzer
 
         var projectMetricsList = projectMetricsBag.ToList();
 
-        // Analyze coupling across the entire solution with configuration
+        // Analyze coupling across the entire solution with configuration (reusing cached compilations)
         _logger.LogInformation("Analyzing solution-wide coupling with mode: {CouplingMode}", config.Coupling.Mode);
-        var couplingAnalysis = await CouplingAnalyzer.AnalyzeSolutionAsync(solution, config, _logger, cancellationToken);
+        var couplingAnalysis = await CouplingAnalyzer.AnalyzeSolutionAsync(solution, config, _logger, compilationCache, cancellationToken);
 
         // Run architecture linting if rules are configured
         LintingResults? lintingResults = null;
@@ -183,7 +207,9 @@ public sealed class SolutionAnalyzer
         var project = await workspace.OpenProjectAsync(fullPath, cancellationToken: cancellationToken);
         _logger.LogInformation("Analyzing project: {ProjectName}", project.Name);
         
-        var projectMetrics = await AnalyzeProjectAsync(project, cancellationToken);
+        // For single project, create an empty cache (compilation will be fetched on demand)
+        var compilationCache = new System.Collections.Concurrent.ConcurrentDictionary<string, Compilation>();
+        var projectMetrics = await AnalyzeProjectAsync(project, compilationCache, cancellationToken);
 
         // Analyze internal coupling within the project with configuration
         _logger.LogInformation("Analyzing project coupling with mode: {CouplingMode}", config.Coupling.Mode);
@@ -211,15 +237,19 @@ public sealed class SolutionAnalyzer
         };
     }
 
-    private async Task<ProjectMetrics> AnalyzeProjectAsync(Project project, CancellationToken cancellationToken)
+    private async Task<ProjectMetrics> AnalyzeProjectAsync(Project project, System.Collections.Concurrent.ConcurrentDictionary<string, Compilation> compilationCache, CancellationToken cancellationToken)
     {
-        _logger.LogDebug("Getting compilation for project: {ProjectName}", project.Name);
-        var compilation = await project.GetCompilationAsync(cancellationToken);
-        if (compilation == null)
+        // Use cached compilation if available
+        if (!compilationCache.TryGetValue(project.Name, out var compilation))
         {
-            _warnings.Add($"Could not get compilation for project: {project.Name}");
-            _logger.LogWarning("Could not get compilation for project: {ProjectName}", project.Name);
-            return new ProjectMetrics(project.Name, project.FilePath ?? "", []);
+            _logger.LogDebug("Getting compilation for project: {ProjectName}", project.Name);
+            compilation = await project.GetCompilationAsync(cancellationToken);
+            if (compilation == null)
+            {
+                _warnings.Add($"Could not get compilation for project: {project.Name}");
+                _logger.LogWarning("Could not get compilation for project: {ProjectName}", project.Name);
+                return new ProjectMetrics(project.Name, project.FilePath ?? "", []);
+            }
         }
 
         // Collect diagnostics from compilation
