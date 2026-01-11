@@ -53,21 +53,57 @@ public record CouplingMetrics(
     
     /// <summary>Dependencies other entities have on this one (inbound coupling).</summary>
     public IReadOnlyList<DependencyEdge> InboundDependencies { get; init; } = [];
-    
+
+    // Pre-computed metrics (lazily initialized on first access, then cached)
+    private int? _efferentCoupling;
+    private int? _afferentCoupling;
+    private int? _totalCouplingStrength;
+
     /// <summary>Efferent coupling (Ce) - number of entities this depends on.</summary>
-    public int EfferentCoupling => OutboundDependencies.Select(d => d.ToEntity).Distinct().Count();
+    public int EfferentCoupling => _efferentCoupling ??= ComputeEfferentCoupling();
     
     /// <summary>Afferent coupling (Ca) - number of entities that depend on this.</summary>
-    public int AfferentCoupling => InboundDependencies.Select(d => d.FromEntity).Distinct().Count();
+    public int AfferentCoupling => _afferentCoupling ??= ComputeAfferentCoupling();
     
     /// <summary>Instability (I) = Ce / (Ca + Ce). Range 0-1, where 0 = stable, 1 = unstable.</summary>
-    public double Instability => EfferentCoupling + AfferentCoupling > 0 
-        ? (double)EfferentCoupling / (EfferentCoupling + AfferentCoupling) 
-        : 0;
+    public double Instability
+    {
+        get
+        {
+            var ce = EfferentCoupling;
+            var ca = AfferentCoupling;
+            return ce + ca > 0 ? (double)ce / (ce + ca) : 0;
+        }
+    }
     
     /// <summary>Total coupling strength based on reference counts.</summary>
-    public int TotalCouplingStrength => OutboundDependencies.Sum(d => d.ReferenceCount) + 
-                                       InboundDependencies.Sum(d => d.ReferenceCount);
+    public int TotalCouplingStrength => _totalCouplingStrength ??= ComputeTotalCouplingStrength();
+
+    private int ComputeEfferentCoupling()
+    {
+        var seen = new HashSet<string>();
+        foreach (var d in OutboundDependencies)
+            seen.Add(d.ToEntity);
+        return seen.Count;
+    }
+
+    private int ComputeAfferentCoupling()
+    {
+        var seen = new HashSet<string>();
+        foreach (var d in InboundDependencies)
+            seen.Add(d.FromEntity);
+        return seen.Count;
+    }
+
+    private int ComputeTotalCouplingStrength()
+    {
+        var total = 0;
+        foreach (var d in OutboundDependencies)
+            total += d.ReferenceCount;
+        foreach (var d in InboundDependencies)
+            total += d.ReferenceCount;
+        return total;
+    }
 }
 
 /// <summary>
