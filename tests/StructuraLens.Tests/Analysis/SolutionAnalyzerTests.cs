@@ -1,16 +1,40 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using StructuraLens.Core.Abstractions;
 using StructuraLens.Core.Analysis;
+using StructuraLens.Core.Infrastructure;
 
 namespace StructuraLens.Tests.Analysis;
 
 public class SolutionAnalyzerTests
 {
+    private static SolutionAnalyzer CreateAnalyzer()
+    {
+        // Create real dependencies for integration tests
+        var logger = new NullLogger<SolutionAnalyzer>();
+        var nugetRestorer = new NuGetRestorer(new NullLogger<NuGetRestorer>());
+        var registrationService = new MSBuildRegistrationService();
+        var workspaceFactory = new MSBuildWorkspaceFactory(registrationService);
+        var couplingAnalyzer = new CouplingAnalyzer(new NullLogger<CouplingAnalyzer>());
+        var metricsCalculator = new MetricsCalculator();
+        var fileSystem = new FileSystemService();
+
+        return new SolutionAnalyzer(
+            logger,
+            nugetRestorer,
+            workspaceFactory,
+            couplingAnalyzer,
+            metricsCalculator,
+            fileSystem);
+    }
+
     [Test]
     public async Task AnalyzeSolutionAsync_NonExistentFile_ThrowsFileNotFoundException()
     {
-        var analyzer = new SolutionAnalyzer();
+        var analyzer = CreateAnalyzer();
 
         await Assert.ThrowsAsync<FileNotFoundException>(
             async () => await analyzer.AnalyzeSolutionAsync("/nonexistent/path/solution.sln"));
@@ -19,7 +43,7 @@ public class SolutionAnalyzerTests
     [Test]
     public async Task AnalyzeProjectAsync_NonExistentFile_ThrowsFileNotFoundException()
     {
-        var analyzer = new SolutionAnalyzer();
+        var analyzer = CreateAnalyzer();
 
         await Assert.ThrowsAsync<FileNotFoundException>(
             async () => await analyzer.AnalyzeProjectAsync("/nonexistent/path/project.csproj"));
@@ -29,9 +53,10 @@ public class SolutionAnalyzerTests
     public async Task EnsureMSBuildRegistered_CanBeCalledMultipleTimes_DoesNotThrow()
     {
         // Should not throw even when called multiple times
-        SolutionAnalyzer.EnsureMSBuildRegistered();
-        SolutionAnalyzer.EnsureMSBuildRegistered();
-        SolutionAnalyzer.EnsureMSBuildRegistered();
+        var registrationService = new MSBuildRegistrationService();
+        registrationService.EnsureMSBuildRegistered();
+        registrationService.EnsureMSBuildRegistered();
+        registrationService.EnsureMSBuildRegistered();
 
         // If we get here, no exception was thrown
         await Task.CompletedTask;
@@ -40,7 +65,7 @@ public class SolutionAnalyzerTests
     [Test]
     public async Task AnalyzeSolutionAsync_WithCancellation_ThrowsException()
     {
-        var analyzer = new SolutionAnalyzer();
+        var analyzer = CreateAnalyzer();
         using var cts = new CancellationTokenSource();
         cts.Cancel();
 
@@ -69,6 +94,26 @@ public class SolutionAnalyzerTests
 /// </summary>
 public class SolutionAnalyzerIntegrationTests
 {
+    private static SolutionAnalyzer CreateAnalyzer()
+    {
+        // Create real dependencies for integration tests
+        var logger = new NullLogger<SolutionAnalyzer>();
+        var nugetRestorer = new NuGetRestorer(new NullLogger<NuGetRestorer>());
+        var registrationService = new MSBuildRegistrationService();
+        var workspaceFactory = new MSBuildWorkspaceFactory(registrationService);
+        var couplingAnalyzer = new CouplingAnalyzer(new NullLogger<CouplingAnalyzer>());
+        var metricsCalculator = new MetricsCalculator();
+        var fileSystem = new FileSystemService();
+
+        return new SolutionAnalyzer(
+            logger,
+            nugetRestorer,
+            workspaceFactory,
+            couplingAnalyzer,
+            metricsCalculator,
+            fileSystem);
+    }
+
     private static string GetSolutionPath()
     {
         // Navigate up from test output to find solution
@@ -85,7 +130,7 @@ public class SolutionAnalyzerIntegrationTests
     public async Task AnalyzeSolutionAsync_OwnSolution_ReturnsValidReport()
     {
         var solutionPath = GetSolutionPath();
-        var analyzer = new SolutionAnalyzer();
+        var analyzer = CreateAnalyzer();
         var report = await analyzer.AnalyzeSolutionAsync(solutionPath);
 
         await Assert.That(report).IsNotNull();
@@ -97,7 +142,7 @@ public class SolutionAnalyzerIntegrationTests
     public async Task AnalyzeSolutionAsync_OwnSolution_FindsAllProjects()
     {
         var solutionPath = GetSolutionPath();
-        var analyzer = new SolutionAnalyzer();
+        var analyzer = CreateAnalyzer();
         var report = await analyzer.AnalyzeSolutionAsync(solutionPath);
 
         // Should find at least Cli, Core, and Tests projects
@@ -112,7 +157,7 @@ public class SolutionAnalyzerIntegrationTests
     public async Task AnalyzeSolutionAsync_OwnSolution_CalculatesMetrics()
     {
         var solutionPath = GetSolutionPath();
-        var analyzer = new SolutionAnalyzer();
+        var analyzer = CreateAnalyzer();
         var report = await analyzer.AnalyzeSolutionAsync(solutionPath);
 
         await Assert.That(report.TotalTypes).IsGreaterThan(0);
@@ -125,7 +170,7 @@ public class SolutionAnalyzerIntegrationTests
     public async Task AnalyzeSolutionAsync_OwnSolution_IncludesHalsteadAndMI()
     {
         var solutionPath = GetSolutionPath();
-        var analyzer = new SolutionAnalyzer();
+        var analyzer = CreateAnalyzer();
         var report = await analyzer.AnalyzeSolutionAsync(solutionPath);
 
         var allMethods = report.Projects
@@ -147,7 +192,7 @@ public class SolutionAnalyzerIntegrationTests
     public async Task AnalyzeSolutionAsync_OwnSolution_AnalyzesTopLevelStatements()
     {
         var solutionPath = GetSolutionPath();
-        var analyzer = new SolutionAnalyzer();
+        var analyzer = CreateAnalyzer();
         var report = await analyzer.AnalyzeSolutionAsync(solutionPath);
 
         // CLI project uses top-level statements
@@ -166,7 +211,7 @@ public class SolutionAnalyzerIntegrationTests
     public async Task AnalyzeSolutionAsync_OwnSolution_CalculatesDepthOfInheritance()
     {
         var solutionPath = GetSolutionPath();
-        var analyzer = new SolutionAnalyzer();
+        var analyzer = CreateAnalyzer();
         var report = await analyzer.AnalyzeSolutionAsync(solutionPath);
 
         var coreProject = report.Projects.FirstOrDefault(p => p.Name == "StructuraLens.Core");
@@ -184,7 +229,7 @@ public class SolutionAnalyzerIntegrationTests
         var solutionDir = Path.GetDirectoryName(solutionPath)!;
         var projectPath = Path.Combine(solutionDir, "src", "StructuraLens.Core", "StructuraLens.Core.csproj");
 
-        var analyzer = new SolutionAnalyzer();
+        var analyzer = CreateAnalyzer();
         var report = await analyzer.AnalyzeProjectAsync(projectPath);
 
         await Assert.That(report).IsNotNull();
@@ -199,7 +244,7 @@ public class SolutionAnalyzerIntegrationTests
         var solutionPath = GetSolutionPath();
         var beforeAnalysis = DateTime.UtcNow.AddSeconds(-1);
         
-        var analyzer = new SolutionAnalyzer();
+        var analyzer = CreateAnalyzer();
         var report = await analyzer.AnalyzeSolutionAsync(solutionPath);
 
         var afterAnalysis = DateTime.UtcNow.AddSeconds(1);
@@ -212,7 +257,7 @@ public class SolutionAnalyzerIntegrationTests
     public async Task AnalyzeSolutionAsync_OwnSolution_MethodMetricsHaveValidLineNumbers()
     {
         var solutionPath = GetSolutionPath();
-        var analyzer = new SolutionAnalyzer();
+        var analyzer = CreateAnalyzer();
         var report = await analyzer.AnalyzeSolutionAsync(solutionPath);
 
         var allMethods = report.Projects
@@ -232,7 +277,7 @@ public class SolutionAnalyzerIntegrationTests
     public async Task AnalyzeSolutionAsync_OwnSolution_MaintainabilityIndexInValidRange()
     {
         var solutionPath = GetSolutionPath();
-        var analyzer = new SolutionAnalyzer();
+        var analyzer = CreateAnalyzer();
         var report = await analyzer.AnalyzeSolutionAsync(solutionPath);
 
         var allMethods = report.Projects
@@ -251,7 +296,7 @@ public class SolutionAnalyzerIntegrationTests
     public async Task AnalyzeSolutionAsync_OwnSolution_LocalFunctionsAreAnalyzed()
     {
         var solutionPath = GetSolutionPath();
-        var analyzer = new SolutionAnalyzer();
+        var analyzer = CreateAnalyzer();
         var report = await analyzer.AnalyzeSolutionAsync(solutionPath);
 
         // CLI has a PrintSummary local function

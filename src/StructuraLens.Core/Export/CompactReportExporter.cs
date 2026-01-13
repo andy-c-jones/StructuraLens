@@ -1,3 +1,4 @@
+using StructuraLens.Core.Abstractions;
 using StructuraLens.Core.Models;
 
 namespace StructuraLens.Core.Export;
@@ -5,15 +6,10 @@ namespace StructuraLens.Core.Export;
 /// <summary>
 /// Converts AnalysisReport to compact format optimized for size and visualization.
 /// </summary>
-public static class CompactReportExporter
+public sealed class CompactReportExporter : IReportExporter
 {
-    /// <summary>
-    /// Converts an AnalysisReport to compact format.
-    /// </summary>
-    /// <param name="report">The full analysis report.</param>
-    /// <param name="includeMethodDetails">Include individual method metrics.</param>
-    /// <param name="includeTypeDetails">Include individual type metrics.</param>
-    public static CompactReport Export(
+    /// <inheritdoc />
+    public CompactReport Export(
         AnalysisReport report,
         bool includeMethodDetails = false,
         bool includeTypeDetails = false)
@@ -33,7 +29,7 @@ public static class CompactReportExporter
         };
     }
 
-    private static List<CompactProject> ExportProjects(
+    private List<CompactProject> ExportProjects(
         AnalysisReport report,
         bool includeTypes,
         bool includeMethods)
@@ -76,7 +72,7 @@ public static class CompactReportExporter
         return projects;
     }
 
-    private static List<CompactType> ExportTypes(IReadOnlyList<TypeMetrics> types, bool includeMethods)
+    private List<CompactType> ExportTypes(IReadOnlyList<TypeMetrics> types, bool includeMethods)
     {
         return types.Select(t =>
         {
@@ -94,7 +90,7 @@ public static class CompactReportExporter
         }).ToList();
     }
 
-    private static List<CompactMethod> ExportMethods(IReadOnlyList<MethodMetrics> methods)
+    private List<CompactMethod> ExportMethods(IReadOnlyList<MethodMetrics> methods)
     {
         return methods.Select(m => new CompactMethod
         {
@@ -108,7 +104,7 @@ public static class CompactReportExporter
         }).ToList();
     }
 
-    private static CompactGraph BuildGraph(AnalysisReport report)
+    private CompactGraph BuildGraph(AnalysisReport report)
     {
         var coupling = report.CouplingAnalysis;
         if (coupling == null)
@@ -129,7 +125,7 @@ public static class CompactReportExporter
         };
     }
 
-    private static GraphLayer BuildProjectGraph(
+    private GraphLayer BuildProjectGraph(
         IReadOnlyList<ProjectMetrics> projects,
         CouplingAnalysis coupling)
     {
@@ -165,7 +161,7 @@ public static class CompactReportExporter
         return new GraphLayer { Nodes = nodes, Edges = edges };
     }
 
-    private static GraphLayer BuildNamespaceGraph(
+    private GraphLayer BuildNamespaceGraph(
         IReadOnlyList<ProjectMetrics> projects,
         CouplingAnalysis coupling)
     {
@@ -232,7 +228,7 @@ public static class CompactReportExporter
     }
 
 
-    private static string GetShortName(string fullName)
+    private string GetShortName(string fullName)
     {
         // Extract just the method/type name without namespace
         var parenIndex = fullName.IndexOf('(');
@@ -250,7 +246,7 @@ public static class CompactReportExporter
         return shortName;
     }
 
-    private static CompactDiagnostics? ExportDiagnostics(AnalysisReport report)
+    private CompactDiagnostics? ExportDiagnostics(AnalysisReport report)
     {
         var allDiagnostics = report.Projects
             .Where(p => p.Diagnostics != null)
@@ -285,7 +281,7 @@ public static class CompactReportExporter
         };
     }
 
-    private static string GetNamespace(string fullTypeName)
+    private string GetNamespace(string fullTypeName)
     {
         var lastDot = fullTypeName.LastIndexOf('.');
         return lastDot > 0 ? fullTypeName[..lastDot] : "";

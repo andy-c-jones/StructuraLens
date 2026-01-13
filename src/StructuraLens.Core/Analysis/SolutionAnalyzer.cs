@@ -1,10 +1,8 @@
-using Microsoft.Build.Locator;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Microsoft.CodeAnalysis.MSBuild;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 
+using StructuraLens.Core.Abstractions;
 using StructuraLens.Core.Models;
 
 namespace StructuraLens.Core.Analysis;
@@ -12,60 +10,49 @@ namespace StructuraLens.Core.Analysis;
 /// <summary>
 /// Main analyzer that loads a solution and computes metrics for all projects.
 /// </summary>
-public sealed class SolutionAnalyzer
+public sealed class SolutionAnalyzer : ISolutionAnalyzer
 {
-    private static bool _msBuildRegistered;
-    private static readonly object _lock = new();
-
     private readonly System.Collections.Concurrent.ConcurrentBag<string> _warnings = [];
-    private readonly ILogger _logger;
+    private readonly ILogger<SolutionAnalyzer> _logger;
+    private readonly INuGetRestorer _nugetRestorer;
+    private readonly IMSBuildWorkspaceFactory _workspaceFactory;
+    private readonly ICouplingAnalyzer _couplingAnalyzer;
+    private readonly IMetricsCalculator _metricsCalculator;
+    private readonly IFileSystemService _fileSystem;
 
-    public SolutionAnalyzer(ILogger? logger = null)
+    public SolutionAnalyzer(
+        ILogger<SolutionAnalyzer> logger,
+        INuGetRestorer nugetRestorer,
+        IMSBuildWorkspaceFactory workspaceFactory,
+        ICouplingAnalyzer couplingAnalyzer,
+        IMetricsCalculator metricsCalculator,
+        IFileSystemService fileSystem)
     {
-        _logger = logger ?? NullLogger.Instance;
+        _logger = logger;
+        _nugetRestorer = nugetRestorer;
+        _workspaceFactory = workspaceFactory;
+        _couplingAnalyzer = couplingAnalyzer;
+        _metricsCalculator = metricsCalculator;
+        _fileSystem = fileSystem;
     }
 
-    public static void EnsureMSBuildRegistered()
-    {
-        if (_msBuildRegistered) return;
-
-        lock (_lock)
-        {
-            if (_msBuildRegistered) return;
-
-            var instances = MSBuildLocator.QueryVisualStudioInstances().ToList();
-            if (instances.Count > 0)
-            {
-                MSBuildLocator.RegisterInstance(instances.OrderByDescending(i => i.Version).First());
-            }
-            else
-            {
-                MSBuildLocator.RegisterDefaults();
-            }
-            _msBuildRegistered = true;
-        }
-    }
-
-    /// <summary>
-    /// Analyzes a solution.
-    /// </summary>
+    /// <inheritdoc />
     public async Task<AnalysisReport> AnalyzeSolutionAsync(string solutionPath, CancellationToken cancellationToken = default)
     {     
         _logger.LogInformation("Starting solution analysis: {SolutionPath}", solutionPath);
-        EnsureMSBuildRegistered();
 
-        var fullPath = Path.GetFullPath(solutionPath);
-        if (!File.Exists(fullPath))
+        var fullPath = _fileSystem.GetFullPath(solutionPath);
+        if (!_fileSystem.FileExists(fullPath))
         {
             throw new FileNotFoundException($"Solution file not found: {fullPath}");
         }
 
         // Restore NuGet packages to ensure all references are available
         _logger.LogInformation("Restoring NuGet packages...");
-        await RestorePackagesAsync(fullPath, cancellationToken);
+        await _nugetRestorer.RestorePackagesAsync(fullPath, cancellationToken);
 
         _logger.LogInformation("Loading solution into MSBuild workspace...");
-        using var workspace = MSBuildWorkspace.Create();
+        using var workspace = _workspaceFactory.Create();
         workspace.RegisterWorkspaceFailedHandler(e =>
         {
             if (e.Diagnostic.Kind == WorkspaceDiagnosticKind.Warning)
@@ -139,7 +126,7 @@ public sealed class SolutionAnalyzer
 
         // Build coupling analysis from pre-collected dependencies (no separate document pass needed)
         _logger.LogInformation("Building coupling analysis from {DepCount} dependencies", allDependencies.Count);
-        var couplingAnalysis = CouplingAnalyzer.BuildCouplingAnalysisFromDependencies(solution, allDependencies);
+        var couplingAnalysis = _couplingAnalyzer.BuildCouplingAnalysisFromDependencies(solution, allDependencies);
 
         _logger.LogInformation("Analysis complete. Total: {ProjectCount} projects, {TypeCount} types, {MethodCount} methods",
             projectMetricsList.Count,
@@ -156,26 +143,23 @@ public sealed class SolutionAnalyzer
         };
     }
 
-    /// <summary>
-    /// Analyzes a project.
-    /// </summary>
+    /// <inheritdoc />
     public async Task<AnalysisReport> AnalyzeProjectAsync(string projectPath, CancellationToken cancellationToken = default)
-    {     
+    {
         _logger.LogInformation("Starting project analysis: {ProjectPath}", projectPath);
-        EnsureMSBuildRegistered();
 
-        var fullPath = Path.GetFullPath(projectPath);
-        if (!File.Exists(fullPath))
+        var fullPath = _fileSystem.GetFullPath(projectPath);
+        if (!_fileSystem.FileExists(fullPath))
         {
             throw new FileNotFoundException($"Project file not found: {fullPath}");
         }
 
-        // Restore NuGet packages to ensure all references are available
+        // Restore NuGet packages
         _logger.LogInformation("Restoring NuGet packages...");
-        await RestorePackagesAsync(fullPath, cancellationToken);
+        await _nugetRestorer.RestorePackagesAsync(fullPath, cancellationToken);
 
         _logger.LogInformation("Loading project into MSBuild workspace...");
-        using var workspace = MSBuildWorkspace.Create();
+        using var workspace = _workspaceFactory.Create();
         workspace.RegisterWorkspaceFailedHandler(e =>
         {
             if (e.Diagnostic.Kind == WorkspaceDiagnosticKind.Warning)
@@ -193,7 +177,7 @@ public sealed class SolutionAnalyzer
         var projectMetrics = await AnalyzeProjectAsync(project, compilationCache, cancellationToken);
 
         _logger.LogInformation("Analyzing project coupling");
-        var couplingAnalysis = await CouplingAnalyzer.AnalyzeProjectCouplingAsync(project, _logger, cancellationToken);
+        var couplingAnalysis = await _couplingAnalyzer.AnalyzeProjectCouplingAsync(project, cancellationToken);
 
         return new AnalysisReport(
             SolutionPath: fullPath,
@@ -354,7 +338,7 @@ public sealed class SolutionAnalyzer
     private TypeMetrics AnalyzeTypeDeclaration(TypeDeclarationSyntax typeDecl, SemanticModel semanticModel, string filePath)
     {
         var typeSymbol = semanticModel.GetDeclaredSymbol(typeDecl) as INamedTypeSymbol;
-        var dit = DepthOfInheritanceCalculator.Calculate(typeSymbol);
+        var dit = _metricsCalculator.CalculateDepthOfInheritance(typeSymbol);
 
         var methodMetricsList = new List<MethodMetrics>();
 
@@ -393,7 +377,7 @@ public sealed class SolutionAnalyzer
         var firstStatement = topLevelStatements.First();
         var lastStatement = topLevelStatements.Last();
 
-        var metrics = UnifiedMetricsCalculator.Calculate(root);
+        var metrics = _metricsCalculator.CalculateUnifiedMetrics(root);
         var cc = metrics.CyclomaticComplexity;
         var loc = metrics.LinesOfCode;
         var halsteadVolume = metrics.HalsteadVolume;
@@ -440,7 +424,7 @@ public sealed class SolutionAnalyzer
 
         if (method.Body != null || method.ExpressionBody != null)
         {
-            var metrics = UnifiedMetricsCalculator.Calculate(method);
+            var metrics = _metricsCalculator.CalculateUnifiedMetrics(method);
             cc = metrics.CyclomaticComplexity;
             loc = method.Body != null ? metrics.LinesOfCode : 1;
             halsteadVolume = metrics.HalsteadVolume;
@@ -477,7 +461,7 @@ public sealed class SolutionAnalyzer
 
         if (ctor.Body != null || ctor.ExpressionBody != null)
         {
-            var metrics = UnifiedMetricsCalculator.Calculate(ctor);
+            var metrics = _metricsCalculator.CalculateUnifiedMetrics(ctor);
             cc = metrics.CyclomaticComplexity;
             loc = ctor.Body != null ? metrics.LinesOfCode : 1;
             halsteadVolume = metrics.HalsteadVolume;
@@ -513,7 +497,7 @@ public sealed class SolutionAnalyzer
 
         if (localFunc.Body != null || localFunc.ExpressionBody != null)
         {
-            var metrics = UnifiedMetricsCalculator.Calculate(localFunc);
+            var metrics = _metricsCalculator.CalculateUnifiedMetrics(localFunc);
             cc = metrics.CyclomaticComplexity;
             loc = localFunc.Body != null ? metrics.LinesOfCode : 1;
             halsteadVolume = metrics.HalsteadVolume;
@@ -540,63 +524,4 @@ public sealed class SolutionAnalyzer
             MaintainabilityIndex: mi);
     }
 
-    private async Task RestorePackagesAsync(string projectOrSolutionPath, CancellationToken cancellationToken)
-    {
-        _logger.LogDebug("Starting package restore for {Path}", projectOrSolutionPath);
-        
-        var startInfo = new System.Diagnostics.ProcessStartInfo
-        {
-            FileName = "dotnet",
-            Arguments = $"restore \"{projectOrSolutionPath}\" --verbosity normal --interactive",
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-
-        using var process = System.Diagnostics.Process.Start(startInfo);
-        if (process == null)
-        {
-            _logger.LogError("Failed to start dotnet restore process. Ensure the .NET SDK is installed and 'dotnet' is available in PATH.");
-            return;
-        }
-
-        // Read stdout and stderr concurrently to avoid deadlocks
-        var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
-        var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
-        
-        await process.WaitForExitAsync(cancellationToken);
-        
-        var stdout = await stdoutTask;
-        var stderr = await stderrTask;
-        
-        if (process.ExitCode != 0)
-        {
-            _logger.LogError("Package restore failed with exit code {ExitCode} for {Path}", process.ExitCode, projectOrSolutionPath);
-            
-            if (!string.IsNullOrWhiteSpace(stderr))
-            {
-                _logger.LogError("Restore stderr: {Error}", stderr);
-            }
-            
-            if (!string.IsNullOrWhiteSpace(stdout))
-            {
-                _logger.LogError("Restore stdout: {Output}", stdout);
-            }
-            
-            // Log common troubleshooting hints
-            if (stderr.Contains("401") || stdout.Contains("401") || 
-                stderr.Contains("Unable to load the service index") || stdout.Contains("Unable to load the service index"))
-            {
-                _logger.LogError("Authentication failure detected. For private NuGet feeds, ensure credentials are configured. " +
-                    "Options: (1) Use 'dotnet nuget add source' with credentials, (2) Configure nuget.config with credentials, " +
-                    "(3) Use Azure Artifacts Credential Provider or similar for your feed type. " +
-                    "See: https://learn.microsoft.com/en-us/nuget/consume-packages/consuming-packages-authenticated-feeds");
-            }
-        }
-        else
-        {
-            _logger.LogDebug("Package restore completed successfully for {Path}", projectOrSolutionPath);
-        }
-    }
 }

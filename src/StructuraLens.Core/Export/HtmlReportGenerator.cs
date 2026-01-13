@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using StructuraLens.Core.Abstractions;
 using StructuraLens.Core.Models;
 
 namespace StructuraLens.Core.Export;
@@ -7,14 +8,19 @@ namespace StructuraLens.Core.Export;
 /// <summary>
 /// Generates a single-file interactive HTML report.
 /// </summary>
-public static class HtmlReportGenerator
+public sealed class HtmlReportGenerator : IReportGenerator
 {
-    /// <summary>
-    /// Generates an HTML report from an analysis report.
-    /// </summary>
-    public static string Generate(AnalysisReport report)
+    private readonly IReportExporter _reportExporter;
+
+    public HtmlReportGenerator(IReportExporter reportExporter)
     {
-        var compactReport = CompactReportExporter.Export(report);
+        _reportExporter = reportExporter;
+    }
+
+    /// <inheritdoc />
+    public string GenerateHtml(AnalysisReport report)
+    {
+        var compactReport = _reportExporter.Export(report);
         var jsonData = JsonSerializer.Serialize(compactReport, new JsonSerializerOptions
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -27,7 +33,7 @@ public static class HtmlReportGenerator
         return GenerateHtml(report, jsonData, diagnosticsData);
     }
 
-    private static string BuildDiagnosticsJson(AnalysisReport report)
+    private string BuildDiagnosticsJson(AnalysisReport report)
     {
         var diagnostics = report.Projects
             .Where(p => p.Diagnostics != null)
@@ -46,7 +52,7 @@ public static class HtmlReportGenerator
         return JsonSerializer.Serialize(diagnostics);
     }
 
-    private static string GenerateHtml(AnalysisReport report, string compactJson, string diagnosticsJson)
+    private string GenerateHtml(AnalysisReport report, string compactJson, string diagnosticsJson)
     {
         var sb = new StringBuilder();
         sb.AppendLine("<!DOCTYPE html>");
@@ -73,7 +79,7 @@ public static class HtmlReportGenerator
         return sb.ToString();
     }
 
-    private static string GenerateStyles()
+    private string GenerateStyles()
     {
         return """
   <style>
@@ -169,7 +175,7 @@ public static class HtmlReportGenerator
 """;
     }
 
-    private static string GenerateHeader(AnalysisReport report)
+    private string GenerateHeader(AnalysisReport report)
     {
         var timestamp = report.AnalyzedAt.ToString("yyyy-MM-dd HH:mm:ss UTC");
         var solutionName = Path.GetFileName(report.SolutionPath);
@@ -184,7 +190,7 @@ public static class HtmlReportGenerator
 """;
     }
 
-    private static string GenerateTabs()
+    private string GenerateTabs()
     {
         return """
     <div class="tabs">
@@ -197,7 +203,7 @@ public static class HtmlReportGenerator
 """;
     }
 
-    private static string GenerateTabContents()
+    private string GenerateTabContents()
     {
         return """
     <div id="summary" class="tab-content active"></div>
@@ -208,7 +214,7 @@ public static class HtmlReportGenerator
 """;
     }
 
-    private static string GenerateJavaScript()
+    private string GenerateJavaScript()
     {
         return """
   <script>

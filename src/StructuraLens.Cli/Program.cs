@@ -1,13 +1,19 @@
 using System.CommandLine;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using StructuraLens.Core.Abstractions;
 using StructuraLens.Core.Analysis;
 using StructuraLens.Core.Export;
+using StructuraLens.Core.Infrastructure;
 using StructuraLens.Core.Models;
 
-// Configure logging
-using var loggerFactory = LoggerFactory.Create(builder =>
+// Configure DI container
+var services = new ServiceCollection();
+
+// Logging configuration
+services.AddLogging(builder =>
 {
     builder
         .AddConsole(options =>
@@ -17,7 +23,22 @@ using var loggerFactory = LoggerFactory.Create(builder =>
         .SetMinimumLevel(LogLevel.Information);
 });
 
-var logger = loggerFactory.CreateLogger("StructuraLens");
+// Core services
+services.AddSingleton<IMetricsCalculator, MetricsCalculator>();
+services.AddSingleton<ICouplingAnalyzer, CouplingAnalyzer>();
+services.AddSingleton<ISolutionAnalyzer, SolutionAnalyzer>();
+
+// Infrastructure services
+services.AddSingleton<INuGetRestorer, NuGetRestorer>();
+services.AddSingleton<IMSBuildRegistrationService, MSBuildRegistrationService>();
+services.AddSingleton<IMSBuildWorkspaceFactory, MSBuildWorkspaceFactory>();
+services.AddSingleton<IFileSystemService, FileSystemService>();
+
+// Export services
+services.AddSingleton<IReportExporter, CompactReportExporter>();
+services.AddSingleton<IReportGenerator, HtmlReportGenerator>();
+
+var serviceProvider = services.BuildServiceProvider();
 
 // Create options
 var outputOption = new Option<string?>("--out", "-o")
@@ -60,10 +81,11 @@ analyzeCommand.SetAction(async (parseResult, cancellationToken) =>
     var verbose = parseResult.GetValue(verboseOption);
 
     // Adjust logging level based on verbose flag
+    IServiceProvider executionServiceProvider;
     if (verbose)
     {
-        loggerFactory.Dispose();
-        using var verboseLoggerFactory = LoggerFactory.Create(builder =>
+        var verboseServices = new ServiceCollection();
+        verboseServices.AddLogging(builder =>
         {
             builder
                 .AddConsole(options =>
@@ -72,18 +94,33 @@ analyzeCommand.SetAction(async (parseResult, cancellationToken) =>
                 })
                 .SetMinimumLevel(LogLevel.Debug);
         });
-        var verboseLogger = verboseLoggerFactory.CreateLogger("StructuraLens");
-        return await ExecuteAnalysisAsync(path, output, format, verboseLogger, cancellationToken);
+        
+        // Register all other services
+        verboseServices.AddSingleton<IMetricsCalculator, MetricsCalculator>();
+        verboseServices.AddSingleton<ICouplingAnalyzer, CouplingAnalyzer>();
+        verboseServices.AddSingleton<ISolutionAnalyzer, SolutionAnalyzer>();
+        verboseServices.AddSingleton<INuGetRestorer, NuGetRestorer>();
+        verboseServices.AddSingleton<IMSBuildRegistrationService, MSBuildRegistrationService>();
+        verboseServices.AddSingleton<IMSBuildWorkspaceFactory, MSBuildWorkspaceFactory>();
+        verboseServices.AddSingleton<IFileSystemService, FileSystemService>();
+        verboseServices.AddSingleton<IReportExporter, CompactReportExporter>();
+        verboseServices.AddSingleton<IReportGenerator, HtmlReportGenerator>();
+        
+        executionServiceProvider = verboseServices.BuildServiceProvider();
+    }
+    else
+    {
+        executionServiceProvider = serviceProvider;
     }
 
-    return await ExecuteAnalysisAsync(path, output, format, logger, cancellationToken);
+    return await ExecuteAnalysisAsync(path, output, format, executionServiceProvider, cancellationToken);
 });
 
 static async Task<int> ExecuteAnalysisAsync(
     string path,
     string? output,
     string format,
-    ILogger logger,
+    IServiceProvider serviceProvider,
     CancellationToken cancellationToken)
 {
     try
@@ -95,7 +132,7 @@ static async Task<int> ExecuteAnalysisAsync(
         Console.WriteLine("Coupling mode: All");
         Console.WriteLine();
 
-        var analyzer = new SolutionAnalyzer(logger);
+        var analyzer = serviceProvider.GetRequiredService<ISolutionAnalyzer>();
         var report = path.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)
             ? await analyzer.AnalyzeProjectAsync(path, cancellationToken)
             : await analyzer.AnalyzeSolutionAsync(path, cancellationToken);
@@ -121,7 +158,8 @@ static async Task<int> ExecuteAnalysisAsync(
         }
         else if (format == "compact")
         {
-            var compactReport = CompactReportExporter.Export(report);
+            var exporter = serviceProvider.GetRequiredService<IReportExporter>();
+            var compactReport = exporter.Export(report);
             var jsonOptions = new JsonSerializerOptions
             {
                 PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -142,7 +180,8 @@ static async Task<int> ExecuteAnalysisAsync(
         }
         else if (format == "html")
         {
-            var html = HtmlReportGenerator.Generate(report);
+            var generator = serviceProvider.GetRequiredService<IReportGenerator>();
+            var html = generator.GenerateHtml(report);
 
             if (!string.IsNullOrEmpty(output))
             {
