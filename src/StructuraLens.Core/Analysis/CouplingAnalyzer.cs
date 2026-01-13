@@ -3,7 +3,6 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using StructuraLens.Core.Configuration;
 using StructuraLens.Core.Models;
 
 namespace StructuraLens.Core.Analysis;
@@ -18,27 +17,18 @@ public static class CouplingAnalyzer
     /// </summary>
     public static Task<CouplingAnalysis> AnalyzeSolutionAsync(Solution solution, CancellationToken cancellationToken = default)
     {
-        return AnalyzeSolutionAsync(solution, ConfigurationLoader.CreateDefaultConfig(), NullLogger.Instance, null, cancellationToken);
+        return AnalyzeSolutionAsync(solution, NullLogger.Instance, null, cancellationToken);
     }
 
     /// <summary>
-    /// Analyzes coupling for an entire solution with specified configuration.
-    /// </summary>
-    public static Task<CouplingAnalysis> AnalyzeSolutionAsync(Solution solution, StructuraLensConfig config, ILogger logger, CancellationToken cancellationToken = default)
-    {
-        return AnalyzeSolutionAsync(solution, config, logger, null, cancellationToken);
-    }
-
-    /// <summary>
-    /// Analyzes coupling for an entire solution with specified configuration and pre-cached compilations.
+    /// Analyzes coupling for an entire solution with specified logger and optional pre-cached compilations.
     /// </summary>
     public static async Task<CouplingAnalysis> AnalyzeSolutionAsync(
-        Solution solution, 
-        StructuraLensConfig config, 
-        ILogger logger, 
+        Solution solution,
+        ILogger logger,
         IReadOnlyDictionary<string, Compilation>? compilationCache,
         CancellationToken cancellationToken = default)
-    {
+    {     
         var projectNames = solution.Projects.Select(p => p.Name).ToList();
 
         // Analyze project-to-project dependencies
@@ -72,7 +62,7 @@ public static class CouplingAnalyzer
             allDependencies.AddRange(deps);
         }
 
-        return BuildCouplingAnalysisFromDependencies(solution, allDependencies, config);
+        return BuildCouplingAnalysisFromDependencies(solution, allDependencies);
     }
 
     /// <summary>
@@ -80,9 +70,8 @@ public static class CouplingAnalyzer
     /// </summary>
     public static CouplingAnalysis BuildCouplingAnalysisFromDependencies(
         Solution solution,
-        IReadOnlyList<DependencyEdge> allDependencies,
-        StructuraLensConfig config)
-    {
+        IReadOnlyList<DependencyEdge> allDependencies)
+    {     
         var projectNames = solution.Projects.Select(p => p.Name).ToList();
 
         // Add project-to-project dependencies if not already included
@@ -90,15 +79,18 @@ public static class CouplingAnalyzer
         var combinedDependencies = new List<DependencyEdge>(projectDependencies);
         combinedDependencies.AddRange(allDependencies);
 
-        // Apply filtering based on configuration
-        var filteredDependencies = DependencyFilter.FilterDependencies(combinedDependencies, config.Coupling, projectNames);
+        // Always analyze all dependencies (no filtering)
+        DependencyEdge.EnableDetails = true;
 
-        // Build coupling metrics from filtered dependencies
-        var projectCouplingMetrics = BuildProjectCouplingMetrics(solution, filteredDependencies);
-        var namespaceCouplingMetrics = BuildNamespaceCouplingMetrics(filteredDependencies);
-        var typeCouplingMetrics = BuildTypeCouplingMetrics(filteredDependencies);
+        // Aggregate duplicate edges to reduce memory pressure
+        var aggregatedDependencies = AggregateDependencies(combinedDependencies);
 
-        var summary = BuildCouplingSummary(projectCouplingMetrics, namespaceCouplingMetrics, typeCouplingMetrics, filteredDependencies, config);
+        // Build coupling metrics from aggregated dependencies
+        var projectCouplingMetrics = BuildProjectCouplingMetrics(solution, aggregatedDependencies);
+        var namespaceCouplingMetrics = BuildNamespaceCouplingMetrics(aggregatedDependencies);
+        var typeCouplingMetrics = BuildTypeCouplingMetrics(aggregatedDependencies);
+
+        var summary = BuildCouplingSummary(projectCouplingMetrics, namespaceCouplingMetrics, typeCouplingMetrics, aggregatedDependencies);
 
         return new CouplingAnalysis(
             AnalyzedEntity: solution.FilePath ?? "Solution",
@@ -107,7 +99,7 @@ public static class CouplingAnalyzer
             ProjectCoupling = projectCouplingMetrics,
             NamespaceCoupling = namespaceCouplingMetrics,
             TypeCoupling = typeCouplingMetrics,
-            AllDependencies = filteredDependencies,
+            AllDependencies = aggregatedDependencies,
             Summary = summary
         };
     }
@@ -127,14 +119,14 @@ public static class CouplingAnalyzer
     /// </summary>
     public static Task<CouplingAnalysis> AnalyzeProjectCouplingAsync(Project project, CancellationToken cancellationToken = default)
     {
-        return AnalyzeProjectCouplingAsync(project, ConfigurationLoader.CreateDefaultConfig(), NullLogger.Instance, cancellationToken);
+        return AnalyzeProjectCouplingAsync(project, NullLogger.Instance, cancellationToken);
     }
 
     /// <summary>
-    /// Analyzes coupling for a single project with specified configuration.
+    /// Analyzes coupling for a single project with specified logger.
     /// </summary>
-    public static async Task<CouplingAnalysis> AnalyzeProjectCouplingAsync(Project project, StructuraLensConfig config, ILogger logger, CancellationToken cancellationToken = default)
-    {
+    public static async Task<CouplingAnalysis> AnalyzeProjectCouplingAsync(Project project, ILogger logger, CancellationToken cancellationToken = default)
+    {     
         var allDependencies = new List<DependencyEdge>();
         var projectNames = new List<string> { project.Name };
 
@@ -142,12 +134,14 @@ public static class CouplingAnalyzer
         var projectCoupling = await AnalyzeProjectInternalCouplingAsync(project, null, logger, cancellationToken);
         allDependencies.AddRange(projectCoupling.dependencies);
 
-        // Apply filtering based on configuration
-        var filteredDependencies = DependencyFilter.FilterDependencies(allDependencies, config.Coupling, projectNames);
+        DependencyEdge.EnableDetails = true;
 
-        // Build coupling metrics from filtered dependencies
-        var namespaceCouplingMetrics = BuildNamespaceCouplingMetrics(filteredDependencies);
-        var typeCouplingMetrics = BuildTypeCouplingMetrics(filteredDependencies);
+        // Aggregate duplicate edges to reduce memory pressure
+        var aggregatedDependencies = AggregateDependencies(allDependencies);
+
+        // Build coupling metrics from aggregated dependencies
+        var namespaceCouplingMetrics = BuildNamespaceCouplingMetrics(aggregatedDependencies);
+        var typeCouplingMetrics = BuildTypeCouplingMetrics(aggregatedDependencies);
 
         // For single project, create a simple project coupling metric
         var projectCouplingMetrics = new List<CouplingMetrics>
@@ -159,7 +153,7 @@ public static class CouplingAnalyzer
             }
         };
 
-        var summary = BuildCouplingSummary(projectCouplingMetrics, namespaceCouplingMetrics, typeCouplingMetrics, filteredDependencies, config);
+        var summary = BuildCouplingSummary(projectCouplingMetrics, namespaceCouplingMetrics, typeCouplingMetrics, aggregatedDependencies);
 
         return new CouplingAnalysis(
             AnalyzedEntity: project.FilePath ?? project.Name,
@@ -168,7 +162,7 @@ public static class CouplingAnalyzer
             ProjectCoupling = projectCouplingMetrics,
             NamespaceCoupling = namespaceCouplingMetrics,
             TypeCoupling = typeCouplingMetrics,
-            AllDependencies = filteredDependencies,
+            AllDependencies = aggregatedDependencies,
             Summary = summary
         };
     }
@@ -361,13 +355,35 @@ public static class CouplingAnalyzer
         }).ToList();
     }
 
+    private static List<DependencyEdge> AggregateDependencies(List<DependencyEdge> dependencies)
+    {
+        if (dependencies.Count == 0) return dependencies;
+
+        var aggregated = new Dictionary<(string From, string To, DependencyType Type), int>(dependencies.Count);
+        foreach (var d in dependencies)
+        {
+            var key = (d.FromEntity, d.ToEntity, d.Type);
+            if (aggregated.TryGetValue(key, out var current))
+                aggregated[key] = current + d.ReferenceCount;
+            else
+                aggregated[key] = d.ReferenceCount;
+        }
+
+        var result = new List<DependencyEdge>(aggregated.Count);
+        foreach (var (key, count) in aggregated)
+        {
+            result.Add(new DependencyEdge(key.From, key.To, key.Type, count));
+        }
+
+        return result;
+    }
+
     private static CouplingSummary BuildCouplingSummary(
         List<CouplingMetrics> projectCoupling,
         List<CouplingMetrics> namespaceCoupling, 
         List<CouplingMetrics> typeCoupling,
-        List<DependencyEdge> allDependencies,
-        StructuraLensConfig config)
-    {
+        List<DependencyEdge> allDependencies)
+    {     
         var allMetrics = projectCoupling.Concat(namespaceCoupling).Concat(typeCoupling).ToList();
         
         return new CouplingSummary
@@ -378,7 +394,7 @@ public static class CouplingAnalyzer
             AverageInstability = allMetrics.Count > 0 ? allMetrics.Average(m => m.Instability) : 0,
             MostCoupledEntity = allMetrics.OrderByDescending(m => m.TotalCouplingStrength).FirstOrDefault()?.EntityName,
             MostUnstableEntity = allMetrics.OrderByDescending(m => m.Instability).FirstOrDefault()?.EntityName,
-            CouplingMode = config.Coupling.Mode.ToString()
+            CouplingMode = "All"
         };
     }
 }
@@ -436,14 +452,16 @@ internal sealed class DocumentCouplingAnalyzer : CSharpSyntaxWalker
 
             if (!string.IsNullOrEmpty(containingNamespace) && containingNamespace != namespaceName)
             {
-                _dependencies.Add(new DependencyEdge(
-                    FromEntity: containingNamespace,
-                    ToEntity: namespaceName,
-                    Type: DependencyType.NamespaceReference,
-                    ReferenceCount: 1)
-                {
-                    SourceLocation = $"{_filePath}:{node.GetLocation().GetLineSpan().StartLinePosition.Line + 1}"
-                });
+            _dependencies.Add(new DependencyEdge(
+                FromEntity: containingNamespace,
+                ToEntity: namespaceName,
+                Type: DependencyType.NamespaceReference,
+                ReferenceCount: 1)
+            {
+                SourceLocation = DependencyEdge.EnableDetails
+                    ? $"{_filePath}:{node.GetLocation().GetLineSpan().StartLinePosition.Line + 1}"
+                    : null
+            });
             }
         }
 
@@ -485,8 +503,10 @@ internal sealed class DocumentCouplingAnalyzer : CSharpSyntaxWalker
                 Type: DependencyType.TypeReference,
                 ReferenceCount: 1)
             {
-                SourceLocation = $"{_filePath}:{node.GetLocation().GetLineSpan().StartLinePosition.Line + 1}",
-                ReferencedSymbol = typeSymbol.Name
+                SourceLocation = DependencyEdge.EnableDetails
+                    ? $"{_filePath}:{node.GetLocation().GetLineSpan().StartLinePosition.Line + 1}"
+                    : null,
+                ReferencedSymbol = DependencyEdge.EnableDetails ? typeSymbol.Name : null
             });
 
             var fromNamespace = GetNamespace(fromType);
@@ -502,8 +522,10 @@ internal sealed class DocumentCouplingAnalyzer : CSharpSyntaxWalker
                     Type: DependencyType.NamespaceReference,
                     ReferenceCount: 1)
                 {
-                    SourceLocation = $"{_filePath}:{node.GetLocation().GetLineSpan().StartLinePosition.Line + 1}",
-                    ReferencedSymbol = typeSymbol.Name
+                    SourceLocation = DependencyEdge.EnableDetails
+                        ? $"{_filePath}:{node.GetLocation().GetLineSpan().StartLinePosition.Line + 1}"
+                        : null,
+                    ReferencedSymbol = DependencyEdge.EnableDetails ? typeSymbol.Name : null
                 });
             }
         }

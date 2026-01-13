@@ -28,9 +28,6 @@ public record CompactReport
     [JsonPropertyName("g")]
     public CompactGraph Graph { get; init; } = new();
 
-    /// <summary>Linting results.</summary>
-    [JsonPropertyName("l")]
-    public CompactLinting? Linting { get; init; }
 
     /// <summary>Roslyn diagnostics (compiler errors, warnings, etc.).</summary>
     [JsonPropertyName("diag")]
@@ -182,30 +179,6 @@ public record GraphLayer
     public IReadOnlyList<int[]> Edges { get; init; } = [];
 }
 
-/// <summary>Compact linting results.</summary>
-public record CompactLinting
-{
-    /// <summary>Rules evaluated.</summary>
-    [JsonPropertyName("r")]
-    public int RulesEvaluated { get; init; }
-
-    /// <summary>Error count.</summary>
-    [JsonPropertyName("e")]
-    public int Errors { get; init; }
-
-    /// <summary>Warning count.</summary>
-    [JsonPropertyName("w")]
-    public int Warnings { get; init; }
-
-    /// <summary>Passed (no errors).</summary>
-    [JsonPropertyName("ok")]
-    public bool Passed { get; init; }
-
-    /// <summary>Violations: [ruleId, severity, from, to]. Severity: 0=info, 1=warn, 2=error.</summary>
-    [JsonPropertyName("v")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<object[]>? Violations { get; init; }
-}
 
 /// <summary>Compact diagnostics (Roslyn compiler issues).</summary>
 public record CompactDiagnostics

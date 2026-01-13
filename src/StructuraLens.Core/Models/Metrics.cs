@@ -63,8 +63,4 @@ public record AnalysisReport(
     /// </summary>
     public CouplingAnalysis? CouplingAnalysis { get; init; }
 
-    /// <summary>
-    /// Architecture linting results.
-    /// </summary>
-    public LintingResults? LintingResults { get; init; }
 }

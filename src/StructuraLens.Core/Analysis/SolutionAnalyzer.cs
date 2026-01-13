@@ -4,7 +4,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.MSBuild;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using StructuraLens.Core.Configuration;
+
 using StructuraLens.Core.Models;
 
 namespace StructuraLens.Core.Analysis;
@@ -47,18 +47,10 @@ public sealed class SolutionAnalyzer
     }
 
     /// <summary>
-    /// Analyzes a solution using default configuration.
+    /// Analyzes a solution.
     /// </summary>
-    public Task<AnalysisReport> AnalyzeSolutionAsync(string solutionPath, CancellationToken cancellationToken = default)
-    {
-        return AnalyzeSolutionAsync(solutionPath, ConfigurationLoader.CreateDefaultConfig(), cancellationToken);
-    }
-
-    /// <summary>
-    /// Analyzes a solution with specified configuration.
-    /// </summary>
-    public async Task<AnalysisReport> AnalyzeSolutionAsync(string solutionPath, StructuraLensConfig config, CancellationToken cancellationToken = default)
-    {
+    public async Task<AnalysisReport> AnalyzeSolutionAsync(string solutionPath, CancellationToken cancellationToken = default)
+    {     
         _logger.LogInformation("Starting solution analysis: {SolutionPath}", solutionPath);
         EnsureMSBuildRegistered();
 
@@ -146,20 +138,8 @@ public sealed class SolutionAnalyzer
         }
 
         // Build coupling analysis from pre-collected dependencies (no separate document pass needed)
-        _logger.LogInformation("Building coupling analysis from {DepCount} dependencies with mode: {CouplingMode}", 
-            allDependencies.Count, config.Coupling.Mode);
-        var couplingAnalysis = CouplingAnalyzer.BuildCouplingAnalysisFromDependencies(solution, allDependencies, config);
-
-        // Run architecture linting if rules are configured
-        LintingResults? lintingResults = null;
-        if (config.Rules.Count > 0)
-        {
-            _logger.LogInformation("Evaluating {RuleCount} architecture rules...", config.Rules.Count);
-            lintingResults = ArchitectureLinter.Evaluate(couplingAnalysis, config.Rules);
-            _logger.LogInformation("Linting complete: {ErrorCount} errors, {WarningCount} warnings", 
-                lintingResults.ErrorCount, 
-                lintingResults.WarningCount);
-        }
+        _logger.LogInformation("Building coupling analysis from {DepCount} dependencies", allDependencies.Count);
+        var couplingAnalysis = CouplingAnalyzer.BuildCouplingAnalysisFromDependencies(solution, allDependencies);
 
         _logger.LogInformation("Analysis complete. Total: {ProjectCount} projects, {TypeCount} types, {MethodCount} methods",
             projectMetricsList.Count,
@@ -172,24 +152,15 @@ public sealed class SolutionAnalyzer
             Projects: projectMetricsList,
             Warnings: _warnings.ToList())
         {
-            CouplingAnalysis = couplingAnalysis,
-            LintingResults = lintingResults
+            CouplingAnalysis = couplingAnalysis
         };
     }
 
     /// <summary>
-    /// Analyzes a project using default configuration.
+    /// Analyzes a project.
     /// </summary>
-    public Task<AnalysisReport> AnalyzeProjectAsync(string projectPath, CancellationToken cancellationToken = default)
-    {
-        return AnalyzeProjectAsync(projectPath, ConfigurationLoader.CreateDefaultConfig(), cancellationToken);
-    }
-
-    /// <summary>
-    /// Analyzes a project with specified configuration.
-    /// </summary>
-    public async Task<AnalysisReport> AnalyzeProjectAsync(string projectPath, StructuraLensConfig config, CancellationToken cancellationToken = default)
-    {
+    public async Task<AnalysisReport> AnalyzeProjectAsync(string projectPath, CancellationToken cancellationToken = default)
+    {     
         _logger.LogInformation("Starting project analysis: {ProjectPath}", projectPath);
         EnsureMSBuildRegistered();
 
@@ -221,20 +192,8 @@ public sealed class SolutionAnalyzer
         var compilationCache = new System.Collections.Concurrent.ConcurrentDictionary<string, Compilation>();
         var projectMetrics = await AnalyzeProjectAsync(project, compilationCache, cancellationToken);
 
-        // Analyze internal coupling within the project with configuration
-        _logger.LogInformation("Analyzing project coupling with mode: {CouplingMode}", config.Coupling.Mode);
-        var couplingAnalysis = await CouplingAnalyzer.AnalyzeProjectCouplingAsync(project, config, _logger, cancellationToken);
-
-        // Run architecture linting if rules are configured
-        LintingResults? lintingResults = null;
-        if (config.Rules.Count > 0)
-        {
-            _logger.LogInformation("Evaluating {RuleCount} architecture rules...", config.Rules.Count);
-            lintingResults = ArchitectureLinter.Evaluate(couplingAnalysis, config.Rules);
-            _logger.LogInformation("Linting complete: {ErrorCount} errors, {WarningCount} warnings", 
-                lintingResults.ErrorCount, 
-                lintingResults.WarningCount);
-        }
+        _logger.LogInformation("Analyzing project coupling");
+        var couplingAnalysis = await CouplingAnalyzer.AnalyzeProjectCouplingAsync(project, _logger, cancellationToken);
 
         return new AnalysisReport(
             SolutionPath: fullPath,
@@ -242,8 +201,7 @@ public sealed class SolutionAnalyzer
             Projects: [projectMetrics],
             Warnings: _warnings.ToList())
         {
-            CouplingAnalysis = couplingAnalysis,
-            LintingResults = lintingResults
+            CouplingAnalysis = couplingAnalysis
         };
     }
 

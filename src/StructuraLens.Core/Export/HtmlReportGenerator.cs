@@ -192,7 +192,6 @@ public static class HtmlReportGenerator
       <div class="tab" data-tab="projects">Projects</div>
       <div class="tab" data-tab="coupling">Coupling</div>
       <div class="tab" data-tab="graph">Graph</div>
-      <div class="tab" data-tab="linting">Linting</div>
       <div class="tab" data-tab="diagnostics">Diagnostics</div>
     </div>
 """;
@@ -205,7 +204,6 @@ public static class HtmlReportGenerator
     <div id="projects" class="tab-content"></div>
     <div id="coupling" class="tab-content"></div>
     <div id="graph" class="tab-content"></div>
-    <div id="linting" class="tab-content"></div>
     <div id="diagnostics" class="tab-content"></div>
 """;
     }
@@ -423,7 +421,6 @@ public static class HtmlReportGenerator
           <select id="colorMetric">
             <option value="none">None</option>
             <option value="diagnostics">Diagnostics Count</option>
-            <option value="linting">Linting Violations</option>
             <option value="coupling">Coupling (Ce)</option>
             <option value="complexity">Cyclomatic Complexity</option>
             <option value="loc">Lines of Code</option>
@@ -433,7 +430,6 @@ public static class HtmlReportGenerator
           <select id="sizeMetric">
             <option value="dependencies">Dependencies</option>
             <option value="diagnostics">Diagnostics Count</option>
-            <option value="linting">Linting Violations</option>
             <option value="coupling">Coupling (Ce)</option>
             <option value="complexity">Cyclomatic Complexity</option>
             <option value="loc">Lines of Code</option>
@@ -531,11 +527,6 @@ public static class HtmlReportGenerator
           value = (metrics.err || 0) * 5 + (metrics.warn || 0); // Errors weighted 5x
           values = allProjects.map(p => (p.err || 0) * 5 + (p.warn || 0));
           break;
-        case 'linting':
-          const violations = reportData.l?.v?.filter(v => v[2] === metrics.n || v[3]?.startsWith(metrics.n))?.length || 0;
-          value = violations;
-          values = allProjects.map(p => reportData.l?.v?.filter(v => v[2] === p.n || v[3]?.startsWith(p.n))?.length || 0);
-          break;
         case 'coupling':
           value = metrics.ce || 0;
           values = allProjects.map(p => p.ce || 0);
@@ -583,8 +574,6 @@ public static class HtmlReportGenerator
       switch (sizeMetric) {
         case 'diagnostics':
           return (metrics.err || 0) * 5 + (metrics.warn || 0);
-        case 'linting':
-          return reportData.l?.v?.filter(v => v[2] === metrics.n || v[3]?.startsWith(metrics.n))?.length || 0;
         case 'coupling':
           return metrics.ce || 0;
         case 'complexity':
@@ -725,37 +714,6 @@ public static class HtmlReportGenerator
       });
     }
 
-    // Render linting tab
-    function renderLinting() {
-      const l = reportData.l;
-      if (!l) {
-        document.getElementById('linting').innerHTML = '<p style="color:var(--text-muted)">No architecture rules configured.</p>';
-        return;
-      }
-      document.getElementById('linting').innerHTML = `
-        <div class="cards">
-          <div class="card"><div class="card-value">${l.r}</div><div class="card-label">Rules Evaluated</div></div>
-          <div class="card"><div class="card-value" style="color: ${l.e > 0 ? 'var(--error)' : 'var(--success)'}">${l.e}</div><div class="card-label">Errors</div></div>
-          <div class="card"><div class="card-value" style="color: ${l.w > 0 ? 'var(--warning)' : 'var(--success)'}">${l.w}</div><div class="card-label">Warnings</div></div>
-          <div class="card"><div class="card-value ${l.ok ? 'passed' : 'failed'}">${l.ok ? 'PASSED' : 'FAILED'}</div><div class="card-label">Status</div></div>
-        </div>
-        ${l.v && l.v.length > 0 ? `
-        <div class="section">
-          <h2>Violations</h2>
-          <table>
-            <thead><tr><th>Rule</th><th>Severity</th><th>From</th><th>To</th></tr></thead>
-            <tbody>${l.v.map(([rule, sev, from, to]) => `
-              <tr>
-                <td>${rule}</td>
-                <td><span class="badge ${sev === 2 ? 'badge-error' : sev === 1 ? 'badge-warning' : 'badge-info'}">${sev === 2 ? 'Error' : sev === 1 ? 'Warning' : 'Info'}</span></td>
-                <td>${from}</td>
-                <td>${to}</td>
-              </tr>`).join('')}
-            </tbody>
-          </table>
-        </div>` : '<p class="passed" style="margin-top:20px">✅ No violations found</p>'}
-      `;
-    }
 
     // Render diagnostics tab
     function renderDiagnostics() {

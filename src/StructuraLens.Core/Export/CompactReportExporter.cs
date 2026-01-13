@@ -1,4 +1,3 @@
-using StructuraLens.Core.Configuration;
 using StructuraLens.Core.Models;
 
 namespace StructuraLens.Core.Export;
@@ -21,7 +20,6 @@ public static class CompactReportExporter
     {
         var projects = ExportProjects(report, includeTypeDetails, includeMethodDetails);
         var graph = BuildGraph(report);
-        var linting = ExportLinting(report.LintingResults);
         var diagnostics = ExportDiagnostics(report);
 
         return new CompactReport
@@ -31,7 +29,6 @@ public static class CompactReportExporter
             Timestamp = new DateTimeOffset(report.AnalyzedAt).ToUnixTimeMilliseconds(),
             Projects = projects,
             Graph = graph,
-            Linting = linting,
             Diagnostics = diagnostics
         };
     }
@@ -234,34 +231,6 @@ public static class CompactReportExporter
         return new GraphLayer { Nodes = nodes, Edges = edges };
     }
 
-    private static CompactLinting? ExportLinting(LintingResults? linting)
-    {
-        if (linting == null) return null;
-
-        var violations = linting.Violations.Count > 0
-            ? linting.Violations.Select(v => new object[]
-            {
-                v.RuleId,
-                v.Severity switch
-                {
-                    RuleSeverity.Error => 2,
-                    RuleSeverity.Warning => 1,
-                    _ => 0
-                },
-                v.FromEntity ?? "",
-                v.ToEntity ?? ""
-            }).ToList()
-            : null;
-
-        return new CompactLinting
-        {
-            RulesEvaluated = linting.RulesEvaluated,
-            Errors = linting.ErrorCount,
-            Warnings = linting.WarningCount,
-            Passed = linting.Passed,
-            Violations = violations
-        };
-    }
 
     private static string GetShortName(string fullName)
     {
