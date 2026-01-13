@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using StructuraLens.Core.Abstractions;
+using StructuraLens.Core.Infrastructure.Logging;
 
 namespace StructuraLens.Core.Infrastructure;
 
@@ -21,7 +22,7 @@ public sealed class NuGetRestorer : INuGetRestorer
     {
         cancellationToken.ThrowIfCancellationRequested();
         
-        _logger.LogDebug("Starting package restore for {Path}", projectOrSolutionPath);
+        NuGetRestorerLog.StartingPackageRestore(_logger, projectOrSolutionPath);
 
         var startInfo = new ProcessStartInfo
         {
@@ -36,7 +37,7 @@ public sealed class NuGetRestorer : INuGetRestorer
         using var process = Process.Start(startInfo);
         if (process == null)
         {
-            _logger.LogError("Failed to start dotnet restore process. Ensure the .NET SDK is installed and 'dotnet' is available in PATH.");
+            NuGetRestorerLog.FailedToStartRestoreProcess(_logger);
             return;
         }
 
@@ -51,31 +52,28 @@ public sealed class NuGetRestorer : INuGetRestorer
 
         if (process.ExitCode != 0)
         {
-            _logger.LogError("Package restore failed with exit code {ExitCode} for {Path}", process.ExitCode, projectOrSolutionPath);
+            NuGetRestorerLog.PackageRestoreFailed(_logger, process.ExitCode, projectOrSolutionPath);
 
             if (!string.IsNullOrWhiteSpace(stderr))
             {
-                _logger.LogError("Restore stderr: {Error}", stderr);
+                NuGetRestorerLog.RestoreStderr(_logger, stderr);
             }
 
             if (!string.IsNullOrWhiteSpace(stdout))
             {
-                _logger.LogError("Restore stdout: {Output}", stdout);
+                NuGetRestorerLog.RestoreStdout(_logger, stdout);
             }
 
             // Log common troubleshooting hints
             if (stderr.Contains("401") || stdout.Contains("401") ||
                 stderr.Contains("Unable to load the service index") || stdout.Contains("Unable to load the service index"))
             {
-                _logger.LogError("Authentication failure detected. For private NuGet feeds, ensure credentials are configured. " +
-                    "Options: (1) Use 'dotnet nuget add source' with credentials, (2) Configure nuget.config with credentials, " +
-                    "(3) Use Azure Artifacts Credential Provider or similar for your feed type. " +
-                    "See: https://learn.microsoft.com/en-us/nuget/consume-packages/consuming-packages-authenticated-feeds");
+                NuGetRestorerLog.AuthenticationFailureDetected(_logger);
             }
         }
         else
         {
-            _logger.LogDebug("Package restore completed successfully for {Path}", projectOrSolutionPath);
+            NuGetRestorerLog.PackageRestoreCompleted(_logger, projectOrSolutionPath);
         }
     }
 }

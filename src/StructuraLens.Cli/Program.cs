@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using StructuraLens.Cli.Logging;
 using StructuraLens.Core.Abstractions;
 using StructuraLens.Core.Analysis;
 using StructuraLens.Core.Export;
@@ -22,6 +23,10 @@ services.AddLogging(builder =>
         })
         .SetMinimumLevel(LogLevel.Information);
 });
+
+// CLI logging (for Program class)
+services.AddSingleton<ILogger<Program>>(sp => 
+    sp.GetRequiredService<ILoggerFactory>().CreateLogger<Program>());
 
 // Core services
 services.AddSingleton<IMetricsCalculator, MetricsCalculator>();
@@ -95,6 +100,10 @@ analyzeCommand.SetAction(async (parseResult, cancellationToken) =>
                 .SetMinimumLevel(LogLevel.Debug);
         });
         
+        // CLI logging (for Program class)
+        verboseServices.AddSingleton<ILogger<Program>>(sp => 
+            sp.GetRequiredService<ILoggerFactory>().CreateLogger<Program>());
+        
         // Register all other services
         verboseServices.AddSingleton<IMetricsCalculator, MetricsCalculator>();
         verboseServices.AddSingleton<ICouplingAnalyzer, CouplingAnalyzer>();
@@ -123,14 +132,13 @@ static async Task<int> ExecuteAnalysisAsync(
     IServiceProvider serviceProvider,
     CancellationToken cancellationToken)
 {
+    var logger = serviceProvider.GetRequiredService<ILogger<Program>>();
+    
     try
     {
-        Console.WriteLine("StructuraLens v0.1.0");
-        Console.WriteLine($"Analyzing: {path}");
-        Console.WriteLine();
-
-        Console.WriteLine("Coupling mode: All");
-        Console.WriteLine();
+        ProgramLog.ApplicationStartup(logger, "0.1.0");
+        ProgramLog.AnalyzingPath(logger, path);
+        ProgramLog.CouplingModeEnabled(logger, "All");
 
         var analyzer = serviceProvider.GetRequiredService<ISolutionAnalyzer>();
         var report = path.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)
@@ -139,22 +147,19 @@ static async Task<int> ExecuteAnalysisAsync(
 
         if (report.Warnings.Count > 0)
         {
-            Console.ForegroundColor = ConsoleColor.Yellow;
             foreach (var warning in report.Warnings.Take(10))
             {
-                Console.WriteLine($"Warning: {warning}");
+                ProgramLog.AnalysisWarning(logger, warning);
             }
             if (report.Warnings.Count > 10)
             {
-                Console.WriteLine($"... and {report.Warnings.Count - 10} more warnings");
+                ProgramLog.AdditionalWarnings(logger, report.Warnings.Count - 10);
             }
-            Console.ResetColor();
-            Console.WriteLine();
         }
 
         if (format == "summary")
         {
-            PrintSummary(report);
+            PrintSummary(report, logger);
         }
         else if (format == "compact")
         {
@@ -171,7 +176,7 @@ static async Task<int> ExecuteAnalysisAsync(
             if (!string.IsNullOrEmpty(output))
             {
                 await File.WriteAllTextAsync(output, json, cancellationToken);
-                Console.WriteLine($"Compact report written to: {output} ({json.Length:N0} bytes)");
+                ProgramLog.CompactReportWritten(logger, output, json.Length);
             }
             else
             {
@@ -186,7 +191,7 @@ static async Task<int> ExecuteAnalysisAsync(
             if (!string.IsNullOrEmpty(output))
             {
                 await File.WriteAllTextAsync(output, html, cancellationToken);
-                Console.WriteLine($"HTML report written to: {output} ({html.Length:N0} bytes)");
+                ProgramLog.HtmlReportWritten(logger, output, html.Length);
             }
             else
             {
@@ -207,7 +212,7 @@ static async Task<int> ExecuteAnalysisAsync(
             if (!string.IsNullOrEmpty(output))
             {
                 await File.WriteAllTextAsync(output, json, cancellationToken);
-                Console.WriteLine($"Report written to: {output}");
+                ProgramLog.ReportWritten(logger, output);
             }
             else
             {
@@ -219,9 +224,7 @@ static async Task<int> ExecuteAnalysisAsync(
     }
     catch (Exception ex)
     {
-        Console.ForegroundColor = ConsoleColor.Red;
-        Console.WriteLine($"Error: {ex.Message}");
-        Console.ResetColor();
+        ProgramLog.AnalysisError(logger, ex.Message);
         return 1;
     }
 }
@@ -246,7 +249,7 @@ rootCommand.SetAction(_ =>
 var parseResult = rootCommand.Parse(args);
 return await parseResult.InvokeAsync();
 
-static void PrintSummary(AnalysisReport report)
+static void PrintSummary(AnalysisReport report, ILogger logger)
 {
     Console.WriteLine("=== Analysis Summary ===");
     Console.WriteLine($"Solution: {report.SolutionPath}");

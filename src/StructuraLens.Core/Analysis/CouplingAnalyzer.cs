@@ -3,6 +3,7 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.Extensions.Logging;
 using StructuraLens.Core.Abstractions;
+using StructuraLens.Core.Analysis.Logging;
 using StructuraLens.Core.Models;
 
 namespace StructuraLens.Core.Analysis;
@@ -43,12 +44,12 @@ public sealed class CouplingAnalyzer : ICouplingAnalyzer
         }, async (project, ct) =>
         {
             var currentIndex = Interlocked.Increment(ref completedCount);
-            _logger.LogDebug("Analyzing coupling in project {Index}/{Total}: {ProjectName}", currentIndex, totalProjects, project.Name);
+            CouplingAnalyzerLog.AnalyzingCouplingInProject(_logger, currentIndex, totalProjects, project.Name);
             
             var projectCoupling = await AnalyzeProjectInternalCouplingAsync(project, compilationCache, ct);
             dependenciesBag.Add(projectCoupling.dependencies);
             
-            _logger.LogDebug("Project {ProjectName}: {DependencyCount} dependencies found", project.Name, projectCoupling.dependencies.Count);
+            CouplingAnalyzerLog.ProjectDependenciesFound(_logger, project.Name, projectCoupling.dependencies.Count);
         });
 
         // Merge all dependencies
@@ -191,14 +192,14 @@ public sealed class CouplingAnalyzer : ICouplingAnalyzer
 
         if (compilation == null)
         {
-            _logger.LogWarning("Could not get compilation for project: {ProjectName}", project.Name);
+            CouplingAnalyzerLog.CouldNotGetCompilation(_logger, project.Name);
             return ([], []);
         }
 
         var documents = project.Documents.Where(d => d.SourceCodeKind == SourceCodeKind.Regular).ToList();
         var documentCount = documents.Count;
         
-        _logger.LogDebug("Analyzing {DocumentCount} documents for coupling in {ProjectName}", documentCount, project.Name);
+        CouplingAnalyzerLog.AnalyzingDocumentsForCoupling(_logger, documentCount, project.Name);
 
         // Analyze documents in parallel for performance
         var dependenciesBag = new System.Collections.Concurrent.ConcurrentBag<List<DependencyEdge>>();
@@ -213,8 +214,7 @@ public sealed class CouplingAnalyzer : ICouplingAnalyzer
             var currentCount = Interlocked.Increment(ref processedCount);
             if (currentCount % 100 == 0)
             {
-                _logger.LogDebug("Coupling analysis progress: {DocumentIndex}/{DocumentCount} documents in {ProjectName}", 
-                    currentCount, documentCount, project.Name);
+                CouplingAnalyzerLog.CouplingAnalysisProgress(_logger, currentCount, documentCount, project.Name);
             }
 
             var syntaxTree = await document.GetSyntaxTreeAsync(ct);

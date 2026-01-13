@@ -3,6 +3,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.Extensions.Logging;
 
 using StructuraLens.Core.Abstractions;
+using StructuraLens.Core.Analysis.Logging;
 using StructuraLens.Core.Models;
 
 namespace StructuraLens.Core.Analysis;
@@ -39,7 +40,7 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
     /// <inheritdoc />
     public async Task<AnalysisReport> AnalyzeSolutionAsync(string solutionPath, CancellationToken cancellationToken = default)
     {     
-        _logger.LogInformation("Starting solution analysis: {SolutionPath}", solutionPath);
+        SolutionAnalyzerLog.StartingSolutionAnalysis(_logger, solutionPath);
 
         var fullPath = _fileSystem.GetFullPath(solutionPath);
         if (!_fileSystem.FileExists(fullPath))
@@ -48,26 +49,26 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
         }
 
         // Restore NuGet packages to ensure all references are available
-        _logger.LogInformation("Restoring NuGet packages...");
+        SolutionAnalyzerLog.RestoringNuGetPackages(_logger);
         await _nugetRestorer.RestorePackagesAsync(fullPath, cancellationToken);
 
-        _logger.LogInformation("Loading solution into MSBuild workspace...");
+        SolutionAnalyzerLog.LoadingSolutionIntoWorkspace(_logger);
         using var workspace = _workspaceFactory.Create();
         workspace.RegisterWorkspaceFailedHandler(e =>
         {
             if (e.Diagnostic.Kind == WorkspaceDiagnosticKind.Warning)
             {
                 _warnings.Add($"Workspace warning: {e.Diagnostic.Message}");
-                _logger.LogWarning("Workspace warning: {Message}", e.Diagnostic.Message);
+                SolutionAnalyzerLog.WorkspaceWarning(_logger, e.Diagnostic.Message);
             }
         });
 
         var solution = await workspace.OpenSolutionAsync(fullPath, cancellationToken: cancellationToken);
         var csharpProjects = solution.Projects.Where(p => p.Language == LanguageNames.CSharp).ToList();
-        _logger.LogInformation("Loaded solution with {ProjectCount} C# projects", csharpProjects.Count);
+        SolutionAnalyzerLog.LoadedSolutionWithProjects(_logger, csharpProjects.Count);
 
         // Pre-fetch all compilations in parallel and cache them for reuse
-        _logger.LogInformation("Pre-fetching compilations for all projects...");
+        SolutionAnalyzerLog.PreFetchingCompilations(_logger);
         var compilationCache = new System.Collections.Concurrent.ConcurrentDictionary<string, Compilation>();
         
         await Parallel.ForEachAsync(csharpProjects, new ParallelOptions
@@ -84,11 +85,11 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
             else
             {
                 _warnings.Add($"Could not get compilation for project: {project.Name}");
-                _logger.LogWarning("Could not get compilation for project: {ProjectName}", project.Name);
+                SolutionAnalyzerLog.CouldNotGetCompilation(_logger, project.Name);
             }
         });
 
-        _logger.LogInformation("Cached {Count} compilations", compilationCache.Count);
+        SolutionAnalyzerLog.CachedCompilations(_logger, compilationCache.Count);
 
         // Analyze projects in parallel for performance on large solutions
         // Collect both metrics AND coupling dependencies in a single pass
@@ -103,16 +104,12 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
         }, async (project, ct) =>
         {
             var currentIndex = Interlocked.Increment(ref completedCount);
-            _logger.LogInformation("Analyzing project {Index}/{Total}: {ProjectName}", currentIndex, totalProjects, project.Name);
+            SolutionAnalyzerLog.AnalyzingProject(_logger, currentIndex, totalProjects, project.Name);
             
             var result = await AnalyzeProjectWithCouplingAsync(project, compilationCache, ct);
             projectResultsBag.Add(result);
             
-            _logger.LogInformation("Completed {ProjectName}: {TypeCount} types, {MethodCount} methods, {DepCount} dependencies", 
-                project.Name, 
-                result.metrics.Types.Count, 
-                result.metrics.TotalMethods,
-                result.dependencies.Count);
+            SolutionAnalyzerLog.CompletedProject(_logger, project.Name, result.metrics.Types.Count, result.metrics.TotalMethods, result.dependencies.Count);
         });
 
         // Extract metrics and dependencies from combined results
@@ -125,13 +122,10 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
         }
 
         // Build coupling analysis from pre-collected dependencies (no separate document pass needed)
-        _logger.LogInformation("Building coupling analysis from {DepCount} dependencies", allDependencies.Count);
+        SolutionAnalyzerLog.BuildingCouplingAnalysis(_logger, allDependencies.Count);
         var couplingAnalysis = _couplingAnalyzer.BuildCouplingAnalysisFromDependencies(solution, allDependencies);
 
-        _logger.LogInformation("Analysis complete. Total: {ProjectCount} projects, {TypeCount} types, {MethodCount} methods",
-            projectMetricsList.Count,
-            projectMetricsList.Sum(p => p.Types.Count),
-            projectMetricsList.Sum(p => p.TotalMethods));
+        SolutionAnalyzerLog.AnalysisComplete(_logger, projectMetricsList.Count, projectMetricsList.Sum(p => p.Types.Count), projectMetricsList.Sum(p => p.TotalMethods));
 
         return new AnalysisReport(
             SolutionPath: fullPath,
@@ -146,7 +140,7 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
     /// <inheritdoc />
     public async Task<AnalysisReport> AnalyzeProjectAsync(string projectPath, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Starting project analysis: {ProjectPath}", projectPath);
+        SolutionAnalyzerLog.StartingProjectAnalysis(_logger, projectPath);
 
         var fullPath = _fileSystem.GetFullPath(projectPath);
         if (!_fileSystem.FileExists(fullPath))
@@ -155,28 +149,28 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
         }
 
         // Restore NuGet packages
-        _logger.LogInformation("Restoring NuGet packages...");
+        SolutionAnalyzerLog.RestoringNuGetPackages(_logger);
         await _nugetRestorer.RestorePackagesAsync(fullPath, cancellationToken);
 
-        _logger.LogInformation("Loading project into MSBuild workspace...");
+        SolutionAnalyzerLog.LoadingProjectIntoWorkspace(_logger);
         using var workspace = _workspaceFactory.Create();
         workspace.RegisterWorkspaceFailedHandler(e =>
         {
             if (e.Diagnostic.Kind == WorkspaceDiagnosticKind.Warning)
             {
                 _warnings.Add($"Workspace warning: {e.Diagnostic.Message}");
-                _logger.LogWarning("Workspace warning: {Message}", e.Diagnostic.Message);
+                SolutionAnalyzerLog.WorkspaceWarning(_logger, e.Diagnostic.Message);
             }
         });
 
         var project = await workspace.OpenProjectAsync(fullPath, cancellationToken: cancellationToken);
-        _logger.LogInformation("Analyzing project: {ProjectName}", project.Name);
+        SolutionAnalyzerLog.AnalyzingProjectSingle(_logger, project.Name);
         
         // For single project, create an empty cache (compilation will be fetched on demand)
         var compilationCache = new System.Collections.Concurrent.ConcurrentDictionary<string, Compilation>();
         var projectMetrics = await AnalyzeProjectAsync(project, compilationCache, cancellationToken);
 
-        _logger.LogInformation("Analyzing project coupling");
+        SolutionAnalyzerLog.AnalyzingProjectCoupling(_logger);
         var couplingAnalysis = await _couplingAnalyzer.AnalyzeProjectCouplingAsync(project, cancellationToken);
 
         return new AnalysisReport(
@@ -197,12 +191,12 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
         // Use cached compilation if available
         if (!compilationCache.TryGetValue(project.Name, out var compilation))
         {
-            _logger.LogDebug("Getting compilation for project: {ProjectName}", project.Name);
+            SolutionAnalyzerLog.GettingCompilationForProject(_logger, project.Name);
             compilation = await project.GetCompilationAsync(cancellationToken);
             if (compilation == null)
             {
                 _warnings.Add($"Could not get compilation for project: {project.Name}");
-                _logger.LogWarning("Could not get compilation for project: {ProjectName}", project.Name);
+                SolutionAnalyzerLog.CouldNotGetCompilation(_logger, project.Name);
                 return (new ProjectMetrics(project.Name, project.FilePath ?? "", []), []);
             }
         }
@@ -213,7 +207,7 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
         var documents = project.Documents.Where(d => d.SourceCodeKind == SourceCodeKind.Regular).ToList();
         var documentCount = documents.Count;
 
-        _logger.LogDebug("Analyzing {DocumentCount} documents in project {ProjectName}", documentCount, project.Name);
+        SolutionAnalyzerLog.AnalyzingDocumentsInProject(_logger, documentCount, project.Name);
 
         // Analyze documents in parallel for performance - collect both metrics AND dependencies in single pass
         var typeMetricsBag = new System.Collections.Concurrent.ConcurrentBag<TypeMetrics>();
@@ -229,8 +223,7 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
             var currentCount = Interlocked.Increment(ref processedCount);
             if (currentCount % 50 == 0)
             {
-                _logger.LogDebug("Progress: {DocumentIndex}/{DocumentCount} documents processed in {ProjectName}", 
-                    currentCount, documentCount, project.Name);
+                SolutionAnalyzerLog.DocumentProcessingProgress(_logger, currentCount, documentCount, project.Name);
             }
 
             var syntaxTree = await document.GetSyntaxTreeAsync(ct);
