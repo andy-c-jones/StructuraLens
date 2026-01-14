@@ -1,15 +1,19 @@
 # StructuraLens Usage Guide
 
-StructuraLens is a CLI tool for analyzing C# codebases to produce code complexity metrics, coupling analysis, and architecture insights.
+StructuraLens is a .NET 10 CLI tool for analyzing C# codebases to produce code complexity metrics, coupling analysis, and comprehensive diagnostics reports.
 
 ## Installation
 
-### Using Docker
+### Using Pre-built Binaries
 
-```bash
-docker pull ghcr.io/your-org/structuralens:latest
-docker run -v $(pwd):/repo structuralens analyze /repo/YourSolution.sln
-```
+Download the latest release for your platform from the [Releases](https://github.com/your-org/structuralens/releases) page.
+
+**Supported Platforms:**
+- Windows (win-x64)
+- Linux (linux-x64)
+- macOS (osx-x64, osx-arm64)
+
+Extract the archive and add the directory to your PATH, or run the executable directly.
 
 ### Building from Source
 
@@ -17,245 +21,246 @@ docker run -v $(pwd):/repo structuralens analyze /repo/YourSolution.sln
 git clone https://github.com/your-org/structuralens.git
 cd structuralens
 dotnet build -c Release
-dotnet run --project src/StructuraLens.Cli -- analyze YourSolution.sln
 ```
+
+The compiled CLI will be in `src/StructuraLens.Cli/bin/Release/net10.0/`.
+
+### System Requirements
+
+- .NET 10 Runtime (or .NET 10 SDK for building from source)
+- Windows, Linux, or macOS
 
 ## CLI Reference
 
-### Commands
+### analyze Command
 
-| Command | Description |
-|---------|-------------|
-| `analyze <path>` | Analyze a solution or project for code metrics |
-| `init [path]` | Create a default `structuralens.json` configuration file |
+Analyzes a C# solution or project file and generates metrics reports.
 
-### analyze
-
+**Syntax:**
 ```bash
 structuralens analyze <path> [options]
 ```
 
-Where `<path>` is the path to a solution (`.sln`, `.slnx`) or project (`.csproj`) file.
+**Arguments:**
+- `<path>` (required) - Path to a solution file (`.sln`, `.slnx`) or project file (`.csproj`)
 
-#### Options
+**Options:**
 
-| Option | Short | Description | Default |
-|--------|-------|-------------|---------|
-| `--out` | `-o` | Output file path for the report | stdout |
-| `--format` | `-f` | Output format: `json`, `compact`, `summary` | `json` |
-| `--coupling-mode` | `-c` | Coupling analysis mode: `internal`, `filtered`, `all` | from config |
-| `--config` | | Path to `structuralens.json` configuration file | auto-discover |
-
-### init
-
-```bash
-structuralens init [path]
-```
-
-Creates a default `structuralens.json` configuration file. If `path` is omitted, creates in the current directory.
-
-```bash
-# Create config in current directory
-structuralens init
-
-# Create config in specific directory
-structuralens init ./src/MyProject
-```
-
-The generated config includes sensible defaults and can be customized for your project's architecture rules.
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--out` | `-o` | string | stdout | Output file path for the report |
+| `--format` | `-f` | string | `json` | Output format: `json`, `compact`, `html`, or `summary` |
+| `--verbose` | `-v` | flag | false | Enable verbose logging (sets log level to Debug) |
+| `--aggregation-strategy` | | string | `Adaptive` | Strategy for aggregating dependencies: `InMemory`, `SQLite`, or `Adaptive` |
+| `--memory-threshold` | | long | 1024 | Memory threshold in MB for adaptive strategy to migrate from InMemory to SQLite |
+| `--sqlite-batch-size` | | int | 1000 | Batch size for SQLite collector operations |
 
 ### Examples
 
-#### Analyze a solution with summary output
-```bash
-structuralens analyze MyProject.sln --format summary
-```
+#### Basic Analysis with JSON Output
 
-#### Analyze with internal-only coupling
-```bash
-structuralens analyze MyProject.sln --coupling-mode internal --format summary
-```
-
-#### Save JSON report to file
 ```bash
 structuralens analyze MyProject.sln --out report.json
 ```
 
-#### Use custom configuration
-```bash
-structuralens analyze MyProject.sln --config ./my-config.json
-```
+Outputs a complete JSON report to `report.json`.
 
-## Coupling Modes
-
-StructuraLens supports three coupling analysis modes to help you focus on the dependencies that matter:
-
-### Internal Mode (`--coupling-mode internal`)
-
-Only tracks dependencies between your own code. External libraries (NuGet packages, framework libraries) are excluded.
-
-**Use when:** You want to focus purely on your internal architecture without noise from external dependencies.
+#### Generate Interactive HTML Report
 
 ```bash
-structuralens analyze MyProject.sln --coupling-mode internal --format summary
+structuralens analyze MyProject.sln --format html --out report.html
 ```
 
-Example output:
-```
-=== Coupling Summary ===
-Mode: Internal
-Total Dependencies: 45
-Average Efferent Coupling: 2.1
-```
+Creates a single-file HTML report with interactive dependency graphs and filterable tables. Open `report.html` in any modern browser.
 
-### Filtered Mode (`--coupling-mode filtered`) - Default
-
-Tracks dependencies on external libraries but excludes common framework namespaces like `System.*` and `Microsoft.*`. This is the default mode.
-
-**Use when:** You want to see dependencies on third-party NuGet packages (like Newtonsoft.Json, Serilog) while filtering out framework noise.
-
-Default exclude patterns:
-- `System.*`
-- `Microsoft.*`
+#### Quick Console Summary
 
 ```bash
 structuralens analyze MyProject.sln --format summary
-# or explicitly:
-structuralens analyze MyProject.sln --coupling-mode filtered --format summary
 ```
 
-### All Mode (`--coupling-mode all`)
+Displays a human-readable summary to the console with key metrics, high-complexity methods, and low-maintainability items.
 
-Tracks all dependencies including framework libraries. This gives the complete picture but can be noisy.
-
-**Use when:** You need comprehensive dependency analysis or want to audit all external dependencies.
+#### Compact Format for Large Solutions
 
 ```bash
-structuralens analyze MyProject.sln --coupling-mode all --format summary
+structuralens analyze LargeSolution.sln --format compact --out report.slr
 ```
+
+Generates a highly optimized compact format (~99% smaller than JSON) suitable for visualization tools. Recommended file extension: `.slr` (StructuraLens Report).
+
+#### Analyze with Verbose Logging
+
+```bash
+structuralens analyze MyProject.sln --verbose --format summary
+```
+
+Enables detailed debug logging showing analysis progress, MSBuild operations, and NuGet restore details.
+
+#### Force SQLite Strategy for Large Codebases
+
+```bash
+structuralens analyze MegaSolution.sln --aggregation-strategy SQLite --verbose
+```
+
+Uses disk-backed SQLite storage from the start, ideal for solutions with 100+ projects to minimize memory usage.
+
+#### Adjust Memory Threshold for Adaptive Strategy
+
+```bash
+structuralens analyze MyProject.sln --memory-threshold 2048 --verbose
+```
+
+Increases the memory threshold to 2GB before migrating from InMemory to SQLite (default is 1GB).
+
+#### Analyze a Single Project
+
+```bash
+structuralens analyze src/MyLibrary/MyLibrary.csproj --format html --out mylibrary-report.html
+```
+
+You can analyze individual projects instead of entire solutions.
 
 ## Output Formats
 
 ### JSON Format (Default)
 
-The JSON format provides complete structured data suitable for tooling integration:
+The JSON format provides complete structured data suitable for tooling integration, automation, and custom analysis.
 
+**When to use:** Integrating with CI/CD pipelines, custom tooling, or when you need programmatic access to all metrics.
+
+**Example:**
 ```bash
 structuralens analyze MyProject.sln --out report.json
 ```
 
+**Structure:**
 ```json
 {
   "solutionPath": "/path/to/MyProject.sln",
-  "analyzedAt": "2026-01-10T15:00:00Z",
+  "analyzedAt": "2026-01-14T10:00:00Z",
   "projects": [
     {
       "name": "MyProject.Core",
+      "path": "/path/to/MyProject.Core.csproj",
+      "typeCount": 20,
+      "methodCount": 150,
+      "totalCyclomaticComplexity": 200,
+      "totalLinesOfExecutableCode": 1500,
+      "maxDepthOfInheritance": 3,
+      "avgMaintainabilityIndex": 72.5,
+      "efferentCoupling": 5,
+      "afferentCoupling": 15,
+      "instability": 0.25,
       "types": [...],
-      "totalCyclomaticComplexity": 150,
-      "totalLinesOfExecutableCode": 500
+      "methods": [...]
     }
   ],
   "couplingAnalysis": {
-    "summary": {
-      "couplingMode": "Filtered",
-      "totalDependencies": 200,
-      "averageInstability": 0.45
-    }
-  }
+    "projectDependencies": [...],
+    "namespaceDependencies": [...],
+    "typeDependencies": [...]
+  },
+  "diagnostics": [...]
 }
 ```
 
+**Key fields:**
+- `projects[]` - Metrics for each project
+- `types[]` - Per-type metrics (CC, LOC, DIT, MI)
+- `methods[]` - Per-method metrics
+- `couplingAnalysis` - Dependency graphs at project, namespace, and type levels
+- `diagnostics[]` - Compiler warnings and errors with locations
+
+### HTML Format
+
+Interactive single-file HTML report with tabs, dependency graphs, and filtering capabilities. No server required - just open in a browser.
+
+**When to use:** Sharing reports with stakeholders, code reviews, or visual exploration of dependencies.
+
+**Example:**
+```bash
+structuralens analyze MyProject.sln --format html --out report.html
+```
+
+**Features:**
+- **Summary Tab**: Overview cards with total projects, types, methods, complexity, and maintainability
+- **Projects Tab**: Sortable, filterable table of project metrics
+- **Coupling Tab**: Interactive D3.js force-directed graphs showing:
+  - Project dependencies (how projects reference each other)
+  - Namespace dependencies (internal namespace coupling)
+- **Diagnostics Tab**: Compiler errors and warnings with severity filters
+- **Responsive Design**: Works on desktop and mobile browsers
+
+**Technology:**
+- All CSS and JavaScript embedded inline (no external files needed)
+- D3.js loaded from CDN for dependency graphs
+- Works offline after initial load
+
 ### Compact Format (.slr)
 
-The compact format is optimized for size and machine parsing. It uses short property names and includes graph data for visualization with d3.js or similar libraries. Use the `.slr` (StructuraLens Report) extension.
+Optimized for size and machine parsing with short property names. Includes graph data for D3.js visualization. Recommended file extension: `.slr` (StructuraLens Report).
 
+**When to use:** Large solutions where JSON size is prohibitive, or integrating with visualization tools.
+
+**Example:**
 ```bash
 structuralens analyze MyProject.sln --format compact --out report.slr
 ```
 
-**Size comparison:** ~99% smaller than full JSON (1KB vs 1.4MB for a typical project)
+**Size comparison:** ~99% smaller than full JSON (e.g., 15KB vs 1.4MB for a typical solution)
 
-See [Compact Format Specification](compact-format.md) for complete documentation.
-
+**Structure:**
 ```json
 {
   "v": 1,
   "p": "/path/to/MyProject.sln",
   "t": 1768063200000,
   "prj": [
-    {"n":"MyProject.Core","tc":20,"mc":100,"cc":150,"loc":500,"dit":3,"mi":72.5,"ce":5,"ca":15,"i":0.25}
+    {"n":"MyProject.Core","tc":20,"mc":150,"cc":200,"loc":1500,"dit":3,"mi":72.5,"ce":5,"ca":15,"i":0.25}
   ],
   "g": {
     "p": {
-      "n": [[0,"MyProject.Core",500],[1,"MyProject.Api",300]],
-      "e": [[1,0,1]]
+      "n": [[0,"MyProject.Core",1500],[1,"MyProject.Api",800]],
+      "e": [[1,0,25]]
     },
     "ns": {
-      "n": [[0,"MyProject.Core.Services",200]],
+      "n": [[0,"MyProject.Core.Services",500]],
       "e": []
     }
-  },
-  "l": {"r":5,"e":0,"w":0,"ok":true}
+  }
 }
 ```
 
-#### Compact Format Schema
+**Key compact properties:**
+- `v` - Format version
+- `p` - Solution path
+- `t` - Timestamp (Unix milliseconds)
+- `prj[]` - Project metrics (n=name, tc=type count, mc=method count, cc=cyclomatic complexity, loc=lines of code, dit=depth of inheritance, mi=maintainability index, ce=efferent coupling, ca=afferent coupling, i=instability)
+- `g.p` - Project dependency graph (n=nodes as [id, name, size], e=edges as [sourceId, targetId, weight])
+- `g.ns` - Namespace dependency graph (internal only)
 
-| Field | Description |
-|-------|-------------|
-| `v` | Format version |
-| `p` | Solution/project path |
-| `t` | Timestamp (Unix milliseconds) |
-| `prj` | Array of project metrics |
-| `g` | Graph data for visualization |
-| `g.p` | Project dependency graph (nodes + edges) |
-| `g.ns` | Namespace dependency graph (internal only) |
-| `l` | Linting results |
-
-**Project metrics (`prj[]`):**
-- `n`: Name, `tc`: Type count, `mc`: Method count
-- `cc`: Cyclomatic complexity, `loc`: Lines of code
-- `dit`: Max depth of inheritance, `mi`: Avg maintainability index
-- `ce`: Efferent coupling, `ca`: Afferent coupling, `i`: Instability
-
-**Graph nodes (`g.p.n`, `g.ns.n`):** `[id, name, size]`
-
-**Graph edges (`g.p.e`, `g.ns.e`):** `[sourceId, targetId, weight]`
-
-### HTML Format
-
-Interactive single-file HTML report with tabs, filters, and dependency diagrams. Requires no server - just open in a browser.
-
-```bash
-structuralens analyze MyProject.sln --format html --out report.html
-```
-
-**Features:**
-- **Summary tab**: Overview cards with key metrics
-- **Projects tab**: Filterable project metrics table
-- **Coupling tab**: Interactive D3.js force-directed graphs for project and namespace dependencies
-- **Linting tab**: Architecture rule violations
-- **Diagnostics tab**: Compiler errors and warnings with filters
-
-The HTML report loads D3.js from CDN for the dependency graphs. All other CSS and JavaScript is embedded inline.
+See [Compact Format Specification](compact-format.md) for complete details.
 
 ### Summary Format
 
-Human-readable summary for quick analysis:
+Human-readable console output with key metrics, top complexity items, and maintainability warnings.
 
+**When to use:** Quick analysis during development, CI/CD pipeline logs, or sanity checks.
+
+**Example:**
 ```bash
 structuralens analyze MyProject.sln --format summary
 ```
 
+**Output:**
 ```
 StructuraLens v0.1.0
 Analyzing: MyProject.sln
-Coupling mode: Filtered
 
 === Analysis Summary ===
 Solution: /path/to/MyProject.sln
-Analyzed at: 2026-01-10T15:00:00Z
+Analyzed at: 2026-01-14T10:00:00Z
 
 Projects: 3
 Types: 50
@@ -264,118 +269,473 @@ Total Cyclomatic Complexity: 450
 Total Lines of Executable Code: 1500
 
 === Coupling Summary ===
-Mode: Filtered
-Total Dependencies: 200
-Average Efferent Coupling: 3.2
-Average Afferent Coupling: 2.1
+Total Project Dependencies: 5
+Total Namespace Dependencies: 45
+Total Type Dependencies: 200
 Average Instability: 0.45
-Most Coupled Entity: MyProject.Services
-Most Unstable Entity: MyProject.Api
+
+=== Project Metrics ===
 
 Project: MyProject.Core
   Types: 20
-  Total CC: 150
-  Total LOC: 500
-  Max DIT: 3
+  Methods: 150
+  Total CC: 200
+  Total LOC: 1500
+  Max Depth of Inheritance: 3
   Avg Maintainability Index: 72.5
   Efferent Coupling (Ce): 5
   Afferent Coupling (Ca): 15
-  Instability (I): 0.25
+  Instability (I): 0.25 (Stable)
+
+=== High Complexity Methods (CC > 10) ===
+
+MyProject.Core.Services.OrderService.ProcessOrder (CC: 15, LOC: 80, MI: 45)
+MyProject.Api.Controllers.ProductController.GetProducts (CC: 12, LOC: 60, MI: 52)
+
+=== Low Maintainability Methods (MI < 40) ===
+
+MyProject.Core.Services.LegacyProcessor.Transform (CC: 20, LOC: 150, MI: 25)
 ```
 
-## Metrics Explained
+**Highlights:**
+- Total counts (projects, types, methods)
+- Aggregate complexity and LOC
+- Per-project metrics with coupling
+- Methods with CC > 10 (candidates for refactoring)
+- Methods with MI < 40 (difficult to maintain)
+
+## Aggregation Strategies
+
+StructuraLens offers three strategies for handling dependency data during analysis. The strategy affects memory usage and performance for large codebases.
+
+### InMemory Strategy
+
+Uses concurrent dictionaries in memory for fast dependency tracking.
+
+**Best for:** Small to medium solutions (up to ~50 projects)
+
+**Characteristics:**
+- Fastest performance
+- Moderate memory usage (50-70% reduction from naive approach via deduplication)
+- All data kept in RAM
+
+**Usage:**
+```bash
+structuralens analyze MyProject.sln --aggregation-strategy InMemory
+```
+
+### SQLite Strategy
+
+Uses disk-backed SQLite database for dependency tracking.
+
+**Best for:** Large solutions (100+ projects) or memory-constrained environments
+
+**Characteristics:**
+- Minimal memory usage (95% reduction compared to InMemory)
+- Slightly slower (10-20% overhead)
+- Handles unlimited data
+- Creates temporary SQLite database file (deleted after analysis)
+
+**Usage:**
+```bash
+structuralens analyze LargeSolution.sln --aggregation-strategy SQLite
+```
+
+### Adaptive Strategy (Default)
+
+Starts with InMemory, automatically migrates to SQLite when memory threshold is exceeded.
+
+**Best for:** Unknown codebase sizes or general-purpose analysis
+
+**Characteristics:**
+- Combines benefits of both strategies
+- Automatic selection based on memory usage
+- Configurable threshold (default: 1024 MB)
+- Transparent migration (analysis continues uninterrupted)
+
+**Usage:**
+```bash
+# Use default threshold (1024 MB)
+structuralens analyze MyProject.sln
+
+# Increase threshold to 2048 MB
+structuralens analyze MyProject.sln --memory-threshold 2048
+```
+
+**Verbose output shows strategy selection:**
+```
+[INFO] Using Adaptive aggregation strategy (threshold: 1024 MB)
+[INFO] Starting with InMemory collector
+...
+[INFO] Memory threshold exceeded, migrating to SQLite
+[INFO] Migration complete, continuing analysis with SQLite
+```
+
+## Understanding the Metrics
 
 ### Code Complexity Metrics
 
-| Metric | Description | Formula |
-|--------|-------------|---------|
-| **Cyclomatic Complexity (CC)** | Number of independent paths through code | `decision_points + 1` |
-| **Lines of Executable Code (LOC)** | Count of executable statements | Statement count |
-| **Halstead Volume (V)** | Program size based on operators/operands | `N * log2(n)` |
-| **Depth of Inheritance (DIT)** | Levels in inheritance hierarchy | Base type chain length |
-| **Maintainability Index (MI)** | Overall maintainability score (0-100) | See below |
+#### Cyclomatic Complexity (CC)
 
-#### Maintainability Index Formula
+Measures the number of independent paths through code. Calculated as `decision_points + 1`.
 
+**Decision points:**
+- `if`, `else if`, `switch` cases
+- Loops (`for`, `foreach`, `while`, `do-while`)
+- Logical operators (`&&`, `||`)
+- Ternary operators (`? :`)
+- `catch` blocks
+
+**Interpretation:**
+- CC = 1-10: Simple, easy to test
+- CC = 11-20: Moderate complexity, consider refactoring
+- CC > 20: High complexity, refactoring recommended
+
+**Example:**
+```csharp
+public void Method(bool a, bool b)  // CC = 1 (baseline)
+{
+    if (a)                          // +1
+    {
+        if (b)                      // +1
+        {
+            // do something
+        }
+    }
+    else                            // No increment (part of if)
+    {
+        // do something else
+    }
+}
+// Total CC = 3
+```
+
+#### Lines of Executable Code (LOC)
+
+Count of executable statements (not including braces, comments, or whitespace).
+
+**Interpretation:**
+- LOC < 50: Small method, easy to understand
+- LOC = 50-100: Medium method
+- LOC > 100: Large method, consider splitting
+
+#### Halstead Volume (V)
+
+Measures program size based on operators and operands. Formula: `V = N * log2(n)` where:
+- N = Total operators + operands
+- n = Distinct operators + distinct operands
+
+**Interpretation:**
+- Higher volume = more complex program
+- Used in Maintainability Index calculation
+
+#### Depth of Inheritance (DIT)
+
+The length of the inheritance chain from a class to the root of the hierarchy.
+
+**Interpretation:**
+- DIT = 0: No inheritance (or inherits from Object)
+- DIT = 1-3: Reasonable depth
+- DIT > 5: Deep hierarchy, may be fragile
+
+**Example:**
+```csharp
+class Animal { }                    // DIT = 0
+class Mammal : Animal { }           // DIT = 1
+class Dog : Mammal { }              // DIT = 2
+class Labrador : Dog { }            // DIT = 3
+```
+
+#### Maintainability Index (MI)
+
+Composite metric combining CC, LOC, and Halstead Volume. Score ranges from 0 (worst) to 100 (best).
+
+**Formula:**
 ```
 MI = max(0, 100 * (171 - 5.2*ln(V) - 0.23*CC - 16.2*ln(LOC)) / 171)
 ```
 
-| Score | Interpretation |
-|-------|----------------|
-| 0-9 | Unmaintainable |
-| 10-19 | Difficult to maintain |
-| 20-39 | Moderate maintainability |
-| 40-100 | Good maintainability |
+**Interpretation:**
+- MI = 0-9: Unmaintainable (red flag)
+- MI = 10-19: Difficult to maintain
+- MI = 20-39: Moderate maintainability
+- MI = 40-100: Good maintainability
+
+**Note:** Lower CC, LOC, and Halstead Volume lead to higher MI.
 
 ### Coupling Metrics
 
-| Metric | Description |
-|--------|-------------|
-| **Efferent Coupling (Ce)** | Number of dependencies going OUT (this depends on others) |
-| **Afferent Coupling (Ca)** | Number of dependencies coming IN (others depend on this) |
-| **Instability (I)** | `Ce / (Ca + Ce)` — ranges from 0 (stable) to 1 (unstable) |
+#### Efferent Coupling (Ce)
 
-#### Instability Interpretation
+Number of dependencies going OUT from an entity (projects, namespaces, or types this entity depends on).
 
-| Score | Meaning |
-|-------|---------|
-| 0.0 | Completely stable - many depend on it, hard to change |
-| 0.5 | Balanced |
-| 1.0 | Completely unstable - depends on others, easy to change |
+**Interpretation:**
+- High Ce = Entity depends on many others
+- Changes in dependencies can break this entity
+- Goal: Minimize efferent coupling for stability
+
+**Example:**
+```csharp
+// MyProject.Services has high efferent coupling
+using MyProject.Data;              // +1
+using MyProject.Models;            // +1
+using ThirdParty.Logging;          // +1
+using System.Linq;                 // (filtered out in default mode)
+```
+
+#### Afferent Coupling (Ca)
+
+Number of dependencies coming IN to an entity (other entities that depend on this one).
+
+**Interpretation:**
+- High Ca = Many others depend on this entity
+- Changes to this entity can break many dependents
+- High Ca in core libraries is expected
+
+**Example:**
+```csharp
+// MyProject.Core has high afferent coupling
+// Referenced by:
+// - MyProject.Services
+// - MyProject.Api
+// - MyProject.Workers
+// Ca = 3
+```
+
+#### Instability (I)
+
+Ratio of efferent to total coupling: `I = Ce / (Ca + Ce)`
+
+**Range:** 0.0 (stable) to 1.0 (unstable)
+
+**Interpretation:**
+- I = 0.0: Completely stable (only incoming dependencies)
+- I = 0.5: Balanced
+- I = 1.0: Completely unstable (only outgoing dependencies)
+
+**Recommended patterns:**
+- Core/shared libraries: I < 0.5 (stable)
+- Application/UI layers: I > 0.5 (unstable, depends on core)
+- Stable Abstractions Principle: Stability should align with abstraction level
+
+**Example:**
+```csharp
+// MyProject.Core
+// Ce = 2 (depends on System, Microsoft.Extensions)
+// Ca = 10 (depended on by many projects)
+// I = 2 / (2 + 10) = 0.17 (very stable) ✓ Good for core library
+
+// MyProject.Api
+// Ce = 8 (depends on Core, Services, Models, ASP.NET, etc.)
+// Ca = 0 (nothing depends on the API layer)
+// I = 8 / (8 + 0) = 1.0 (completely unstable) ✓ Good for top layer
+```
+
+## Diagnostics
+
+StructuraLens collects all Roslyn compiler diagnostics (errors, warnings, info messages) during analysis.
+
+**Diagnostics are included in JSON and HTML outputs:**
+- **JSON**: `diagnostics[]` array with full details
+- **HTML**: Diagnostics tab with severity filters
+- **Summary**: Diagnostic count in header
+
+**Diagnostic fields:**
+- `id` - Diagnostic code (e.g., CS0103, CA1062)
+- `severity` - Error, Warning, Info, Hidden
+- `message` - Diagnostic message
+- `filePath` - Source file location
+- `lineNumber` - Line number in source
+- `columnNumber` - Column number in source
+
+**Use cases:**
+- Track compiler warnings across the codebase
+- Identify code analysis violations (CA rules)
+- Find potential bugs before runtime
 
 ## Exit Codes
 
+StructuraLens returns the following exit codes:
+
 | Code | Meaning |
 |------|---------|
-| 0 | Success (no linting errors) |
-| 1 | Error (file not found, analysis failure, or linting errors) |
+| 0 | Success - Analysis completed without errors |
+| 1 | Error - Analysis failed (file not found, unhandled exception, or analysis error) |
 
-**Note:** Architecture linting violations with `error` severity cause exit code 1. Warnings and info do not affect the exit code.
-
-## Architecture Linting
-
-StructuraLens can enforce dependency rules via configuration. See [Configuration](configuration.md#architecture-linting-rules) for details.
-
-When linting rules are configured, the summary output includes:
-
-```
-=== Architecture Linting ===
-Rules Evaluated: 5
-Errors: 0
-Warnings: 2
-Info: 0
-Status: PASSED
-
-Violations:
-  [WARNING] NO-LEGACY: Avoid legacy library
-         MyApp.Services → LegacyLib.Core
-```
-
-### Example: Enforce Layer Architecture
-
-```json
-{
-  "rules": [
-    {
-      "id": "UI-NO-DB",
-      "description": "UI layer must not access database directly",
-      "severity": "error",
-      "from": "*.UI*",
-      "disallow": ["*.Data*", "EntityFramework*"]
-    }
-  ]
-}
-```
+**Note:** Compiler diagnostics (errors, warnings) do not affect the exit code. They are reported in the output but don't cause the CLI to exit with code 1.
 
 ## Tips for Best Results
 
-1. **Build before analyzing**: Run `dotnet build` before analysis to ensure all binaries are present for accurate coupling analysis.
+### 1. Build Before Analyzing
 
-2. **Use filtered mode for practical insights**: The default `filtered` mode excludes framework noise while showing third-party dependencies.
+While StructuraLens can analyze source code directly, building your solution first ensures:
+- NuGet packages are restored
+- Generated code is available
+- Assembly references are resolved
 
-3. **Focus on high-complexity methods**: Methods with CC > 10 or MI < 40 are candidates for refactoring.
+```bash
+dotnet build
+structuralens analyze MySolution.sln --format html --out report.html
+```
 
-4. **Watch for unstable core components**: Core/shared libraries should have low instability (I < 0.5).
+### 2. Focus on Refactoring Candidates
 
-5. **Use configuration files for teams**: Create a `structuralens.json` at the solution root for consistent analysis across the team.
+Look for methods with:
+- **CC > 10** - High complexity, hard to test
+- **MI < 40** - Low maintainability, technical debt
+- **LOC > 100** - Long methods, consider splitting
+
+The summary format highlights these automatically.
+
+### 3. Watch Core Component Instability
+
+Core/shared libraries should have low instability (I < 0.5):
+- Many incoming dependencies (high Ca)
+- Few outgoing dependencies (low Ce)
+
+If a core library has high instability, consider:
+- Reducing dependencies on other projects
+- Moving implementation details to separate projects
+
+### 4. Use HTML Reports for Code Reviews
+
+HTML reports provide visual dependency graphs and sortable metrics, making them ideal for:
+- Architecture reviews
+- Identifying tightly coupled components
+- Tracking technical debt
+
+### 5. Automate Analysis in CI/CD
+
+Integrate StructuraLens into your CI pipeline:
+
+```yaml
+# GitHub Actions example
+- name: Analyze Code Metrics
+  run: |
+    dotnet tool restore
+    structuralens analyze MySolution.sln --format json --out metrics.json
+    
+- name: Upload Metrics
+  uses: actions/upload-artifact@v3
+  with:
+    name: code-metrics
+    path: metrics.json
+```
+
+### 6. Compare Metrics Over Time
+
+Track metrics across commits to:
+- Identify increasing complexity
+- Monitor technical debt growth
+- Validate refactoring efforts
+
+Save JSON reports in version control or CI artifacts for historical comparison.
+
+### 7. Use Compact Format for Large Solutions
+
+For solutions with 100+ projects, use compact format to:
+- Reduce report size by ~99%
+- Speed up report generation
+- Integrate with custom visualization tools
+
+```bash
+structuralens analyze LargeSolution.sln --format compact --out report.slr
+```
+
+## Troubleshooting
+
+### Analysis Fails with "File not found"
+
+**Cause:** Solution or project file doesn't exist at the specified path.
+
+**Solution:** Verify the path is correct and use absolute paths if needed:
+```bash
+structuralens analyze C:\projects\MySolution.sln
+```
+
+### High Memory Usage
+
+**Cause:** Large solution with InMemory strategy.
+
+**Solution:** Use SQLite strategy or increase memory threshold:
+```bash
+structuralens analyze LargeSolution.sln --aggregation-strategy SQLite
+```
+
+### NuGet Restore Fails
+
+**Cause:** Private NuGet feeds require authentication.
+
+**Solution:** Restore packages before running StructuraLens:
+```bash
+dotnet restore
+structuralens analyze MySolution.sln
+```
+
+### Missing Metrics for Some Projects
+
+**Cause:** Projects failed to load (missing SDKs, unsupported project types).
+
+**Solution:** Run with `--verbose` to see detailed error messages:
+```bash
+structuralens analyze MySolution.sln --verbose
+```
+
+### HTML Report Graphs Not Loading
+
+**Cause:** Browser blocking CDN access to D3.js or JavaScript disabled.
+
+**Solution:** 
+- Ensure internet connectivity (D3.js loads from CDN)
+- Enable JavaScript in browser
+- Check browser console for errors
+
+## Advanced Usage
+
+### Analyzing Specific Project Types
+
+StructuraLens supports:
+- Class libraries (`.csproj`)
+- Console applications
+- Web applications (ASP.NET Core)
+- Test projects
+- .NET 6, 7, 8, 9, 10 projects
+
+**Not supported:**
+- .NET Framework projects (.NET 4.x)
+- Non-C# projects (F#, VB.NET)
+
+### Custom Batch Sizes for SQLite
+
+For very large solutions, adjust SQLite batch size for optimal performance:
+
+```bash
+# Larger batches = fewer disk writes, more memory
+structuralens analyze LargeSolution.sln --sqlite-batch-size 5000
+
+# Smaller batches = more frequent writes, less memory
+structuralens analyze LargeSolution.sln --sqlite-batch-size 500
+```
+
+Default (1000) is optimal for most scenarios.
+
+### Combining with Other Tools
+
+StructuraLens JSON output can be consumed by:
+- SonarQube (custom import scripts)
+- Grafana (visualize metrics over time)
+- Code review tools
+- Technical debt tracking systems
+
+Example: Parse JSON with jq to extract high-complexity methods:
+```bash
+structuralens analyze MySolution.sln --out report.json
+cat report.json | jq '.projects[].methods[] | select(.cyclomaticComplexity > 10)'
+```
+
+## Next Steps
+
+- Read the [Architecture Guide](architecture.md) to understand internal design
+- See the [Development Guide](development.md) for contributor information
+- Review the [Design Document](design.md) for architectural decisions
+- Explore the [Compact Format Specification](compact-format.md) for integration details

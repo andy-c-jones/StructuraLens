@@ -27,8 +27,7 @@ The compact format achieves ~99% size reduction compared to the full JSON format
   "p": "/path/to/Solution.sln",
   "t": 1768063200000,
   "prj": [...],
-  "g": {...},
-  "l": {...}
+  "g": {...}
 }
 ```
 
@@ -39,7 +38,6 @@ The compact format achieves ~99% size reduction compared to the full JSON format
 | `t` | `long` | Analysis timestamp (Unix milliseconds UTC) |
 | `prj` | `array` | Project metrics array |
 | `g` | `object` | Graph data for visualization |
-| `l` | `object?` | Linting results (null if no rules configured) |
 
 ### Project Metrics (`prj[]`)
 
@@ -179,40 +177,9 @@ Array of edge tuples: `[sourceId, targetId, weight]`
 | 1 | `int` | Target node ID |
 | 2 | `int` | Edge weight (reference count) |
 
-### Linting Results (`l`)
+### Linting Results
 
-```json
-{
-  "l": {
-    "r": 5,
-    "e": 0,
-    "w": 2,
-    "ok": true,
-    "v": [
-      ["RULE-ID", 1, "FromEntity", "ToEntity"]
-    ]
-  }
-}
-```
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `r` | `int` | Rules evaluated |
-| `e` | `int` | Error count |
-| `w` | `int` | Warning count |
-| `ok` | `bool` | Passed (no errors) |
-| `v` | `array?` | Violations array (null if none) |
-
-#### Violations (`v[]`)
-
-Array of violation tuples: `[ruleId, severity, fromEntity, toEntity]`
-
-| Index | Type | Description |
-|-------|------|-------------|
-| 0 | `string` | Rule ID |
-| 1 | `int` | Severity: `0`=info, `1`=warning, `2`=error |
-| 2 | `string` | Source entity (may be empty) |
-| 3 | `string` | Target entity (may be empty) |
+**Note:** Architecture linting is not currently implemented in StructuraLens. This section is reserved for future enhancement.
 
 ## Example: Complete Report
 
@@ -234,8 +201,7 @@ Array of violation tuples: `[ruleId, severity, fromEntity, toEntity]`
       "n": [[0,"MyApp.Core.Services",400],[1,"MyApp.Core.Models",300],[2,"MyApp.Api.Controllers",500]],
       "e": [[0,1,12],[2,0,8]]
     }
-  },
-  "l": {"r":3,"e":0,"w":1,"ok":true,"v":[["NO-LEGACY",1,"MyApp.Api.Controllers","LegacyLib.Helpers"]]}
+  }
 }
 ```
 
@@ -263,13 +229,6 @@ interface SlrReport {
   g: {
     p: { n: [number, string, number][]; e: [number, number, number][] };
     ns: { n: [number, string, number][]; e: [number, number, number][] };
-  };
-  l?: {
-    r: number;
-    e: number;
-    w: number;
-    ok: boolean;
-    v?: [string, number, string, string][];
   };
 }
 
@@ -382,5 +341,3 @@ structuralens analyze MySolution.sln --format compact --out report.slr
 3. **Use project-level metrics for dashboards**: The `prj[]` array contains all metrics needed for summary tables.
 
 4. **Use graph data for visualizations**: The `g.p` and `g.ns` sections are pre-indexed for direct use with graph libraries.
-
-5. **Track `l.ok` for CI/CD gates**: Exit code is non-zero when `l.ok` is false (linting errors).
