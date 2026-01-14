@@ -7,7 +7,6 @@ permissions:
   contents: write
   pull-requests: read
   issues: read
-  repository-projects: read
 
 jobs:
   release:
@@ -28,15 +27,74 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '24.10.0'
-
-      - name: Install semantic-release
-        run: npm ci
-
-      - name: Run semantic-release
+      - name: Semantic Release
+        uses: cycjimmy/semantic-release-action@v4
+        id: semantic
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx semantic-release
+
+      - name: Build multi-platform binaries
+        if: steps.semantic.outputs.new_release_published == 'true'
+        env:
+          VERSION: ${{ steps.semantic.outputs.new_release_version }}
+        run: |
+          echo "Building binaries for version: ${VERSION}"
+          
+          # Build for each platform
+          dotnet publish src/StructuraLens.Cli/StructuraLens.Cli.csproj \
+            -c Release \
+            -r linux-arm64 \
+            --self-contained true \
+            -p:PublishSingleFile=true \
+            -p:IncludeNativeLibrariesForSelfExtract=true \
+            -o ./publish/linux-arm64
+
+          dotnet publish src/StructuraLens.Cli/StructuraLens.Cli.csproj \
+            -c Release \
+            -r linux-x64 \
+            --self-contained true \
+            -p:PublishSingleFile=true \
+            -p:IncludeNativeLibrariesForSelfExtract=true \
+            -o ./publish/linux-x64
+
+          dotnet publish src/StructuraLens.Cli/StructuraLens.Cli.csproj \
+            -c Release \
+            -r osx-arm64 \
+            --self-contained true \
+            -p:PublishSingleFile=true \
+            -p:IncludeNativeLibrariesForSelfExtract=true \
+            -o ./publish/osx-arm64
+
+          dotnet publish src/StructuraLens.Cli/StructuraLens.Cli.csproj \
+            -c Release \
+            -r win-x64 \
+            --self-contained true \
+            -p:PublishSingleFile=true \
+            -p:IncludeNativeLibrariesForSelfExtract=true \
+            -o ./publish/win-x64
+
+          # Create release archives
+          echo "Creating release archives..."
+          mkdir -p artifacts
+          
+          cd publish/linux-arm64
+          tar -czf ../../artifacts/structuralens-linux-arm64-${VERSION}.tar.gz StructuraLens.Cli
+          cd ../linux-x64
+          tar -czf ../../artifacts/structuralens-linux-x64-${VERSION}.tar.gz StructuraLens.Cli
+          cd ../osx-arm64
+          tar -czf ../../artifacts/structuralens-macos-arm64-${VERSION}.tar.gz StructuraLens.Cli
+          cd ../win-x64
+          zip ../../artifacts/structuralens-windows-x64-${VERSION}.zip StructuraLens.Cli.exe
+          cd ../..
+
+          echo "Build complete! Artifacts:"
+          ls -lh artifacts/
+
+      - name: Upload release assets
+        if: steps.semantic.outputs.new_release_published == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: v${{ steps.semantic.outputs.new_release_version }}
+        run: |
+          echo "Uploading release assets to ${TAG}"
+          gh release upload ${TAG} artifacts/*.tar.gz artifacts/*.zip
