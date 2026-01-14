@@ -92,8 +92,9 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
         SolutionAnalyzerLog.CachedCompilations(_logger, compilationCache.Count);
 
         // Analyze projects in parallel for performance on large solutions
-        // Collect both metrics AND coupling dependencies in a single pass
-        var projectResultsBag = new System.Collections.Concurrent.ConcurrentBag<(ProjectMetrics metrics, List<DependencyEdge> dependencies)>();
+        // Use streaming dependency collector to reduce memory usage
+        using var dependencyCollector = new InMemoryDependencyCollector();
+        var projectMetricsList = new System.Collections.Concurrent.ConcurrentBag<ProjectMetrics>();
         var completedCount = 0;
         var totalProjects = csharpProjects.Count;
 
@@ -106,31 +107,23 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
             var currentIndex = Interlocked.Increment(ref completedCount);
             SolutionAnalyzerLog.AnalyzingProject(_logger, currentIndex, totalProjects, project.Name);
             
-            var result = await AnalyzeProjectWithCouplingAsync(project, compilationCache, ct);
-            projectResultsBag.Add(result);
+            var metrics = await AnalyzeProjectWithCouplingAsync(project, compilationCache, dependencyCollector, ct);
+            projectMetricsList.Add(metrics);
             
-            SolutionAnalyzerLog.CompletedProject(_logger, project.Name, result.metrics.Types.Count, result.metrics.TotalMethods, result.dependencies.Count);
+            SolutionAnalyzerLog.CompletedProject(_logger, project.Name, metrics.Types.Count, metrics.TotalMethods, 0);
         });
 
-        // Extract metrics and dependencies from combined results
-        var projectMetricsList = new List<ProjectMetrics>();
-        var allDependencies = new List<DependencyEdge>();
-        foreach (var (metrics, dependencies) in projectResultsBag)
-        {
-            projectMetricsList.Add(metrics);
-            allDependencies.AddRange(dependencies);
-        }
-
-        // Build coupling analysis from pre-collected dependencies (no separate document pass needed)
-        SolutionAnalyzerLog.BuildingCouplingAnalysis(_logger, allDependencies.Count);
-        var couplingAnalysis = _couplingAnalyzer.BuildCouplingAnalysisFromDependencies(solution, allDependencies);
+        // Build coupling analysis from streaming collector (already aggregated)
+        var collectorStats = dependencyCollector.GetStats();
+        SolutionAnalyzerLog.BuildingCouplingAnalysis(_logger, (int)collectorStats.UniqueEdgesCount);
+        var couplingAnalysis = _couplingAnalyzer.BuildCouplingAnalysisFromCollector(solution, dependencyCollector);
 
         SolutionAnalyzerLog.AnalysisComplete(_logger, projectMetricsList.Count, projectMetricsList.Sum(p => p.Types.Count), projectMetricsList.Sum(p => p.TotalMethods));
 
         return new AnalysisReport(
             SolutionPath: fullPath,
             AnalyzedAt: DateTime.UtcNow,
-            Projects: projectMetricsList,
+            Projects: projectMetricsList.ToList(),
             Warnings: _warnings.ToList())
         {
             CouplingAnalysis = couplingAnalysis
@@ -183,9 +176,10 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
         };
     }
 
-    private async Task<(ProjectMetrics metrics, List<DependencyEdge> dependencies)> AnalyzeProjectWithCouplingAsync(
+    private async Task<ProjectMetrics> AnalyzeProjectWithCouplingAsync(
         Project project, 
-        System.Collections.Concurrent.ConcurrentDictionary<string, Compilation> compilationCache, 
+        System.Collections.Concurrent.ConcurrentDictionary<string, Compilation> compilationCache,
+        IDependencyCollector dependencyCollector,
         CancellationToken cancellationToken)
     {
         // Use cached compilation if available
@@ -197,7 +191,7 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
             {
                 _warnings.Add($"Could not get compilation for project: {project.Name}");
                 SolutionAnalyzerLog.CouldNotGetCompilation(_logger, project.Name);
-                return (new ProjectMetrics(project.Name, project.FilePath ?? "", []), []);
+                return new ProjectMetrics(project.Name, project.FilePath ?? "", []);
             }
         }
 
@@ -209,9 +203,8 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
 
         SolutionAnalyzerLog.AnalyzingDocumentsInProject(_logger, documentCount, project.Name);
 
-        // Analyze documents in parallel for performance - collect both metrics AND dependencies in single pass
+        // Analyze documents in parallel - stream dependencies directly to collector
         var typeMetricsBag = new System.Collections.Concurrent.ConcurrentBag<TypeMetrics>();
-        var dependenciesBag = new System.Collections.Concurrent.ConcurrentBag<List<DependencyEdge>>();
         var processedCount = 0;
 
         await Parallel.ForEachAsync(documents, new ParallelOptions
@@ -235,9 +228,8 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
             var root = await syntaxTree.GetRootAsync(ct);
             var filePath = document.FilePath ?? "";
             
-            // Analyze coupling dependencies in same pass
-            var docDependencies = CouplingAnalyzer.AnalyzeDocumentCoupling(semanticModel, filePath, root);
-            dependenciesBag.Add(docDependencies.ToList());
+            // Analyze coupling dependencies - stream directly to shared collector
+            CouplingAnalyzer.AnalyzeDocumentCouplingStreaming(semanticModel, filePath, root, dependencyCollector);
             
             // Analyze traditional type declarations
             var typeDeclarations = root.DescendantNodes()
@@ -265,13 +257,6 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
         });
 
         var typeMetricsList = typeMetricsBag.ToList();
-        
-        // Merge all dependencies from this project
-        var allDependencies = new List<DependencyEdge>();
-        foreach (var deps in dependenciesBag)
-        {
-            allDependencies.AddRange(deps);
-        }
 
         var projectMetrics = new ProjectMetrics(
             Name: project.Name,
@@ -281,13 +266,14 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
             Diagnostics = diagnosticSummary
         };
 
-        return (projectMetrics, allDependencies);
+        return projectMetrics;
     }
 
     private async Task<ProjectMetrics> AnalyzeProjectAsync(Project project, System.Collections.Concurrent.ConcurrentDictionary<string, Compilation> compilationCache, CancellationToken cancellationToken)
     {
-        var (metrics, _) = await AnalyzeProjectWithCouplingAsync(project, compilationCache, cancellationToken);
-        return metrics;
+        // For single project analysis, create a temporary collector that we don't use
+        using var tempCollector = new InMemoryDependencyCollector();
+        return await AnalyzeProjectWithCouplingAsync(project, compilationCache, tempCollector, cancellationToken);
     }
 
     private static DiagnosticSummary CollectDiagnostics(Compilation compilation)

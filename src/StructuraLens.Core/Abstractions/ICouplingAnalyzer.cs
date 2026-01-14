@@ -39,6 +39,16 @@ public interface ICouplingAnalyzer
         IReadOnlyList<DependencyEdge> allDependencies);
 
     /// <summary>
+    /// Builds coupling analysis from a dependency collector (streaming-friendly).
+    /// Preferred method for large codebases as it works with aggregated edges.
+    /// </summary>
+    /// <param name="solution">The Roslyn solution.</param>
+    /// <param name="collector">Dependency collector containing aggregated edges.</param>
+    CouplingAnalysis BuildCouplingAnalysisFromCollector(
+        Solution solution,
+        IDependencyCollector collector);
+
+    /// <summary>
     /// Analyzes internal coupling within a project.
     /// </summary>
     /// <param name="project">The Roslyn project to analyze.</param>

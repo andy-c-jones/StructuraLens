@@ -100,6 +100,18 @@ public sealed class CouplingAnalyzer : ICouplingAnalyzer
     }
 
     /// <inheritdoc />
+    public CouplingAnalysis BuildCouplingAnalysisFromCollector(
+        Solution solution,
+        IDependencyCollector collector)
+    {
+        // Get already-aggregated dependencies from collector
+        var aggregatedDependencies = collector.GetAggregatedDependencies();
+        
+        // Use existing method to build analysis from these edges
+        return BuildCouplingAnalysisFromDependencies(solution, aggregatedDependencies);
+    }
+
+    /// <inheritdoc />
     public async Task<CouplingAnalysis> AnalyzeProjectCouplingAsync(
         Project project,
         CancellationToken cancellationToken = default)
@@ -379,9 +391,23 @@ public sealed class CouplingAnalyzer : ICouplingAnalyzer
     /// </summary>
     public static IReadOnlyList<DependencyEdge> AnalyzeDocumentCoupling(SemanticModel semanticModel, string filePath, SyntaxNode root)
     {
-        var analyzer = new DocumentCouplingAnalyzer(semanticModel, filePath, root);
+        var analyzer = new DocumentCouplingAnalyzer(semanticModel, filePath, root, null);
         analyzer.Visit(root);
         return analyzer.Dependencies;
+    }
+
+    /// <summary>
+    /// Analyzes a single document for coupling dependencies, streaming to a collector.
+    /// Memory-efficient version for large codebases.
+    /// </summary>
+    public static void AnalyzeDocumentCouplingStreaming(
+        SemanticModel semanticModel,
+        string filePath,
+        SyntaxNode root,
+        IDependencyCollector collector)
+    {
+        var analyzer = new DocumentCouplingAnalyzer(semanticModel, filePath, root, collector);
+        analyzer.Visit(root);
     }
 }
 
@@ -392,7 +418,8 @@ internal sealed class DocumentCouplingAnalyzer : CSharpSyntaxWalker
 {
     private readonly SemanticModel _semanticModel;
     private readonly string _filePath;
-    private readonly List<DependencyEdge> _dependencies = [];
+    private readonly List<DependencyEdge>? _dependencies;
+    private readonly IDependencyCollector? _collector;
     private readonly string? _primaryNamespace;
     
     // Cache for ToDisplayString() results to avoid repeated expensive calls
@@ -400,12 +427,37 @@ internal sealed class DocumentCouplingAnalyzer : CSharpSyntaxWalker
     // Cache containing type per TypeDeclarationSyntax to avoid repeated lookups
     private readonly Dictionary<TypeDeclarationSyntax, string?> _containingTypeCache = [];
 
-    public IReadOnlyList<DependencyEdge> Dependencies => _dependencies;
+    /// <summary>
+    /// Gets collected dependencies. Only valid when using list-based collection (not streaming).
+    /// </summary>
+    public IReadOnlyList<DependencyEdge> Dependencies => _dependencies ?? [];
 
+    /// <summary>
+    /// Constructor for list-based collection (backward compatibility).
+    /// </summary>
     public DocumentCouplingAnalyzer(SemanticModel semanticModel, string filePath, SyntaxNode root)
+        : this(semanticModel, filePath, root, null)
+    {
+    }
+
+    /// <summary>
+    /// Constructor for streaming collection (memory-efficient).
+    /// </summary>
+    public DocumentCouplingAnalyzer(
+        SemanticModel semanticModel,
+        string filePath,
+        SyntaxNode root,
+        IDependencyCollector? collector)
     {
         _semanticModel = semanticModel;
         _filePath = filePath;
+        _collector = collector;
+        
+        // Only create list if not using collector
+        if (collector == null)
+        {
+            _dependencies = [];
+        }
         
         // Pre-scan for file-level namespace (file-scoped or first traditional namespace)
         _primaryNamespace = root.DescendantNodes()
@@ -414,6 +466,21 @@ internal sealed class DocumentCouplingAnalyzer : CSharpSyntaxWalker
             ?? root.DescendantNodes()
                 .OfType<NamespaceDeclarationSyntax>()
                 .FirstOrDefault()?.Name.ToString();
+    }
+
+    /// <summary>
+    /// Adds a dependency edge, routing to collector or list based on mode.
+    /// </summary>
+    private void AddDependencyEdge(DependencyEdge edge)
+    {
+        if (_collector != null)
+        {
+            _collector.AddDependency(edge);
+        }
+        else
+        {
+            _dependencies?.Add(edge);
+        }
     }
 
     /// <summary>
@@ -438,7 +505,7 @@ internal sealed class DocumentCouplingAnalyzer : CSharpSyntaxWalker
 
             if (!string.IsNullOrEmpty(containingNamespace) && containingNamespace != namespaceName)
             {
-            _dependencies.Add(new DependencyEdge(
+            AddDependencyEdge(new DependencyEdge(
                 FromEntity: containingNamespace,
                 ToEntity: namespaceName,
                 Type: DependencyType.NamespaceReference,
@@ -483,7 +550,7 @@ internal sealed class DocumentCouplingAnalyzer : CSharpSyntaxWalker
 
         if (fromType != null && fromType != toType)
         {
-            _dependencies.Add(new DependencyEdge(
+            AddDependencyEdge(new DependencyEdge(
                 FromEntity: fromType,
                 ToEntity: toType,
                 Type: DependencyType.TypeReference,
@@ -502,7 +569,7 @@ internal sealed class DocumentCouplingAnalyzer : CSharpSyntaxWalker
             
             if (fromNamespace != toNamespace && !string.IsNullOrEmpty(toNamespace))
             {
-                _dependencies.Add(new DependencyEdge(
+                AddDependencyEdge(new DependencyEdge(
                     FromEntity: fromNamespace,
                     ToEntity: toNamespace,
                     Type: DependencyType.NamespaceReference,
