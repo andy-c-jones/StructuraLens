@@ -333,7 +333,7 @@ public sealed class HtmlReportGenerator : IReportGenerator
         <div class="section">
           <h2>Projects Overview</h2>
           <table>
-            <thead><tr><th>Project</th><th>Types</th><th>Methods</th><th>CC</th><th>LOC</th><th>MI</th><th>Instability</th><th>Issues</th></tr></thead>
+             <thead><tr><th>Project</th><th>Types</th><th>Methods</th><th>Cyclomatic Complexity</th><th>Lines of Code</th><th>Maintainability Index</th><th>Instability</th><th>Issues</th></tr></thead>
             <tbody>${d.prj.map(p => `
               <tr>
                 <td>${p.n}</td>
@@ -416,7 +416,7 @@ public sealed class HtmlReportGenerator : IReportGenerator
       const projects = filter ? reportData.prj.filter(p => p.n === filter) : reportData.prj;
       document.getElementById('projectsTable').innerHTML = `
         <table>
-          <thead><tr><th>Project</th><th>Types</th><th>Methods</th><th>Cyclomatic Complexity</th><th>Lines of Code</th><th>Max DIT</th><th>Maintainability</th><th>Efferent (Ce)</th><th>Afferent (Ca)</th><th>Instability</th></tr></thead>
+           <thead><tr><th>Project</th><th>Types</th><th>Methods</th><th>Cyclomatic Complexity</th><th>Lines of Code</th><th>Max Depth of Inheritance</th><th>Maintainability Index</th><th>Efferent (Ce)</th><th>Afferent (Ca)</th><th>Instability</th></tr></thead>
           <tbody>${projects.map(p => `
             <tr>
               <td><strong>${p.n}</strong></td>
@@ -452,12 +452,12 @@ public sealed class HtmlReportGenerator : IReportGenerator
             <div class="tree-label">
               <span class="tree-icon">📦</span>
               <span class="tree-label-text">${project.n}</span>
-              <div class="tree-metrics">
+               <div class="tree-metrics">
                 <span class="tree-metric"><span class="tree-metric-label">Types:</span> <span class="tree-metric-value">${project.tc}</span></span>
                 <span class="tree-metric"><span class="tree-metric-label">Methods:</span> <span class="tree-metric-value">${project.mc}</span></span>
-                <span class="tree-metric"><span class="tree-metric-label">CC:</span> <span class="tree-metric-value">${project.cc}</span></span>
-                <span class="tree-metric"><span class="tree-metric-label">LOC:</span> <span class="tree-metric-value">${project.loc.toLocaleString()}</span></span>
-                <span class="tree-metric"><span class="tree-metric-label">MI:</span> <span class="tree-metric-value">${project.mi}</span></span>
+                <span class="tree-metric"><span class="tree-metric-label">Cyclomatic Complexity:</span> <span class="tree-metric-value">${project.cc}</span></span>
+                <span class="tree-metric"><span class="tree-metric-label">Lines of Code:</span> <span class="tree-metric-value">${project.loc.toLocaleString()}</span></span>
+                <span class="tree-metric"><span class="tree-metric-label">Maintainability Index:</span> <span class="tree-metric-value">${project.mi}</span></span>
               </div>
             </div>
           </div>
@@ -479,12 +479,12 @@ public sealed class HtmlReportGenerator : IReportGenerator
             <div class="tree-label">
               <span class="tree-icon">📁</span>
               <span class="tree-label-text">${namespace.n}</span>
-              <div class="tree-metrics">
+               <div class="tree-metrics">
                 <span class="tree-metric"><span class="tree-metric-label">Types:</span> <span class="tree-metric-value">${namespace.tc}</span></span>
                 <span class="tree-metric"><span class="tree-metric-label">Methods:</span> <span class="tree-metric-value">${namespace.mc}</span></span>
-                <span class="tree-metric"><span class="tree-metric-label">CC:</span> <span class="tree-metric-value">${namespace.cc}</span></span>
-                <span class="tree-metric"><span class="tree-metric-label">LOC:</span> <span class="tree-metric-value">${namespace.loc.toLocaleString()}</span></span>
-                <span class="tree-metric"><span class="tree-metric-label">MI:</span> <span class="tree-metric-value">${namespace.mi}</span></span>
+                <span class="tree-metric"><span class="tree-metric-label">Cyclomatic Complexity:</span> <span class="tree-metric-value">${namespace.cc}</span></span>
+                <span class="tree-metric"><span class="tree-metric-label">Lines of Code:</span> <span class="tree-metric-value">${namespace.loc.toLocaleString()}</span></span>
+                <span class="tree-metric"><span class="tree-metric-label">Maintainability Index:</span> <span class="tree-metric-value">${namespace.mi}</span></span>
               </div>
             </div>
           </div>
@@ -506,12 +506,12 @@ public sealed class HtmlReportGenerator : IReportGenerator
             <div class="tree-label">
               <span class="tree-icon">🔷</span>
               <span class="tree-label-text">${type.n}</span>
-              <div class="tree-metrics">
+               <div class="tree-metrics">
                 <span class="tree-metric"><span class="tree-metric-label">Methods:</span> <span class="tree-metric-value">${hasMethods ? type.m.length : 0}</span></span>
-                <span class="tree-metric"><span class="tree-metric-label">CC:</span> <span class="tree-metric-value">${type.cc}</span></span>
-                <span class="tree-metric"><span class="tree-metric-label">LOC:</span> <span class="tree-metric-value">${type.loc.toLocaleString()}</span></span>
-                <span class="tree-metric"><span class="tree-metric-label">MI:</span> <span class="tree-metric-value">${type.mi}</span></span>
-                <span class="tree-metric"><span class="tree-metric-label">DIT:</span> <span class="tree-metric-value">${type.dit}</span></span>
+                <span class="tree-metric"><span class="tree-metric-label">Cyclomatic Complexity:</span> <span class="tree-metric-value">${type.cc}</span></span>
+                <span class="tree-metric"><span class="tree-metric-label">Lines of Code:</span> <span class="tree-metric-value">${type.loc.toLocaleString()}</span></span>
+                <span class="tree-metric"><span class="tree-metric-label">Maintainability Index:</span> <span class="tree-metric-value">${type.mi}</span></span>
+                <span class="tree-metric"><span class="tree-metric-label">Depth of Inheritance:</span> <span class="tree-metric-value">${type.dit}</span></span>
               </div>
             </div>
           </div>
@@ -529,10 +529,10 @@ public sealed class HtmlReportGenerator : IReportGenerator
             <div class="tree-label">
               <span class="tree-icon">⚡</span>
               <span class="tree-label-text">${method.n}</span>
-              <div class="tree-metrics">
-                <span class="tree-metric"><span class="tree-metric-label">CC:</span> <span class="tree-metric-value">${method.cc}</span></span>
-                <span class="tree-metric"><span class="tree-metric-label">LOC:</span> <span class="tree-metric-value">${method.loc}</span></span>
-                <span class="tree-metric"><span class="tree-metric-label">MI:</span> <span class="tree-metric-value">${method.mi}</span></span>
+               <div class="tree-metrics">
+                <span class="tree-metric"><span class="tree-metric-label">Cyclomatic Complexity:</span> <span class="tree-metric-value">${method.cc}</span></span>
+                <span class="tree-metric"><span class="tree-metric-label">Lines of Code:</span> <span class="tree-metric-value">${method.loc}</span></span>
+                <span class="tree-metric"><span class="tree-metric-label">Maintainability Index:</span> <span class="tree-metric-value">${method.mi}</span></span>
                 <span class="tree-metric"><span class="tree-metric-label">Lines:</span> <span class="tree-metric-value">${method.sl}-${method.el}</span></span>
               </div>
             </div>
@@ -639,11 +639,11 @@ public sealed class HtmlReportGenerator : IReportGenerator
             <option value="project">Project Dependencies</option>
             <option value="namespace">Namespace Dependencies</option>
           </select>
-          <label>Color by:</label>
+           <label>Color by:</label>
           <select id="colorMetric">
             <option value="none">None</option>
             <option value="diagnostics" data-project-only="true">Diagnostics Count</option>
-            <option value="coupling">Coupling (Ce)</option>
+            <option value="coupling">Efferent Coupling (Ce)</option>
             <option value="complexity">Cyclomatic Complexity</option>
             <option value="loc">Lines of Code</option>
             <option value="maintainability">Maintainability Index</option>
@@ -652,7 +652,7 @@ public sealed class HtmlReportGenerator : IReportGenerator
           <select id="sizeMetric">
             <option value="dependencies">Dependencies</option>
             <option value="diagnostics" data-project-only="true">Diagnostics Count</option>
-            <option value="coupling">Coupling (Ce)</option>
+            <option value="coupling">Efferent Coupling (Ce)</option>
             <option value="complexity">Cyclomatic Complexity</option>
             <option value="loc">Lines of Code</option>
             <option value="maintainability">Maintainability Index</option>
