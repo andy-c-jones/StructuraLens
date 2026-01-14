@@ -34,6 +34,60 @@ internal static partial class ProgramLog
     public static partial void AnalysisCompleted(ILogger logger);
 
     [LoggerMessage(
+        EventId = 4007,
+        Level = LogLevel.Information,
+        Message = "Dependency aggregation strategy: {strategy}")]
+    public static partial void AggregationStrategy(ILogger logger, string strategy);
+
+    [LoggerMessage(
+        EventId = 4008,
+        Level = LogLevel.Information,
+        Message = "Memory threshold: {thresholdMB} MB")]
+    public static partial void MemoryThreshold(ILogger logger, long thresholdMB);
+
+    [LoggerMessage(
+        EventId = 4009,
+        Level = LogLevel.Information,
+        Message = "=== Dependency Aggregation Stats ===")]
+    public static partial void AggregationStatsHeader(ILogger logger);
+
+    [LoggerMessage(
+        EventId = 4010,
+        Level = LogLevel.Information,
+        Message = "Strategy: {strategy}")]
+    public static partial void AggregationStatsStrategy(ILogger logger, string strategy);
+
+    [LoggerMessage(
+        EventId = 4011,
+        Level = LogLevel.Information,
+        Message = "Total edges processed: {totalEdges:N0}")]
+    public static partial void AggregationStatsTotalEdges(ILogger logger, long totalEdges);
+
+    [LoggerMessage(
+        EventId = 4012,
+        Level = LogLevel.Information,
+        Message = "Unique edges: {uniqueEdges:N0}")]
+    public static partial void AggregationStatsUniqueEdges(ILogger logger, long uniqueEdges);
+
+    [LoggerMessage(
+        EventId = 4013,
+        Level = LogLevel.Information,
+        Message = "Deduplication: {deduplicationRatio:P1}")]
+    public static partial void AggregationStatsDeduplication(ILogger logger, double deduplicationRatio);
+
+    [LoggerMessage(
+        EventId = 4014,
+        Level = LogLevel.Information,
+        Message = "Memory usage: {memoryUsageMB:F1} MB")]
+    public static partial void AggregationStatsMemory(ILogger logger, double memoryUsageMB);
+
+    [LoggerMessage(
+        EventId = 4015,
+        Level = LogLevel.Information,
+        Message = "Database: {databasePath}")]
+    public static partial void AggregationStatsDatabase(ILogger logger, string databasePath);
+
+    [LoggerMessage(
         EventId = 4004,
         Level = LogLevel.Information,
         Message = "Report written to: {outputPath}")]

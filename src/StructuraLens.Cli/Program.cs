@@ -64,6 +64,24 @@ var verboseOption = new Option<bool>("--verbose", "-v")
     Description = "Enable verbose logging output"
 };
 
+var aggregationStrategyOption = new Option<string>("--aggregation-strategy")
+{
+    Description = "Dependency aggregation strategy: InMemory, SQLite, or Adaptive (default: Adaptive)",
+    DefaultValueFactory = _ => "Adaptive"
+};
+
+var memoryThresholdOption = new Option<long>("--memory-threshold")
+{
+    Description = "Memory threshold in MB for adaptive strategy (default: 1024)",
+    DefaultValueFactory = _ => 1024L
+};
+
+var sqliteBatchSizeOption = new Option<int>("--sqlite-batch-size")
+{
+    Description = "Batch size for SQLite collector (default: 1000)",
+    DefaultValueFactory = _ => 1000
+};
+
 // Create path argument
 var pathArgument = new Argument<string>("path")
 {
@@ -77,6 +95,9 @@ analyzeCommand.Options.Add(outputOption);
 analyzeCommand.Options.Add(formatOption);
 
 analyzeCommand.Options.Add(verboseOption);
+analyzeCommand.Options.Add(aggregationStrategyOption);
+analyzeCommand.Options.Add(memoryThresholdOption);
+analyzeCommand.Options.Add(sqliteBatchSizeOption);
 
 analyzeCommand.SetAction(async (parseResult, cancellationToken) =>
 {
@@ -84,6 +105,17 @@ analyzeCommand.SetAction(async (parseResult, cancellationToken) =>
     var output = parseResult.GetValue(outputOption);
     var format = parseResult.GetValue(formatOption) ?? "json";
     var verbose = parseResult.GetValue(verboseOption);
+    var aggregationStrategy = parseResult.GetValue(aggregationStrategyOption) ?? "Adaptive";
+    var memoryThreshold = parseResult.GetValue(memoryThresholdOption);
+    var sqliteBatchSize = parseResult.GetValue(sqliteBatchSizeOption);
+
+    // Parse analysis options
+    var analysisOptions = new AnalysisOptions
+    {
+        AggregationStrategy = Enum.Parse<DependencyAggregationStrategy>(aggregationStrategy, ignoreCase: true),
+        MemoryThresholdMB = memoryThreshold,
+        SQLiteBatchSize = sqliteBatchSize
+    };
 
     // Adjust logging level based on verbose flag
     IServiceProvider executionServiceProvider;
@@ -122,13 +154,14 @@ analyzeCommand.SetAction(async (parseResult, cancellationToken) =>
         executionServiceProvider = serviceProvider;
     }
 
-    return await ExecuteAnalysisAsync(path, output, format, executionServiceProvider, cancellationToken);
+    return await ExecuteAnalysisAsync(path, output, format, analysisOptions, executionServiceProvider, cancellationToken);
 });
 
 static async Task<int> ExecuteAnalysisAsync(
     string path,
     string? output,
     string format,
+    AnalysisOptions analysisOptions,
     IServiceProvider serviceProvider,
     CancellationToken cancellationToken)
 {
@@ -139,8 +172,24 @@ static async Task<int> ExecuteAnalysisAsync(
         ProgramLog.ApplicationStartup(logger, "0.1.0");
         ProgramLog.AnalyzingPath(logger, path);
         ProgramLog.CouplingModeEnabled(logger, "All");
+        
+        // Log aggregation strategy
+        ProgramLog.AggregationStrategy(logger, analysisOptions.AggregationStrategy.ToString());
+        if (analysisOptions.AggregationStrategy == DependencyAggregationStrategy.Adaptive)
+        {
+            ProgramLog.MemoryThreshold(logger, analysisOptions.MemoryThresholdMB);
+        }
 
-        var analyzer = serviceProvider.GetRequiredService<ISolutionAnalyzer>();
+        // Create analyzer with options
+        var analyzer = new SolutionAnalyzer(
+            serviceProvider.GetRequiredService<ILogger<SolutionAnalyzer>>(),
+            serviceProvider.GetRequiredService<INuGetRestorer>(),
+            serviceProvider.GetRequiredService<IMSBuildWorkspaceFactory>(),
+            serviceProvider.GetRequiredService<ICouplingAnalyzer>(),
+            serviceProvider.GetRequiredService<IMetricsCalculator>(),
+            serviceProvider.GetRequiredService<IFileSystemService>(),
+            analysisOptions);
+            
         var report = path.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)
             ? await analyzer.AnalyzeProjectAsync(path, cancellationToken)
             : await analyzer.AnalyzeSolutionAsync(path, cancellationToken);
@@ -155,6 +204,20 @@ static async Task<int> ExecuteAnalysisAsync(
             {
                 ProgramLog.AdditionalWarnings(logger, report.Warnings.Count - 10);
             }
+        }
+
+        // Display aggregation stats
+        if (report.AggregationStats != null)
+        {
+            var stats = report.AggregationStats;
+            ProgramLog.AggregationStatsHeader(logger);
+            ProgramLog.AggregationStatsStrategy(logger, stats.Strategy);
+            ProgramLog.AggregationStatsTotalEdges(logger, stats.TotalEdgesAdded);
+            ProgramLog.AggregationStatsUniqueEdges(logger, stats.UniqueEdgesCount);
+            ProgramLog.AggregationStatsDeduplication(logger, stats.DeduplicationRatio);
+            ProgramLog.AggregationStatsMemory(logger, stats.MemoryUsageMB);
+            if (stats.DatabasePath != null)
+                ProgramLog.AggregationStatsDatabase(logger, stats.DatabasePath);
         }
 
         if (format == "summary")
@@ -276,6 +339,21 @@ static void PrintSummary(AnalysisReport report, ILogger logger)
             Console.WriteLine($"Most Coupled Entity: {coupling.MostCoupledEntity}");
         if (!string.IsNullOrEmpty(coupling.MostUnstableEntity))
             Console.WriteLine($"Most Unstable Entity: {coupling.MostUnstableEntity}");
+    }
+
+    // Display aggregation stats
+    if (report.AggregationStats != null)
+    {
+        Console.WriteLine();
+        ProgramLog.AggregationStatsHeader(logger);
+        var stats = report.AggregationStats;
+        ProgramLog.AggregationStatsStrategy(logger, stats.Strategy);
+        ProgramLog.AggregationStatsTotalEdges(logger, stats.TotalEdgesAdded);
+        ProgramLog.AggregationStatsUniqueEdges(logger, stats.UniqueEdgesCount);
+        ProgramLog.AggregationStatsDeduplication(logger, stats.DeduplicationRatio);
+        ProgramLog.AggregationStatsMemory(logger, stats.MemoryUsageMB);
+        if (stats.DatabasePath != null)
+            ProgramLog.AggregationStatsDatabase(logger, stats.DatabasePath);
     }
 
 

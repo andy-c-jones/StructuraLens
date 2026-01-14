@@ -63,4 +63,8 @@ public record AnalysisReport(
     /// </summary>
     public CouplingAnalysis? CouplingAnalysis { get; init; }
 
+    /// <summary>
+    /// Statistics about dependency aggregation performance.
+    /// </summary>
+    public DependencyCollectorStats? AggregationStats { get; init; }
 }

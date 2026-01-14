@@ -147,7 +147,8 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
             Projects: projectMetricsList.ToList(),
             Warnings: _warnings.ToList())
         {
-            CouplingAnalysis = couplingAnalysis
+            CouplingAnalysis = couplingAnalysis,
+            AggregationStats = collectorStats
         };
     }
 
