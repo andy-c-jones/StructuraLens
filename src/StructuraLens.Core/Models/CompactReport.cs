@@ -92,6 +92,11 @@ public record CompactProject
     [JsonPropertyName("types")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<CompactType>? Types { get; init; }
+
+    /// <summary>Namespace metrics (optional, for hierarchical reports).</summary>
+    [JsonPropertyName("ns")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<CompactNamespace>? Namespaces { get; init; }
 }
 
 /// <summary>Compact type metrics.</summary>
@@ -100,6 +105,11 @@ public record CompactType
     /// <summary>Type name (short form, not fully qualified).</summary>
     [JsonPropertyName("n")]
     public string Name { get; init; } = "";
+
+    /// <summary>Full type name (fully qualified).</summary>
+    [JsonPropertyName("fn")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? FullName { get; init; }
 
     /// <summary>Depth of inheritance.</summary>
     [JsonPropertyName("dit")]
@@ -121,6 +131,43 @@ public record CompactType
     [JsonPropertyName("m")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<CompactMethod>? Methods { get; init; }
+}
+
+/// <summary>Compact namespace metrics.</summary>
+public record CompactNamespace
+{
+    /// <summary>Namespace name.</summary>
+    [JsonPropertyName("n")]
+    public string Name { get; init; } = "";
+
+    /// <summary>Type count.</summary>
+    [JsonPropertyName("tc")]
+    public int TypeCount { get; init; }
+
+    /// <summary>Method count.</summary>
+    [JsonPropertyName("mc")]
+    public int MethodCount { get; init; }
+
+    /// <summary>Total cyclomatic complexity.</summary>
+    [JsonPropertyName("cc")]
+    public int CyclomaticComplexity { get; init; }
+
+    /// <summary>Total lines of code.</summary>
+    [JsonPropertyName("loc")]
+    public int LinesOfCode { get; init; }
+
+    /// <summary>Max depth of inheritance.</summary>
+    [JsonPropertyName("dit")]
+    public int MaxDepthOfInheritance { get; init; }
+
+    /// <summary>Average maintainability index.</summary>
+    [JsonPropertyName("mi")]
+    public double AvgMaintainabilityIndex { get; init; }
+
+    /// <summary>Types in this namespace (optional).</summary>
+    [JsonPropertyName("types")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<CompactType>? Types { get; init; }
 }
 
 /// <summary>Compact method metrics.</summary>

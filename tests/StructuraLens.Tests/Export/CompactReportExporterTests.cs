@@ -395,4 +395,210 @@ public class CompactReportExporterTests
         await Assert.That(compactReport.Projects.Count).IsEqualTo(0);
         await Assert.That(compactReport.Diagnostics).IsNull();
     }
+
+    [Test]
+    public async Task ExportHierarchical_WithTypeDetails_IncludesNamespaces()
+    {
+        // Arrange
+        var exporter = CreateExporter();
+        var report = CreateMinimalReport();
+
+        // Act
+        var compactReport = exporter.ExportHierarchical(report, includeMethodDetails: false, includeTypeDetails: true);
+
+        // Assert
+        await Assert.That(compactReport).IsNotNull();
+        await Assert.That(compactReport.Projects[0].Namespaces).IsNotNull();
+        await Assert.That(compactReport.Projects[0].Types).IsNull(); // Mutually exclusive
+        await Assert.That(compactReport.Projects[0].Namespaces!.Count).IsEqualTo(1);
+        await Assert.That(compactReport.Projects[0].Namespaces![0].Name).IsEqualTo("TestProject");
+    }
+
+    [Test]
+    public async Task ExportHierarchical_MultipleNamespaces_GroupsCorrectly()
+    {
+        // Arrange
+        var exporter = CreateExporter();
+        var types = new List<TypeMetrics>
+        {
+            new("NS1.Class1", "/f1.cs", 0, new List<MethodMetrics>
+            {
+                new("M1", "/f1.cs", 1, 5, 1, 10, 50, 80)
+            }),
+            new("NS1.Class2", "/f2.cs", 0, new List<MethodMetrics>
+            {
+                new("M2", "/f2.cs", 1, 5, 1, 8, 40, 70)
+            }),
+            new("NS2.Class3", "/f3.cs", 0, new List<MethodMetrics>
+            {
+                new("M3", "/f3.cs", 1, 5, 1, 12, 60, 90)
+            })
+        };
+
+        var project = new ProjectMetrics("TestProject", "/project.csproj", types);
+        var report = new AnalysisReport(
+            SolutionPath: "test.sln",
+            AnalyzedAt: DateTime.UtcNow,
+            Projects: new List<ProjectMetrics> { project },
+            Warnings: []);
+
+        // Act
+        var compactReport = exporter.ExportHierarchical(report, includeMethodDetails: false, includeTypeDetails: true);
+
+        // Assert
+        await Assert.That(compactReport.Projects[0].Namespaces).IsNotNull();
+        await Assert.That(compactReport.Projects[0].Namespaces!.Count).IsEqualTo(2);
+        await Assert.That(compactReport.Projects[0].Namespaces![0].Name).IsEqualTo("NS1");
+        await Assert.That(compactReport.Projects[0].Namespaces![0].Types).IsNotNull();
+        await Assert.That(compactReport.Projects[0].Namespaces![0].Types!.Count).IsEqualTo(2);
+        await Assert.That(compactReport.Projects[0].Namespaces![1].Name).IsEqualTo("NS2");
+        await Assert.That(compactReport.Projects[0].Namespaces![1].Types!.Count).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task ExportHierarchical_NamespaceMetrics_AreCorrectlyAggregated()
+    {
+        // Arrange
+        var exporter = CreateExporter();
+        var types = new List<TypeMetrics>
+        {
+            new("NS.Class1", "/f1.cs", DepthOfInheritance: 2, new List<MethodMetrics>
+            {
+                new("M1", "/f1.cs", 1, 5, CyclomaticComplexity: 3, LinesOfExecutableCode: 10, HalsteadVolume: 50, MaintainabilityIndex: 80)
+            }),
+            new("NS.Class2", "/f2.cs", DepthOfInheritance: 1, new List<MethodMetrics>
+            {
+                new("M2", "/f2.cs", 1, 5, CyclomaticComplexity: 5, LinesOfExecutableCode: 15, HalsteadVolume: 60, MaintainabilityIndex: 60)
+            })
+        };
+
+        var project = new ProjectMetrics("TestProject", "/project.csproj", types);
+        var report = new AnalysisReport(
+            SolutionPath: "test.sln",
+            AnalyzedAt: DateTime.UtcNow,
+            Projects: new List<ProjectMetrics> { project },
+            Warnings: []);
+
+        // Act
+        var compactReport = exporter.ExportHierarchical(report, includeMethodDetails: false, includeTypeDetails: true);
+
+        // Assert
+        var ns = compactReport.Projects[0].Namespaces![0];
+        await Assert.That(ns.Name).IsEqualTo("NS");
+        await Assert.That(ns.TypeCount).IsEqualTo(2);
+        await Assert.That(ns.MethodCount).IsEqualTo(2);
+        await Assert.That(ns.CyclomaticComplexity).IsEqualTo(8); // 3 + 5
+        await Assert.That(ns.LinesOfCode).IsEqualTo(25); // 10 + 15
+        await Assert.That(ns.MaxDepthOfInheritance).IsEqualTo(2);
+        await Assert.That(ns.AvgMaintainabilityIndex).IsEqualTo(70.0); // (80 + 60) / 2
+    }
+
+    [Test]
+    public async Task ExportHierarchical_WithMethodDetails_IncludesMethodsInTypes()
+    {
+        // Arrange
+        var exporter = CreateExporter();
+        var report = CreateMinimalReport();
+
+        // Act
+        var compactReport = exporter.ExportHierarchical(report, includeMethodDetails: true, includeTypeDetails: true);
+
+        // Assert
+        await Assert.That(compactReport.Projects[0].Namespaces).IsNotNull();
+        var ns = compactReport.Projects[0].Namespaces![0];
+        await Assert.That(ns.Types).IsNotNull();
+        await Assert.That(ns.Types![0].Methods).IsNotNull();
+        await Assert.That(ns.Types![0].Methods!.Count).IsEqualTo(1);
+        
+        var method = ns.Types![0].Methods![0];
+        await Assert.That(method.Name).IsEqualTo("TestMethod()");
+        await Assert.That(method.CyclomaticComplexity).IsEqualTo(2);
+        await Assert.That(method.LinesOfCode).IsEqualTo(10);
+    }
+
+    [Test]
+    public async Task ExportHierarchical_WithoutMethodDetails_ExcludesMethods()
+    {
+        // Arrange
+        var exporter = CreateExporter();
+        var report = CreateMinimalReport();
+
+        // Act
+        var compactReport = exporter.ExportHierarchical(report, includeMethodDetails: false, includeTypeDetails: true);
+
+        // Assert
+        await Assert.That(compactReport.Projects[0].Namespaces).IsNotNull();
+        var ns = compactReport.Projects[0].Namespaces![0];
+        await Assert.That(ns.Types).IsNotNull();
+        await Assert.That(ns.Types![0].Methods).IsNull();
+    }
+
+    [Test]
+    public async Task Export_DefaultBehavior_UsesFlatStructure()
+    {
+        // Arrange
+        var exporter = CreateExporter();
+        var report = CreateMinimalReport();
+
+        // Act
+        var compactReport = exporter.Export(report, includeMethodDetails: false, includeTypeDetails: true);
+
+        // Assert - Backward compatibility: Export() should populate Types, not Namespaces
+        await Assert.That(compactReport.Projects[0].Types).IsNotNull();
+        await Assert.That(compactReport.Projects[0].Namespaces).IsNull();
+        await Assert.That(compactReport.Projects[0].Types!.Count).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task ExportHierarchical_EmptyNamespace_HandledCorrectly()
+    {
+        // Arrange
+        var exporter = CreateExporter();
+        var types = new List<TypeMetrics>
+        {
+            new("SimpleClass", "/f1.cs", 0, new List<MethodMetrics>
+            {
+                new("M1", "/f1.cs", 1, 5, 1, 10, 50, 80)
+            }),
+            new("NS.Class2", "/f2.cs", 0, new List<MethodMetrics>
+            {
+                new("M2", "/f2.cs", 1, 5, 1, 8, 40, 70)
+            })
+        };
+
+        var project = new ProjectMetrics("TestProject", "/project.csproj", types);
+        var report = new AnalysisReport(
+            SolutionPath: "test.sln",
+            AnalyzedAt: DateTime.UtcNow,
+            Projects: new List<ProjectMetrics> { project },
+            Warnings: []);
+
+        // Act
+        var compactReport = exporter.ExportHierarchical(report, includeMethodDetails: false, includeTypeDetails: true);
+
+        // Assert
+        await Assert.That(compactReport.Projects[0].Namespaces).IsNotNull();
+        await Assert.That(compactReport.Projects[0].Namespaces!.Count).IsEqualTo(2);
+        
+        // Global namespace should be first alphabetically (starts with '(')
+        var globalNs = compactReport.Projects[0].Namespaces!.FirstOrDefault(n => n.Name == "(global)");
+        await Assert.That(globalNs).IsNotNull();
+        await Assert.That(globalNs!.Types!.Count).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task ExportHierarchical_TypesIncludeFullName()
+    {
+        // Arrange
+        var exporter = CreateExporter();
+        var report = CreateMinimalReport();
+
+        // Act
+        var compactReport = exporter.ExportHierarchical(report, includeMethodDetails: false, includeTypeDetails: true);
+
+        // Assert
+        var type = compactReport.Projects[0].Namespaces![0].Types![0];
+        await Assert.That(type.FullName).IsEqualTo("TestProject.TestClass");
+        await Assert.That(type.Name).IsEqualTo("TestClass");
+    }
 }

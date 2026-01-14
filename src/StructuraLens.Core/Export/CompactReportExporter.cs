@@ -14,7 +14,31 @@ public sealed class CompactReportExporter : IReportExporter
         bool includeMethodDetails = false,
         bool includeTypeDetails = false)
     {
-        var projects = ExportProjects(report, includeTypeDetails, includeMethodDetails);
+        // Default to flat structure (backward compatible)
+        var projects = ExportProjects(report, includeTypeDetails, includeMethodDetails, useNamespaceHierarchy: false);
+        var graph = BuildGraph(report);
+        var diagnostics = ExportDiagnostics(report);
+
+        return new CompactReport
+        {
+            Version = 1,
+            Path = report.SolutionPath,
+            Timestamp = new DateTimeOffset(report.AnalyzedAt).ToUnixTimeMilliseconds(),
+            Projects = projects,
+            Graph = graph,
+            Diagnostics = diagnostics
+        };
+    }
+
+    /// <summary>
+    /// Exports the report with hierarchical namespace structure for the HTML report.
+    /// </summary>
+    public CompactReport ExportHierarchical(
+        AnalysisReport report,
+        bool includeMethodDetails = false,
+        bool includeTypeDetails = false)
+    {
+        var projects = ExportProjects(report, includeTypeDetails, includeMethodDetails, useNamespaceHierarchy: true);
         var graph = BuildGraph(report);
         var diagnostics = ExportDiagnostics(report);
 
@@ -32,7 +56,8 @@ public sealed class CompactReportExporter : IReportExporter
     private List<CompactProject> ExportProjects(
         AnalysisReport report,
         bool includeTypes,
-        bool includeMethods)
+        bool includeMethods,
+        bool useNamespaceHierarchy = true)
     {
         var projects = new List<CompactProject>();
 
@@ -63,7 +88,8 @@ public sealed class CompactReportExporter : IReportExporter
                 Instability = Math.Round(projectCoupling?.Instability ?? 0, 2),
                 Errors = project.Diagnostics?.ErrorCount ?? 0,
                 Warnings = project.Diagnostics?.WarningCount ?? 0,
-                Types = includeTypes ? ExportTypes(project.Types, includeMethods) : null
+                Types = (!useNamespaceHierarchy && includeTypes) ? ExportTypes(project.Types, includeMethods) : null,
+                Namespaces = (useNamespaceHierarchy && includeTypes) ? ExportNamespaces(project, includeMethods) : null
             };
 
             projects.Add(compactProject);
@@ -81,11 +107,38 @@ public sealed class CompactReportExporter : IReportExporter
             return new CompactType
             {
                 Name = GetShortName(t.FullName),
+                FullName = t.FullName,
                 DepthOfInheritance = t.DepthOfInheritance,
                 CyclomaticComplexity = t.TotalCyclomaticComplexity,
                 LinesOfCode = t.TotalLinesOfExecutableCode,
                 AvgMaintainabilityIndex = Math.Round(avgMI, 1),
                 Methods = includeMethods ? ExportMethods(t.Methods) : null
+            };
+        }).ToList();
+    }
+
+    private List<CompactNamespace> ExportNamespaces(ProjectMetrics project, bool includeMethods)
+    {
+        var namespaceGroups = project.Types
+            .GroupBy(t => t.Namespace)
+            .OrderBy(g => g.Key);
+
+        return namespaceGroups.Select(group =>
+        {
+            var types = group.ToList();
+            var allMethods = types.SelectMany(t => t.Methods).ToList();
+            var avgMI = allMethods.Count > 0 ? allMethods.Average(m => m.MaintainabilityIndex) : 0;
+
+            return new CompactNamespace
+            {
+                Name = group.Key,
+                TypeCount = types.Count,
+                MethodCount = allMethods.Count,
+                CyclomaticComplexity = types.Sum(t => t.TotalCyclomaticComplexity),
+                LinesOfCode = types.Sum(t => t.TotalLinesOfExecutableCode),
+                MaxDepthOfInheritance = types.Count > 0 ? types.Max(t => t.DepthOfInheritance) : 0,
+                AvgMaintainabilityIndex = Math.Round(avgMI, 1),
+                Types = ExportTypes(types, includeMethods)
             };
         }).ToList();
     }

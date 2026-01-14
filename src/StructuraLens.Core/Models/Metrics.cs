@@ -24,6 +24,28 @@ public record TypeMetrics(
 {
     public int TotalCyclomaticComplexity => Methods.Sum(m => m.CyclomaticComplexity);
     public int TotalLinesOfExecutableCode => Methods.Sum(m => m.LinesOfExecutableCode);
+    public string Namespace => ExtractNamespace(FullName);
+
+    private static string ExtractNamespace(string fullName)
+    {
+        var lastDot = fullName.LastIndexOf('.');
+        return lastDot > 0 ? fullName[..lastDot] : "(global)";
+    }
+}
+
+/// <summary>
+/// Represents code metrics for a namespace within a project.
+/// </summary>
+public record NamespaceMetrics(
+    string Name,
+    IReadOnlyList<TypeMetrics> Types)
+{
+    public int TotalCyclomaticComplexity => Types.Sum(t => t.TotalCyclomaticComplexity);
+    public int TotalLinesOfExecutableCode => Types.Sum(t => t.TotalLinesOfExecutableCode);
+    public int TotalMethods => Types.Sum(t => t.Methods.Count);
+    public int MaxDepthOfInheritance => Types.Count > 0 ? Types.Max(t => t.DepthOfInheritance) : 0;
+    public double AvgMaintainabilityIndex => 
+        Types.SelectMany(t => t.Methods).DefaultIfEmpty().Average(m => m?.MaintainabilityIndex ?? 0);
 }
 
 /// <summary>
@@ -41,6 +63,18 @@ public record ProjectMetrics(
 
     /// <summary>Compiler diagnostics for this project.</summary>
     public DiagnosticSummary? Diagnostics { get; init; }
+
+    /// <summary>
+    /// Groups types by namespace for hierarchical reporting.
+    /// </summary>
+    public IReadOnlyList<NamespaceMetrics> GetNamespaceMetrics()
+    {
+        return Types
+            .GroupBy(t => t.Namespace)
+            .Select(g => new NamespaceMetrics(g.Key, g.ToList()))
+            .OrderBy(n => n.Name)
+            .ToList();
+    }
 }
 
 /// <summary>
