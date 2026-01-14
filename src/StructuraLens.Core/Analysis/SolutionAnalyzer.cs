@@ -20,6 +20,7 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
     private readonly ICouplingAnalyzer _couplingAnalyzer;
     private readonly IMetricsCalculator _metricsCalculator;
     private readonly IFileSystemService _fileSystem;
+    private readonly AnalysisOptions _options;
 
     public SolutionAnalyzer(
         ILogger<SolutionAnalyzer> logger,
@@ -27,7 +28,8 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
         IMSBuildWorkspaceFactory workspaceFactory,
         ICouplingAnalyzer couplingAnalyzer,
         IMetricsCalculator metricsCalculator,
-        IFileSystemService fileSystem)
+        IFileSystemService fileSystem,
+        AnalysisOptions? options = null)
     {
         _logger = logger;
         _nugetRestorer = nugetRestorer;
@@ -35,6 +37,25 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
         _couplingAnalyzer = couplingAnalyzer;
         _metricsCalculator = metricsCalculator;
         _fileSystem = fileSystem;
+        _options = options ?? new AnalysisOptions();
+    }
+
+    /// <summary>
+    /// Creates a dependency collector based on the configured aggregation strategy.
+    /// </summary>
+    private IDependencyCollector CreateDependencyCollector()
+    {
+        return _options.AggregationStrategy switch
+        {
+            DependencyAggregationStrategy.InMemory => new InMemoryDependencyCollector(),
+            DependencyAggregationStrategy.SQLite => new SQLiteDependencyCollector(
+                _options.SQLiteDatabasePath,
+                _options.SQLiteBatchSize),
+            DependencyAggregationStrategy.Adaptive => new AdaptiveDependencyCollector(
+                _options.MemoryThresholdMB,
+                _options.SQLiteBatchSize),
+            _ => throw new ArgumentException($"Unknown aggregation strategy: {_options.AggregationStrategy}")
+        };
     }
 
     /// <inheritdoc />
@@ -93,7 +114,7 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
 
         // Analyze projects in parallel for performance on large solutions
         // Use streaming dependency collector to reduce memory usage
-        using var dependencyCollector = new InMemoryDependencyCollector();
+        using var dependencyCollector = CreateDependencyCollector();
         var projectMetricsList = new System.Collections.Concurrent.ConcurrentBag<ProjectMetrics>();
         var completedCount = 0;
         var totalProjects = csharpProjects.Count;

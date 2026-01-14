@@ -7,7 +7,8 @@ public record DependencyCollectorStats(
     long TotalEdgesAdded,
     long UniqueEdgesCount,
     long MemoryUsageBytes,
-    string Strategy)
+    string Strategy,
+    string? DatabasePath = null)
 {
     /// <summary>
     /// Calculates the deduplication ratio (higher is better).
