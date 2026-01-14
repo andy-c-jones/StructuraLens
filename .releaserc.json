@@ -3,6 +3,34 @@
   "plugins": [
     "@semantic-release/commit-analyzer",
     "@semantic-release/release-notes-generator",
-    "@semantic-release/github"
+    [
+      "@semantic-release/exec",
+      {
+        "prepareCmd": "bash .github/scripts/build-binaries.sh ${nextRelease.version}"
+      }
+    ],
+    [
+      "@semantic-release/github",
+      {
+        "assets": [
+          {
+            "path": "artifacts/structuralens-linux-arm64-*.tar.gz",
+            "label": "Linux ARM64 Binary"
+          },
+          {
+            "path": "artifacts/structuralens-linux-x64-*.tar.gz",
+            "label": "Linux x64 Binary"
+          },
+          {
+            "path": "artifacts/structuralens-macos-arm64-*.tar.gz",
+            "label": "macOS ARM64 Binary (Apple Silicon)"
+          },
+          {
+            "path": "artifacts/structuralens-windows-x64-*.zip",
+            "label": "Windows x64 Binary"
+          }
+        ]
+      }
+    ]
   ]
 }

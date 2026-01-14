@@ -47,10 +47,6 @@ jobs:
             --self-contained true \
             -o ./artifacts/publish/linux-x64
 
-      - name: Build Docker image
-        run: |
-          docker build -t structura-lens:${{ github.sha }} -t structura-lens:latest -f Dockerfile .
-
       - name: Run StructuraLens analysis
         if: ${{ github.event_name == 'pull_request' }}
         uses: ./.github/actions/analyze
@@ -58,7 +54,7 @@ jobs:
           solution: 'StructuraLens.slnx'
           format: 'html'
           output: 'structuralens-report.html'
-          image: 'structura-lens:latest'
+          executable-path: './artifacts/publish/linux-x64/StructuraLens.Cli'
 
       - name: Upload analysis report
         if: ${{ github.event_name == 'pull_request' }}
@@ -80,4 +76,3 @@ jobs:
               issue_number: context.issue.number,
               body: `📊 Analysis complete. Report available [here](${artifactUrl}).`
             });
-
