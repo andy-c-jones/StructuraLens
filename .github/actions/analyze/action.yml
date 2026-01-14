@@ -1,5 +1,5 @@
 name: 'StructuraLens Analyze'
-description: 'Run StructuraLens analysis using Docker container'
+description: 'Run StructuraLens analysis using native executable'
 
 inputs:
   solution:
@@ -13,10 +13,10 @@ inputs:
     description: 'Output file path'
     required: false
     default: 'structuralens-report.html'
-  image:
-    description: 'Docker image to use'
+  executable-path:
+    description: 'Path to StructuraLens executable'
     required: false
-    default: 'structura-lens:latest'
+    default: './artifacts/publish/linux-x64/StructuraLens.Cli'
 
 outputs:
   report-path:
@@ -29,17 +29,7 @@ runs:
     - name: Run StructuraLens analysis
       shell: bash
       run: |
-        # Mount NuGet cache if available to avoid re-downloading packages
-        NUGET_MOUNT=""
-        if [ -d "$HOME/.nuget/packages" ]; then
-          NUGET_MOUNT="-v $HOME/.nuget/packages:/root/.nuget/packages:ro"
-        fi
-        
-        docker run --rm \
-          -v "${{ github.workspace }}:/workspace" \
-          $NUGET_MOUNT \
-          -w /workspace \
-          ${{ inputs.image }} \
-          analyze "${{ inputs.solution }}" \
+        chmod +x "${{ inputs.executable-path }}"
+        "${{ inputs.executable-path }}" analyze "${{ inputs.solution }}" \
           --format ${{ inputs.format }} \
           --out "${{ inputs.output }}"
