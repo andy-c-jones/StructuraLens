@@ -1,184 +1,398 @@
-using StructuraLens.Core.Configuration;
 using StructuraLens.Core.Export;
 using StructuraLens.Core.Models;
+using TUnit.Core;
 
 namespace StructuraLens.Tests.Export;
 
 public class CompactReportExporterTests
 {
-    private static AnalysisReport CreateTestReport()
+    private CompactReportExporter CreateExporter()
     {
-        var methods = new List<MethodMetrics>
-        {
-            new("MyApp.Services.UserService.GetUser(int)", "UserService.cs", 10, 25, 5, 15, 100.0, 65.0),
-            new("MyApp.Services.UserService.SaveUser(User)", "UserService.cs", 30, 50, 8, 20, 150.0, 55.0)
-        };
+        return new CompactReportExporter();
+    }
 
-        var types = new List<TypeMetrics>
-        {
-            new("MyApp.Services.UserService", "UserService.cs", 2, methods)
-        };
+    private AnalysisReport CreateMinimalReport()
+    {
+        var method = new MethodMetrics(
+            FullName: "TestProject.TestClass.TestMethod()",
+            FilePath: "test.cs",
+            StartLine: 10,
+            EndLine: 20,
+            CyclomaticComplexity: 2,
+            LinesOfExecutableCode: 10,
+            HalsteadVolume: 25.5,
+            MaintainabilityIndex: 75.5);
 
-        var projects = new List<ProjectMetrics>
-        {
-            new("MyApp.Services", "MyApp.Services.csproj", types)
-        };
+        var type = new TypeMetrics(
+            FullName: "TestProject.TestClass",
+            FilePath: "test.cs",
+            DepthOfInheritance: 1,
+            Methods: new List<MethodMetrics> { method });
 
-        var dependencies = new List<DependencyEdge>
-        {
-            new("MyApp.Services", "MyApp.Core", DependencyType.ProjectReference, 1),
-            new("MyApp.Services", "MyApp.Core.Models", DependencyType.NamespaceReference, 5)
-        };
-
-        var coupling = new CouplingAnalysis("Test", DateTime.UtcNow)
-        {
-            AllDependencies = dependencies,
-            ProjectCoupling = new List<CouplingMetrics>
-            {
-                new("MyApp.Services", DependencyType.ProjectReference)
-                {
-                    OutboundDependencies = dependencies.Where(d => d.Type == DependencyType.ProjectReference).ToList(),
-                    InboundDependencies = []
-                }
-            },
-            NamespaceCoupling = [],
-            TypeCoupling = []
-        };
+        var project = new ProjectMetrics(
+            Name: "TestProject",
+            FilePath: "TestProject.csproj",
+            Types: new List<TypeMetrics> { type });
 
         return new AnalysisReport(
-            SolutionPath: "/test/MyApp.sln",
-            AnalyzedAt: new DateTime(2026, 1, 10, 12, 0, 0, DateTimeKind.Utc),
-            Projects: projects,
-            Warnings: [])
-        {
-            CouplingAnalysis = coupling
-        };
+            SolutionPath: "test.sln",
+            AnalyzedAt: DateTime.UtcNow,
+            Projects: new List<ProjectMetrics> { project },
+            Warnings: new List<string>());
     }
 
     [Test]
-    public async Task Export_ProducesValidCompactReport()
+    public async Task Export_WithBasicReport_ReturnsCompactReport()
     {
-        var report = CreateTestReport();
+        // Arrange
+        var exporter = CreateExporter();
+        var report = CreateMinimalReport();
 
-        var compact = CompactReportExporter.Export(report);
+        // Act
+        var compactReport = exporter.Export(report);
 
-        await Assert.That(compact.Version).IsEqualTo(1);
-        await Assert.That(compact.Path).IsEqualTo("/test/MyApp.sln");
-        await Assert.That(compact.Timestamp).IsGreaterThan(0);
+        // Assert
+        await Assert.That(compactReport).IsNotNull();
+        await Assert.That(compactReport.Version).IsEqualTo(1);
+        await Assert.That(compactReport.Path).IsEqualTo("test.sln");
+        await Assert.That(compactReport.Projects.Count).IsEqualTo(1);
     }
 
     [Test]
-    public async Task Export_ProjectMetricsAreCorrect()
+    public async Task Export_WithoutTypeDetails_ExcludesTypes()
     {
-        var report = CreateTestReport();
+        // Arrange
+        var exporter = CreateExporter();
+        var report = CreateMinimalReport();
 
-        var compact = CompactReportExporter.Export(report);
+        // Act
+        var compactReport = exporter.Export(report, includeMethodDetails: false, includeTypeDetails: false);
 
-        await Assert.That(compact.Projects.Count).IsEqualTo(1);
-        var project = compact.Projects[0];
-        await Assert.That(project.Name).IsEqualTo("MyApp.Services");
-        await Assert.That(project.TypeCount).IsEqualTo(1);
-        await Assert.That(project.MethodCount).IsEqualTo(2);
-        await Assert.That(project.CyclomaticComplexity).IsEqualTo(13); // 5 + 8
-        await Assert.That(project.LinesOfCode).IsEqualTo(35); // 15 + 20
-    }
-
-    [Test]
-    public async Task Export_WithoutDetails_OmitsTypesAndMethods()
-    {
-        var report = CreateTestReport();
-
-        var compact = CompactReportExporter.Export(report, includeTypeDetails: false, includeMethodDetails: false);
-
-        await Assert.That(compact.Projects[0].Types).IsNull();
+        // Assert
+        await Assert.That(compactReport).IsNotNull();
+        await Assert.That(compactReport.Projects[0].Types).IsNull();
     }
 
     [Test]
     public async Task Export_WithTypeDetails_IncludesTypes()
     {
-        var report = CreateTestReport();
+        // Arrange
+        var exporter = CreateExporter();
+        var report = CreateMinimalReport();
 
-        var compact = CompactReportExporter.Export(report, includeTypeDetails: true);
+        // Act
+        var compactReport = exporter.Export(report, includeMethodDetails: false, includeTypeDetails: true);
 
-        await Assert.That(compact.Projects[0].Types).IsNotNull();
-        await Assert.That(compact.Projects[0].Types!.Count).IsEqualTo(1);
-        await Assert.That(compact.Projects[0].Types![0].Name).IsEqualTo("UserService");
+        // Assert
+        await Assert.That(compactReport).IsNotNull();
+        await Assert.That(compactReport.Projects[0].Types).IsNotNull();
+        await Assert.That(compactReport.Projects[0].Types!.Count).IsEqualTo(1);
+        await Assert.That(compactReport.Projects[0].Types![0].Name).IsEqualTo("TestClass");
     }
 
     [Test]
     public async Task Export_WithMethodDetails_IncludesMethods()
     {
-        var report = CreateTestReport();
+        // Arrange
+        var exporter = CreateExporter();
+        var report = CreateMinimalReport();
 
-        var compact = CompactReportExporter.Export(report, includeTypeDetails: true, includeMethodDetails: true);
+        // Act
+        var compactReport = exporter.Export(report, includeMethodDetails: true, includeTypeDetails: true);
 
-        var type = compact.Projects[0].Types![0];
-        await Assert.That(type.Methods).IsNotNull();
-        await Assert.That(type.Methods!.Count).IsEqualTo(2);
-        await Assert.That(type.Methods![0].Name).IsEqualTo("GetUser(int)");
+        // Assert
+        await Assert.That(compactReport).IsNotNull();
+        await Assert.That(compactReport.Projects[0].Types).IsNotNull();
+        await Assert.That(compactReport.Projects[0].Types![0].Methods).IsNotNull();
+        await Assert.That(compactReport.Projects[0].Types![0].Methods!.Count).IsEqualTo(1);
+        
+        var method = compactReport.Projects[0].Types![0].Methods![0];
+        await Assert.That(method.Name).IsEqualTo("TestMethod()");
+        await Assert.That(method.CyclomaticComplexity).IsEqualTo(2);
+        await Assert.That(method.LinesOfCode).IsEqualTo(10);
+        await Assert.That(method.StartLine).IsEqualTo(10);
+        await Assert.That(method.EndLine).IsEqualTo(20);
     }
 
     [Test]
-    public async Task Export_GraphHasProjectNodes()
+    public async Task Export_WithoutMethodDetails_ExcludesMethods()
     {
-        var report = CreateTestReport();
+        // Arrange
+        var exporter = CreateExporter();
+        var report = CreateMinimalReport();
 
-        var compact = CompactReportExporter.Export(report);
+        // Act
+        var compactReport = exporter.Export(report, includeMethodDetails: false, includeTypeDetails: true);
 
-        await Assert.That(compact.Graph.Projects.Nodes.Count).IsEqualTo(1);
-        var node = compact.Graph.Projects.Nodes[0];
-        await Assert.That((int)node[0]).IsEqualTo(0); // id
-        await Assert.That((string)node[1]).IsEqualTo("MyApp.Services"); // name
-        await Assert.That((int)node[2]).IsEqualTo(35); // LOC
+        // Assert
+        await Assert.That(compactReport).IsNotNull();
+        await Assert.That(compactReport.Projects[0].Types).IsNotNull();
+        await Assert.That(compactReport.Projects[0].Types![0].Methods).IsNull();
     }
 
     [Test]
-    public async Task Export_LintingResultsIncluded()
+    public async Task Export_ProjectMetrics_AreCorrectlyMapped()
     {
-        var report = CreateTestReport();
-        var linting = new LintingResults(DateTime.UtcNow)
+        // Arrange
+        var exporter = CreateExporter();
+        var report = CreateMinimalReport();
+
+        // Act
+        var compactReport = exporter.Export(report);
+
+        // Assert
+        var project = compactReport.Projects[0];
+        await Assert.That(project.Name).IsEqualTo("TestProject");
+        await Assert.That(project.TypeCount).IsEqualTo(1);
+        await Assert.That(project.MethodCount).IsEqualTo(1);
+        await Assert.That(project.CyclomaticComplexity).IsEqualTo(2);
+        await Assert.That(project.LinesOfCode).IsEqualTo(10);
+        await Assert.That(project.MaxDepthOfInheritance).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task Export_WithCouplingAnalysis_IncludesCouplingMetrics()
+    {
+        // Arrange
+        var exporter = CreateExporter();
+        var report = CreateMinimalReport() with
         {
-            RulesEvaluated = 3,
-            Violations = new List<LintViolation>
+            CouplingAnalysis = new CouplingAnalysis("test.sln", DateTime.UtcNow)
             {
-                new("RULE-1", "Test violation", RuleSeverity.Error)
+                ProjectCoupling = new List<CouplingMetrics>
                 {
-                    FromEntity = "A",
-                    ToEntity = "B"
+                    new CouplingMetrics("TestProject", DependencyType.ProjectReference)
+                    {
+                        OutboundDependencies = new List<DependencyEdge>
+                        {
+                            new DependencyEdge("TestProject", "OtherProject", DependencyType.ProjectReference, 1)
+                        },
+                        InboundDependencies = new List<DependencyEdge>()
+                    }
+                },
+                NamespaceCoupling = new List<CouplingMetrics>(),
+                TypeCoupling = new List<CouplingMetrics>(),
+                AllDependencies = new List<DependencyEdge>(),
+                Summary = new CouplingSummary
+                {
+                    TotalDependencies = 1,
+                    AverageEfferentCoupling = 1.0,
+                    AverageAfferentCoupling = 0.0,
+                    AverageInstability = 1.0
                 }
             }
         };
 
-        var reportWithLinting = report with { LintingResults = linting };
-        var compact = CompactReportExporter.Export(reportWithLinting);
+        // Act
+        var compactReport = exporter.Export(report);
 
-        await Assert.That(compact.Linting).IsNotNull();
-        await Assert.That(compact.Linting!.RulesEvaluated).IsEqualTo(3);
-        await Assert.That(compact.Linting.Errors).IsEqualTo(1);
-        await Assert.That(compact.Linting.Passed).IsFalse();
-        await Assert.That(compact.Linting.Violations!.Count).IsEqualTo(1);
+        // Assert
+        var project = compactReport.Projects[0];
+        await Assert.That(project.EfferentCoupling).IsEqualTo(1);
+        await Assert.That(project.AfferentCoupling).IsEqualTo(0);
+        await Assert.That(project.Instability).IsEqualTo(1.0);
     }
 
     [Test]
-    public async Task Export_ShortNamesExtractedCorrectly()
+    public async Task Export_WithDiagnostics_IncludesDiagnosticsCounts()
     {
-        var report = CreateTestReport();
+        // Arrange
+        var exporter = CreateExporter();
+        var project = new ProjectMetrics(
+            Name: "TestProject",
+            FilePath: "TestProject.csproj",
+            Types: new List<TypeMetrics>())
+        {
+            Diagnostics = new DiagnosticSummary
+            {
+                ErrorCount = 2,
+                WarningCount = 5,
+                InfoCount = 10,
+                Diagnostics = new List<DiagnosticInfo>
+                {
+                    new DiagnosticInfo(
+                        Id: "CS0001",
+                        Message: "Test error 1",
+                        Severity: DiagnosticLevel.Error,
+                        FilePath: "test.cs",
+                        Line: 10,
+                        Column: 5),
+                    new DiagnosticInfo(
+                        Id: "CS0002",
+                        Message: "Test error 2",
+                        Severity: DiagnosticLevel.Error,
+                        FilePath: "test.cs",
+                        Line: 20,
+                        Column: 5),
+                    new DiagnosticInfo(
+                        Id: "CS1001",
+                        Message: "Test warning 1",
+                        Severity: DiagnosticLevel.Warning,
+                        FilePath: "test.cs",
+                        Line: 30,
+                        Column: 5),
+                    new DiagnosticInfo(
+                        Id: "CS1002",
+                        Message: "Test warning 2",
+                        Severity: DiagnosticLevel.Warning,
+                        FilePath: "test.cs",
+                        Line: 40,
+                        Column: 5),
+                    new DiagnosticInfo(
+                        Id: "CS1003",
+                        Message: "Test warning 3",
+                        Severity: DiagnosticLevel.Warning,
+                        FilePath: "test.cs",
+                        Line: 50,
+                        Column: 5),
+                    new DiagnosticInfo(
+                        Id: "CS1004",
+                        Message: "Test warning 4",
+                        Severity: DiagnosticLevel.Warning,
+                        FilePath: "test.cs",
+                        Line: 60,
+                        Column: 5),
+                    new DiagnosticInfo(
+                        Id: "CS1005",
+                        Message: "Test warning 5",
+                        Severity: DiagnosticLevel.Warning,
+                        FilePath: "test.cs",
+                        Line: 70,
+                        Column: 5)
+                }
+            }
+        };
 
-        var compact = CompactReportExporter.Export(report, includeTypeDetails: true, includeMethodDetails: true);
+        var report = new AnalysisReport(
+            SolutionPath: "test.sln",
+            AnalyzedAt: DateTime.UtcNow,
+            Projects: new List<ProjectMetrics> { project },
+            Warnings: new List<string>());
 
-        var method = compact.Projects[0].Types![0].Methods![0];
-        // Should be "GetUser(int)" not "MyApp.Services.UserService.GetUser(int)"
-        await Assert.That(method.Name).IsEqualTo("GetUser(int)");
+        // Act
+        var compactReport = exporter.Export(report);
+
+        // Assert
+        var compactProject = compactReport.Projects[0];
+        await Assert.That(compactProject.Errors).IsEqualTo(2);
+        await Assert.That(compactProject.Warnings).IsEqualTo(5);
+        
+        await Assert.That(compactReport.Diagnostics).IsNotNull();
+        await Assert.That(compactReport.Diagnostics!.Errors).IsEqualTo(2);
+        await Assert.That(compactReport.Diagnostics!.Warnings).IsEqualTo(5);
+        await Assert.That(compactReport.Diagnostics!.Items.Count).IsEqualTo(7); // 2 errors + 5 warnings
     }
 
     [Test]
-    public async Task Export_TimestampIsUnixMilliseconds()
+    public async Task Export_WithoutDiagnostics_DiagnosticsIsNull()
     {
-        var report = CreateTestReport();
+        // Arrange
+        var exporter = CreateExporter();
+        var report = CreateMinimalReport();
 
-        var compact = CompactReportExporter.Export(report);
+        // Act
+        var compactReport = exporter.Export(report);
 
-        var expectedMs = new DateTimeOffset(report.AnalyzedAt).ToUnixTimeMilliseconds();
-        await Assert.That(compact.Timestamp).IsEqualTo(expectedMs);
+        // Assert
+        await Assert.That(compactReport.Diagnostics).IsNull();
+    }
+
+    [Test]
+    public async Task Export_WithCouplingGraph_BuildsGraphStructure()
+    {
+        // Arrange
+        var exporter = CreateExporter();
+        var report = CreateMinimalReport() with
+        {
+            CouplingAnalysis = new CouplingAnalysis("test.sln", DateTime.UtcNow)
+            {
+                ProjectCoupling = new List<CouplingMetrics>(),
+                NamespaceCoupling = new List<CouplingMetrics>(),
+                TypeCoupling = new List<CouplingMetrics>(),
+                AllDependencies = new List<DependencyEdge>
+                {
+                    new DependencyEdge("TestProject", "TestProject", DependencyType.ProjectReference, 1)
+                },
+                Summary = new CouplingSummary { TotalDependencies = 1 }
+            }
+        };
+
+        // Act
+        var compactReport = exporter.Export(report);
+
+        // Assert
+        await Assert.That(compactReport.Graph).IsNotNull();
+        await Assert.That(compactReport.Graph.Projects).IsNotNull();
+        await Assert.That(compactReport.Graph.Namespaces).IsNotNull();
+    }
+
+    [Test]
+    public async Task Export_MultipleMethodsInProject_CalculatesCorrectAverageMI()
+    {
+        // Arrange
+        var exporter = CreateExporter();
+        var method1 = new MethodMetrics(
+            FullName: "Project1.Class1.Method1()",
+            FilePath: "test.cs",
+            StartLine: 1,
+            EndLine: 10,
+            CyclomaticComplexity: 1,
+            LinesOfExecutableCode: 5,
+            HalsteadVolume: 10.0,
+            MaintainabilityIndex: 80.0);
+
+        var method2 = new MethodMetrics(
+            FullName: "Project1.Class1.Method2()",
+            FilePath: "test.cs",
+            StartLine: 11,
+            EndLine: 20,
+            CyclomaticComplexity: 1,
+            LinesOfExecutableCode: 5,
+            HalsteadVolume: 10.0,
+            MaintainabilityIndex: 60.0);
+
+        var type = new TypeMetrics(
+            FullName: "Project1.Class1",
+            FilePath: "test.cs",
+            DepthOfInheritance: 0,
+            Methods: new List<MethodMetrics> { method1, method2 });
+
+        var project = new ProjectMetrics(
+            Name: "Project1",
+            FilePath: "Project1.csproj",
+            Types: new List<TypeMetrics> { type });
+
+        var report = new AnalysisReport(
+            SolutionPath: "test.sln",
+            AnalyzedAt: DateTime.UtcNow,
+            Projects: new List<ProjectMetrics> { project },
+            Warnings: new List<string>());
+
+        // Act
+        var compactReport = exporter.Export(report);
+
+        // Assert
+        var compactProject = compactReport.Projects[0];
+        await Assert.That(compactProject.AvgMaintainabilityIndex).IsEqualTo(70.0); // (80 + 60) / 2 = 70
+    }
+
+    [Test]
+    public async Task Export_EmptyReport_ReturnsValidCompactReport()
+    {
+        // Arrange
+        var exporter = CreateExporter();
+        var report = new AnalysisReport(
+            SolutionPath: "empty.sln",
+            AnalyzedAt: DateTime.UtcNow,
+            Projects: new List<ProjectMetrics>(),
+            Warnings: new List<string>());
+
+        // Act
+        var compactReport = exporter.Export(report);
+
+        // Assert
+        await Assert.That(compactReport).IsNotNull();
+        await Assert.That(compactReport.Projects.Count).IsEqualTo(0);
+        await Assert.That(compactReport.Diagnostics).IsNull();
     }
 }

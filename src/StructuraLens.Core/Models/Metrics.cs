@@ -64,7 +64,7 @@ public record AnalysisReport(
     public CouplingAnalysis? CouplingAnalysis { get; init; }
 
     /// <summary>
-    /// Architecture linting results.
+    /// Statistics about dependency aggregation performance.
     /// </summary>
-    public LintingResults? LintingResults { get; init; }
+    public DependencyCollectorStats? AggregationStats { get; init; }
 }

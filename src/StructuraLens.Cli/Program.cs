@@ -1,14 +1,20 @@
 using System.CommandLine;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using StructuraLens.Cli.Logging;
+using StructuraLens.Core.Abstractions;
 using StructuraLens.Core.Analysis;
-using StructuraLens.Core.Configuration;
 using StructuraLens.Core.Export;
+using StructuraLens.Core.Infrastructure;
 using StructuraLens.Core.Models;
 
-// Configure logging
-using var loggerFactory = LoggerFactory.Create(builder =>
+// Configure DI container
+var services = new ServiceCollection();
+
+// Logging configuration
+services.AddLogging(builder =>
 {
     builder
         .AddConsole(options =>
@@ -18,7 +24,26 @@ using var loggerFactory = LoggerFactory.Create(builder =>
         .SetMinimumLevel(LogLevel.Information);
 });
 
-var logger = loggerFactory.CreateLogger("StructuraLens");
+// CLI logging (for Program class)
+services.AddSingleton<ILogger<Program>>(sp => 
+    sp.GetRequiredService<ILoggerFactory>().CreateLogger<Program>());
+
+// Core services
+services.AddSingleton<IMetricsCalculator, MetricsCalculator>();
+services.AddSingleton<ICouplingAnalyzer, CouplingAnalyzer>();
+services.AddSingleton<ISolutionAnalyzer, SolutionAnalyzer>();
+
+// Infrastructure services
+services.AddSingleton<INuGetRestorer, NuGetRestorer>();
+services.AddSingleton<IMSBuildRegistrationService, MSBuildRegistrationService>();
+services.AddSingleton<IMSBuildWorkspaceFactory, MSBuildWorkspaceFactory>();
+services.AddSingleton<IFileSystemService, FileSystemService>();
+
+// Export services
+services.AddSingleton<IReportExporter, CompactReportExporter>();
+services.AddSingleton<IReportGenerator, HtmlReportGenerator>();
+
+var serviceProvider = services.BuildServiceProvider();
 
 // Create options
 var outputOption = new Option<string?>("--out", "-o")
@@ -32,19 +57,29 @@ var formatOption = new Option<string>("--format", "-f")
     DefaultValueFactory = _ => "json"
 };
 
-var couplingModeOption = new Option<string?>("--coupling-mode", "-c")
-{
-    Description = "Coupling analysis mode: internal (own code only), filtered (exclude System/Microsoft), all (everything)"
-};
 
-var configOption = new Option<string?>("--config")
-{
-    Description = "Path to structuralens.json configuration file"
-};
 
 var verboseOption = new Option<bool>("--verbose", "-v")
 {
     Description = "Enable verbose logging output"
+};
+
+var aggregationStrategyOption = new Option<string>("--aggregation-strategy")
+{
+    Description = "Dependency aggregation strategy: InMemory, SQLite, or Adaptive (default: Adaptive)",
+    DefaultValueFactory = _ => "Adaptive"
+};
+
+var memoryThresholdOption = new Option<long>("--memory-threshold")
+{
+    Description = "Memory threshold in MB for adaptive strategy (default: 1024)",
+    DefaultValueFactory = _ => 1024L
+};
+
+var sqliteBatchSizeOption = new Option<int>("--sqlite-batch-size")
+{
+    Description = "Batch size for SQLite collector (default: 1000)",
+    DefaultValueFactory = _ => 1000
 };
 
 // Create path argument
@@ -58,24 +93,36 @@ var analyzeCommand = new Command("analyze", "Analyze a solution or project for c
 analyzeCommand.Arguments.Add(pathArgument);
 analyzeCommand.Options.Add(outputOption);
 analyzeCommand.Options.Add(formatOption);
-analyzeCommand.Options.Add(couplingModeOption);
-analyzeCommand.Options.Add(configOption);
+
 analyzeCommand.Options.Add(verboseOption);
+analyzeCommand.Options.Add(aggregationStrategyOption);
+analyzeCommand.Options.Add(memoryThresholdOption);
+analyzeCommand.Options.Add(sqliteBatchSizeOption);
 
 analyzeCommand.SetAction(async (parseResult, cancellationToken) =>
 {
     var path = parseResult.GetValue(pathArgument)!;
     var output = parseResult.GetValue(outputOption);
     var format = parseResult.GetValue(formatOption) ?? "json";
-    var couplingMode = parseResult.GetValue(couplingModeOption);
-    var configPath = parseResult.GetValue(configOption);
     var verbose = parseResult.GetValue(verboseOption);
+    var aggregationStrategy = parseResult.GetValue(aggregationStrategyOption) ?? "Adaptive";
+    var memoryThreshold = parseResult.GetValue(memoryThresholdOption);
+    var sqliteBatchSize = parseResult.GetValue(sqliteBatchSizeOption);
+
+    // Parse analysis options
+    var analysisOptions = new AnalysisOptions
+    {
+        AggregationStrategy = Enum.Parse<DependencyAggregationStrategy>(aggregationStrategy, ignoreCase: true),
+        MemoryThresholdMB = memoryThreshold,
+        SQLiteBatchSize = sqliteBatchSize
+    };
 
     // Adjust logging level based on verbose flag
+    IServiceProvider executionServiceProvider;
     if (verbose)
     {
-        loggerFactory.Dispose();
-        using var verboseLoggerFactory = LoggerFactory.Create(builder =>
+        var verboseServices = new ServiceCollection();
+        verboseServices.AddLogging(builder =>
         {
             builder
                 .AddConsole(options =>
@@ -84,94 +131,103 @@ analyzeCommand.SetAction(async (parseResult, cancellationToken) =>
                 })
                 .SetMinimumLevel(LogLevel.Debug);
         });
-        var verboseLogger = verboseLoggerFactory.CreateLogger("StructuraLens");
-        return await ExecuteAnalysisAsync(path, output, format, couplingMode, configPath, verboseLogger, cancellationToken);
+        
+        // CLI logging (for Program class)
+        verboseServices.AddSingleton<ILogger<Program>>(sp => 
+            sp.GetRequiredService<ILoggerFactory>().CreateLogger<Program>());
+        
+        // Register all other services
+        verboseServices.AddSingleton<IMetricsCalculator, MetricsCalculator>();
+        verboseServices.AddSingleton<ICouplingAnalyzer, CouplingAnalyzer>();
+        verboseServices.AddSingleton<ISolutionAnalyzer, SolutionAnalyzer>();
+        verboseServices.AddSingleton<INuGetRestorer, NuGetRestorer>();
+        verboseServices.AddSingleton<IMSBuildRegistrationService, MSBuildRegistrationService>();
+        verboseServices.AddSingleton<IMSBuildWorkspaceFactory, MSBuildWorkspaceFactory>();
+        verboseServices.AddSingleton<IFileSystemService, FileSystemService>();
+        verboseServices.AddSingleton<IReportExporter, CompactReportExporter>();
+        verboseServices.AddSingleton<IReportGenerator, HtmlReportGenerator>();
+        
+        executionServiceProvider = verboseServices.BuildServiceProvider();
+    }
+    else
+    {
+        executionServiceProvider = serviceProvider;
     }
 
-    return await ExecuteAnalysisAsync(path, output, format, couplingMode, configPath, logger, cancellationToken);
+    return await ExecuteAnalysisAsync(path, output, format, analysisOptions, executionServiceProvider, cancellationToken);
 });
 
 static async Task<int> ExecuteAnalysisAsync(
     string path,
     string? output,
     string format,
-    string? couplingMode,
-    string? configPath,
-    ILogger logger,
+    AnalysisOptions analysisOptions,
+    IServiceProvider serviceProvider,
     CancellationToken cancellationToken)
 {
+    var logger = serviceProvider.GetRequiredService<ILogger<Program>>();
+    
     try
     {
-        Console.WriteLine("StructuraLens v0.1.0");
-        Console.WriteLine($"Analyzing: {path}");
-        Console.WriteLine();
-
-        // Build configuration: explicit path > auto-discovery > defaults
-        StructuraLensConfig config;
-        if (!string.IsNullOrEmpty(configPath) && File.Exists(configPath))
+        ProgramLog.ApplicationStartup(logger, "0.1.0");
+        ProgramLog.AnalyzingPath(logger, path);
+        ProgramLog.CouplingModeEnabled(logger, "All");
+        
+        // Log aggregation strategy
+        ProgramLog.AggregationStrategy(logger, analysisOptions.AggregationStrategy.ToString());
+        if (analysisOptions.AggregationStrategy == DependencyAggregationStrategy.Adaptive)
         {
-            var json = await File.ReadAllTextAsync(configPath, cancellationToken);
-            config = System.Text.Json.JsonSerializer.Deserialize<StructuraLensConfig>(json, new JsonSerializerOptions 
-            { 
-                PropertyNameCaseInsensitive = true 
-            }) ?? ConfigurationLoader.CreateDefaultConfig();
-            Console.WriteLine($"Using config: {configPath}");
-        }
-        else
-        {
-            // Auto-discover configuration from solution/project directory
-            config = await ConfigurationLoader.LoadSolutionConfigAsync(path, cancellationToken);
-            if (config.Rules.Count > 0 || config.Coupling.Mode != CouplingMode.Filtered)
-            {
-                Console.WriteLine("Using auto-discovered configuration");
-            }
+            ProgramLog.MemoryThreshold(logger, analysisOptions.MemoryThresholdMB);
         }
 
-        // Override coupling mode from CLI if explicitly specified
-        if (!string.IsNullOrEmpty(couplingMode))
-        {
-            config.Coupling.Mode = couplingMode.ToLowerInvariant() switch
-            {
-                "internal" => CouplingMode.Internal,
-                "all" => CouplingMode.All,
-                _ => CouplingMode.Filtered
-            };
-        }
-
-        Console.WriteLine($"Coupling mode: {config.Coupling.Mode}");
-        if (config.Rules.Count > 0)
-        {
-            Console.WriteLine($"Architecture rules: {config.Rules.Count}");
-        }
-        Console.WriteLine();
-
-        var analyzer = new SolutionAnalyzer(logger);
+        // Create analyzer with options
+        var analyzer = new SolutionAnalyzer(
+            serviceProvider.GetRequiredService<ILogger<SolutionAnalyzer>>(),
+            serviceProvider.GetRequiredService<INuGetRestorer>(),
+            serviceProvider.GetRequiredService<IMSBuildWorkspaceFactory>(),
+            serviceProvider.GetRequiredService<ICouplingAnalyzer>(),
+            serviceProvider.GetRequiredService<IMetricsCalculator>(),
+            serviceProvider.GetRequiredService<IFileSystemService>(),
+            analysisOptions);
+            
         var report = path.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)
-            ? await analyzer.AnalyzeProjectAsync(path, config, cancellationToken)
-            : await analyzer.AnalyzeSolutionAsync(path, config, cancellationToken);
+            ? await analyzer.AnalyzeProjectAsync(path, cancellationToken)
+            : await analyzer.AnalyzeSolutionAsync(path, cancellationToken);
 
         if (report.Warnings.Count > 0)
         {
-            Console.ForegroundColor = ConsoleColor.Yellow;
             foreach (var warning in report.Warnings.Take(10))
             {
-                Console.WriteLine($"Warning: {warning}");
+                ProgramLog.AnalysisWarning(logger, warning);
             }
             if (report.Warnings.Count > 10)
             {
-                Console.WriteLine($"... and {report.Warnings.Count - 10} more warnings");
+                ProgramLog.AdditionalWarnings(logger, report.Warnings.Count - 10);
             }
-            Console.ResetColor();
-            Console.WriteLine();
+        }
+
+        // Display aggregation stats
+        if (report.AggregationStats != null)
+        {
+            var stats = report.AggregationStats;
+            ProgramLog.AggregationStatsHeader(logger);
+            ProgramLog.AggregationStatsStrategy(logger, stats.Strategy);
+            ProgramLog.AggregationStatsTotalEdges(logger, stats.TotalEdgesAdded);
+            ProgramLog.AggregationStatsUniqueEdges(logger, stats.UniqueEdgesCount);
+            ProgramLog.AggregationStatsDeduplication(logger, stats.DeduplicationRatio);
+            ProgramLog.AggregationStatsMemory(logger, stats.MemoryUsageMB);
+            if (stats.DatabasePath != null)
+                ProgramLog.AggregationStatsDatabase(logger, stats.DatabasePath);
         }
 
         if (format == "summary")
         {
-            PrintSummary(report);
+            PrintSummary(report, logger);
         }
         else if (format == "compact")
         {
-            var compactReport = CompactReportExporter.Export(report);
+            var exporter = serviceProvider.GetRequiredService<IReportExporter>();
+            var compactReport = exporter.Export(report);
             var jsonOptions = new JsonSerializerOptions
             {
                 PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -183,7 +239,7 @@ static async Task<int> ExecuteAnalysisAsync(
             if (!string.IsNullOrEmpty(output))
             {
                 await File.WriteAllTextAsync(output, json, cancellationToken);
-                Console.WriteLine($"Compact report written to: {output} ({json.Length:N0} bytes)");
+                ProgramLog.CompactReportWritten(logger, output, json.Length);
             }
             else
             {
@@ -192,12 +248,13 @@ static async Task<int> ExecuteAnalysisAsync(
         }
         else if (format == "html")
         {
-            var html = HtmlReportGenerator.Generate(report);
+            var generator = serviceProvider.GetRequiredService<IReportGenerator>();
+            var html = generator.GenerateHtml(report);
 
             if (!string.IsNullOrEmpty(output))
             {
                 await File.WriteAllTextAsync(output, html, cancellationToken);
-                Console.WriteLine($"HTML report written to: {output} ({html.Length:N0} bytes)");
+                ProgramLog.HtmlReportWritten(logger, output, html.Length);
             }
             else
             {
@@ -218,7 +275,7 @@ static async Task<int> ExecuteAnalysisAsync(
             if (!string.IsNullOrEmpty(output))
             {
                 await File.WriteAllTextAsync(output, json, cancellationToken);
-                Console.WriteLine($"Report written to: {output}");
+                ProgramLog.ReportWritten(logger, output);
             }
             else
             {
@@ -226,73 +283,19 @@ static async Task<int> ExecuteAnalysisAsync(
             }
         }
 
-        // Return non-zero exit code if there are linting errors
-        if (report.LintingResults != null && report.LintingResults.ErrorCount > 0)
-        {
-            return 1;
-        }
-
         return 0;
     }
     catch (Exception ex)
     {
-        Console.ForegroundColor = ConsoleColor.Red;
-        Console.WriteLine($"Error: {ex.Message}");
-        Console.ResetColor();
+        ProgramLog.AnalysisError(logger, ex.Message);
         return 1;
     }
 }
 
-// Create init subcommand
-var initPathArgument = new Argument<string?>("path")
-{
-    Description = "Directory to create structuralens.json in (default: current directory)",
-    Arity = ArgumentArity.ZeroOrOne
-};
-
-var initCommand = new Command("init", "Create a default structuralens.json configuration file");
-initCommand.Arguments.Add(initPathArgument);
-
-initCommand.SetAction(async (parseResult, cancellationToken) =>
-{
-    var path = parseResult.GetValue(initPathArgument) ?? Directory.GetCurrentDirectory();
-    var directory = Directory.Exists(path) ? path : Path.GetDirectoryName(path) ?? Directory.GetCurrentDirectory();
-    var configPath = Path.Combine(directory, "structuralens.json");
-
-    if (File.Exists(configPath))
-    {
-        Console.ForegroundColor = ConsoleColor.Yellow;
-        Console.WriteLine($"Configuration file already exists: {configPath}");
-        Console.ResetColor();
-        return 1;
-    }
-
-    try
-    {
-        await ConfigurationLoader.CreateDefaultConfigAsync(directory, cancellationToken);
-        Console.WriteLine($"Created: {configPath}");
-        Console.WriteLine();
-        Console.WriteLine("Edit this file to configure:");
-        Console.WriteLine("  - Coupling analysis mode and filters");
-        Console.WriteLine("  - Architecture linting rules");
-        Console.WriteLine("  - Output preferences");
-        Console.WriteLine();
-        Console.WriteLine("See: https://github.com/your-org/structuralens/blob/main/docs/configuration.md");
-        return 0;
-    }
-    catch (Exception ex)
-    {
-        Console.ForegroundColor = ConsoleColor.Red;
-        Console.WriteLine($"Error: {ex.Message}");
-        Console.ResetColor();
-        return 1;
-    }
-});
 
 // Create root command
 var rootCommand = new RootCommand("StructuraLens - C# code complexity analyzer");
 rootCommand.Subcommands.Add(analyzeCommand);
-rootCommand.Subcommands.Add(initCommand);
 
 rootCommand.SetAction(_ =>
 {
@@ -301,7 +304,6 @@ rootCommand.SetAction(_ =>
     Console.WriteLine();
     Console.WriteLine("Commands:");
     Console.WriteLine("  analyze <path>   Analyze a solution or project for code metrics");
-    Console.WriteLine("  init [path]      Create a default structuralens.json configuration file");
     Console.WriteLine();
     Console.WriteLine("Run 'structuralens <command> --help' for more information on a command.");
     return 0;
@@ -310,7 +312,7 @@ rootCommand.SetAction(_ =>
 var parseResult = rootCommand.Parse(args);
 return await parseResult.InvokeAsync();
 
-static void PrintSummary(AnalysisReport report)
+static void PrintSummary(AnalysisReport report, ILogger logger)
 {
     Console.WriteLine("=== Analysis Summary ===");
     Console.WriteLine($"Solution: {report.SolutionPath}");
@@ -339,47 +341,22 @@ static void PrintSummary(AnalysisReport report)
             Console.WriteLine($"Most Unstable Entity: {coupling.MostUnstableEntity}");
     }
 
-    // Print linting results
-    if (report.LintingResults != null)
+    // Display aggregation stats
+    if (report.AggregationStats != null)
     {
         Console.WriteLine();
-        Console.WriteLine("=== Architecture Linting ===");
-        Console.WriteLine($"Rules Evaluated: {report.LintingResults.RulesEvaluated}");
-        Console.WriteLine($"Errors: {report.LintingResults.ErrorCount}");
-        Console.WriteLine($"Warnings: {report.LintingResults.WarningCount}");
-        Console.WriteLine($"Info: {report.LintingResults.InfoCount}");
-        Console.WriteLine($"Status: {(report.LintingResults.Passed ? "PASSED" : "FAILED")}");
-
-        if (report.LintingResults.Violations.Count > 0)
-        {
-            Console.WriteLine();
-            Console.WriteLine("Violations:");
-            foreach (var violation in report.LintingResults.Violations.Take(20))
-            {
-                var color = violation.Severity switch
-                {
-                    StructuraLens.Core.Configuration.RuleSeverity.Error => ConsoleColor.Red,
-                    StructuraLens.Core.Configuration.RuleSeverity.Warning => ConsoleColor.Yellow,
-                    _ => ConsoleColor.Cyan
-                };
-                Console.ForegroundColor = color;
-                var severityLabel = violation.Severity.ToString().ToUpper();
-                Console.Write($"  [{severityLabel}] ");
-                Console.ResetColor();
-                Console.WriteLine($"{violation.RuleId}: {violation.Message}");
-                if (violation.FromEntity != null && violation.ToEntity != null)
-                {
-                    Console.WriteLine($"         {violation.FromEntity} → {violation.ToEntity}");
-                }
-            }
-
-            if (report.LintingResults.Violations.Count > 20)
-            {
-                Console.WriteLine($"  ... and {report.LintingResults.Violations.Count - 20} more violations");
-            }
-        }
+        ProgramLog.AggregationStatsHeader(logger);
+        var stats = report.AggregationStats;
+        ProgramLog.AggregationStatsStrategy(logger, stats.Strategy);
+        ProgramLog.AggregationStatsTotalEdges(logger, stats.TotalEdgesAdded);
+        ProgramLog.AggregationStatsUniqueEdges(logger, stats.UniqueEdgesCount);
+        ProgramLog.AggregationStatsDeduplication(logger, stats.DeduplicationRatio);
+        ProgramLog.AggregationStatsMemory(logger, stats.MemoryUsageMB);
+        if (stats.DatabasePath != null)
+            ProgramLog.AggregationStatsDatabase(logger, stats.DatabasePath);
     }
-    
+
+
     Console.WriteLine();
 
     foreach (var project in report.Projects)

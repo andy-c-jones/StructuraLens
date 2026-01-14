@@ -1,10 +1,9 @@
-using Microsoft.Build.Locator;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Microsoft.CodeAnalysis.MSBuild;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
-using StructuraLens.Core.Configuration;
+
+using StructuraLens.Core.Abstractions;
+using StructuraLens.Core.Analysis.Logging;
 using StructuraLens.Core.Models;
 
 namespace StructuraLens.Core.Analysis;
@@ -12,83 +11,85 @@ namespace StructuraLens.Core.Analysis;
 /// <summary>
 /// Main analyzer that loads a solution and computes metrics for all projects.
 /// </summary>
-public sealed class SolutionAnalyzer
+public sealed class SolutionAnalyzer : ISolutionAnalyzer
 {
-    private static bool _msBuildRegistered;
-    private static readonly object _lock = new();
-
     private readonly System.Collections.Concurrent.ConcurrentBag<string> _warnings = [];
-    private readonly ILogger _logger;
+    private readonly ILogger<SolutionAnalyzer> _logger;
+    private readonly INuGetRestorer _nugetRestorer;
+    private readonly IMSBuildWorkspaceFactory _workspaceFactory;
+    private readonly ICouplingAnalyzer _couplingAnalyzer;
+    private readonly IMetricsCalculator _metricsCalculator;
+    private readonly IFileSystemService _fileSystem;
+    private readonly AnalysisOptions _options;
 
-    public SolutionAnalyzer(ILogger? logger = null)
+    public SolutionAnalyzer(
+        ILogger<SolutionAnalyzer> logger,
+        INuGetRestorer nugetRestorer,
+        IMSBuildWorkspaceFactory workspaceFactory,
+        ICouplingAnalyzer couplingAnalyzer,
+        IMetricsCalculator metricsCalculator,
+        IFileSystemService fileSystem,
+        AnalysisOptions? options = null)
     {
-        _logger = logger ?? NullLogger.Instance;
+        _logger = logger;
+        _nugetRestorer = nugetRestorer;
+        _workspaceFactory = workspaceFactory;
+        _couplingAnalyzer = couplingAnalyzer;
+        _metricsCalculator = metricsCalculator;
+        _fileSystem = fileSystem;
+        _options = options ?? new AnalysisOptions();
     }
 
-    public static void EnsureMSBuildRegistered()
+    /// <summary>
+    /// Creates a dependency collector based on the configured aggregation strategy.
+    /// </summary>
+    private IDependencyCollector CreateDependencyCollector()
     {
-        if (_msBuildRegistered) return;
-
-        lock (_lock)
+        return _options.AggregationStrategy switch
         {
-            if (_msBuildRegistered) return;
-
-            var instances = MSBuildLocator.QueryVisualStudioInstances().ToList();
-            if (instances.Count > 0)
-            {
-                MSBuildLocator.RegisterInstance(instances.OrderByDescending(i => i.Version).First());
-            }
-            else
-            {
-                MSBuildLocator.RegisterDefaults();
-            }
-            _msBuildRegistered = true;
-        }
+            DependencyAggregationStrategy.InMemory => new InMemoryDependencyCollector(),
+            DependencyAggregationStrategy.SQLite => new SQLiteDependencyCollector(
+                _options.SQLiteDatabasePath,
+                _options.SQLiteBatchSize),
+            DependencyAggregationStrategy.Adaptive => new AdaptiveDependencyCollector(
+                _options.MemoryThresholdMB,
+                _options.SQLiteBatchSize),
+            _ => throw new ArgumentException($"Unknown aggregation strategy: {_options.AggregationStrategy}")
+        };
     }
 
-    /// <summary>
-    /// Analyzes a solution using default configuration.
-    /// </summary>
-    public Task<AnalysisReport> AnalyzeSolutionAsync(string solutionPath, CancellationToken cancellationToken = default)
-    {
-        return AnalyzeSolutionAsync(solutionPath, ConfigurationLoader.CreateDefaultConfig(), cancellationToken);
-    }
+    /// <inheritdoc />
+    public async Task<AnalysisReport> AnalyzeSolutionAsync(string solutionPath, CancellationToken cancellationToken = default)
+    {     
+        SolutionAnalyzerLog.StartingSolutionAnalysis(_logger, solutionPath);
 
-    /// <summary>
-    /// Analyzes a solution with specified configuration.
-    /// </summary>
-    public async Task<AnalysisReport> AnalyzeSolutionAsync(string solutionPath, StructuraLensConfig config, CancellationToken cancellationToken = default)
-    {
-        _logger.LogInformation("Starting solution analysis: {SolutionPath}", solutionPath);
-        EnsureMSBuildRegistered();
-
-        var fullPath = Path.GetFullPath(solutionPath);
-        if (!File.Exists(fullPath))
+        var fullPath = _fileSystem.GetFullPath(solutionPath);
+        if (!_fileSystem.FileExists(fullPath))
         {
             throw new FileNotFoundException($"Solution file not found: {fullPath}");
         }
 
         // Restore NuGet packages to ensure all references are available
-        _logger.LogInformation("Restoring NuGet packages...");
-        await RestorePackagesAsync(fullPath, cancellationToken);
+        SolutionAnalyzerLog.RestoringNuGetPackages(_logger);
+        await _nugetRestorer.RestorePackagesAsync(fullPath, cancellationToken);
 
-        _logger.LogInformation("Loading solution into MSBuild workspace...");
-        using var workspace = MSBuildWorkspace.Create();
+        SolutionAnalyzerLog.LoadingSolutionIntoWorkspace(_logger);
+        using var workspace = _workspaceFactory.Create();
         workspace.RegisterWorkspaceFailedHandler(e =>
         {
             if (e.Diagnostic.Kind == WorkspaceDiagnosticKind.Warning)
             {
                 _warnings.Add($"Workspace warning: {e.Diagnostic.Message}");
-                _logger.LogWarning("Workspace warning: {Message}", e.Diagnostic.Message);
+                SolutionAnalyzerLog.WorkspaceWarning(_logger, e.Diagnostic.Message);
             }
         });
 
         var solution = await workspace.OpenSolutionAsync(fullPath, cancellationToken: cancellationToken);
         var csharpProjects = solution.Projects.Where(p => p.Language == LanguageNames.CSharp).ToList();
-        _logger.LogInformation("Loaded solution with {ProjectCount} C# projects", csharpProjects.Count);
+        SolutionAnalyzerLog.LoadedSolutionWithProjects(_logger, csharpProjects.Count);
 
         // Pre-fetch all compilations in parallel and cache them for reuse
-        _logger.LogInformation("Pre-fetching compilations for all projects...");
+        SolutionAnalyzerLog.PreFetchingCompilations(_logger);
         var compilationCache = new System.Collections.Concurrent.ConcurrentDictionary<string, Compilation>();
         
         await Parallel.ForEachAsync(csharpProjects, new ParallelOptions
@@ -105,15 +106,16 @@ public sealed class SolutionAnalyzer
             else
             {
                 _warnings.Add($"Could not get compilation for project: {project.Name}");
-                _logger.LogWarning("Could not get compilation for project: {ProjectName}", project.Name);
+                SolutionAnalyzerLog.CouldNotGetCompilation(_logger, project.Name);
             }
         });
 
-        _logger.LogInformation("Cached {Count} compilations", compilationCache.Count);
+        SolutionAnalyzerLog.CachedCompilations(_logger, compilationCache.Count);
 
         // Analyze projects in parallel for performance on large solutions
-        // Collect both metrics AND coupling dependencies in a single pass
-        var projectResultsBag = new System.Collections.Concurrent.ConcurrentBag<(ProjectMetrics metrics, List<DependencyEdge> dependencies)>();
+        // Use streaming dependency collector to reduce memory usage
+        using var dependencyCollector = CreateDependencyCollector();
+        var projectMetricsList = new System.Collections.Concurrent.ConcurrentBag<ProjectMetrics>();
         var completedCount = 0;
         var totalProjects = csharpProjects.Count;
 
@@ -124,117 +126,67 @@ public sealed class SolutionAnalyzer
         }, async (project, ct) =>
         {
             var currentIndex = Interlocked.Increment(ref completedCount);
-            _logger.LogInformation("Analyzing project {Index}/{Total}: {ProjectName}", currentIndex, totalProjects, project.Name);
+            SolutionAnalyzerLog.AnalyzingProject(_logger, currentIndex, totalProjects, project.Name);
             
-            var result = await AnalyzeProjectWithCouplingAsync(project, compilationCache, ct);
-            projectResultsBag.Add(result);
+            var metrics = await AnalyzeProjectWithCouplingAsync(project, compilationCache, dependencyCollector, ct);
+            projectMetricsList.Add(metrics);
             
-            _logger.LogInformation("Completed {ProjectName}: {TypeCount} types, {MethodCount} methods, {DepCount} dependencies", 
-                project.Name, 
-                result.metrics.Types.Count, 
-                result.metrics.TotalMethods,
-                result.dependencies.Count);
+            SolutionAnalyzerLog.CompletedProject(_logger, project.Name, metrics.Types.Count, metrics.TotalMethods, 0);
         });
 
-        // Extract metrics and dependencies from combined results
-        var projectMetricsList = new List<ProjectMetrics>();
-        var allDependencies = new List<DependencyEdge>();
-        foreach (var (metrics, dependencies) in projectResultsBag)
-        {
-            projectMetricsList.Add(metrics);
-            allDependencies.AddRange(dependencies);
-        }
+        // Build coupling analysis from streaming collector (already aggregated)
+        var collectorStats = dependencyCollector.GetStats();
+        SolutionAnalyzerLog.BuildingCouplingAnalysis(_logger, (int)collectorStats.UniqueEdgesCount);
+        var couplingAnalysis = _couplingAnalyzer.BuildCouplingAnalysisFromCollector(solution, dependencyCollector);
 
-        // Build coupling analysis from pre-collected dependencies (no separate document pass needed)
-        _logger.LogInformation("Building coupling analysis from {DepCount} dependencies with mode: {CouplingMode}", 
-            allDependencies.Count, config.Coupling.Mode);
-        var couplingAnalysis = CouplingAnalyzer.BuildCouplingAnalysisFromDependencies(solution, allDependencies, config);
-
-        // Run architecture linting if rules are configured
-        LintingResults? lintingResults = null;
-        if (config.Rules.Count > 0)
-        {
-            _logger.LogInformation("Evaluating {RuleCount} architecture rules...", config.Rules.Count);
-            lintingResults = ArchitectureLinter.Evaluate(couplingAnalysis, config.Rules);
-            _logger.LogInformation("Linting complete: {ErrorCount} errors, {WarningCount} warnings", 
-                lintingResults.ErrorCount, 
-                lintingResults.WarningCount);
-        }
-
-        _logger.LogInformation("Analysis complete. Total: {ProjectCount} projects, {TypeCount} types, {MethodCount} methods",
-            projectMetricsList.Count,
-            projectMetricsList.Sum(p => p.Types.Count),
-            projectMetricsList.Sum(p => p.TotalMethods));
+        SolutionAnalyzerLog.AnalysisComplete(_logger, projectMetricsList.Count, projectMetricsList.Sum(p => p.Types.Count), projectMetricsList.Sum(p => p.TotalMethods));
 
         return new AnalysisReport(
             SolutionPath: fullPath,
             AnalyzedAt: DateTime.UtcNow,
-            Projects: projectMetricsList,
+            Projects: projectMetricsList.ToList(),
             Warnings: _warnings.ToList())
         {
             CouplingAnalysis = couplingAnalysis,
-            LintingResults = lintingResults
+            AggregationStats = collectorStats
         };
     }
 
-    /// <summary>
-    /// Analyzes a project using default configuration.
-    /// </summary>
-    public Task<AnalysisReport> AnalyzeProjectAsync(string projectPath, CancellationToken cancellationToken = default)
+    /// <inheritdoc />
+    public async Task<AnalysisReport> AnalyzeProjectAsync(string projectPath, CancellationToken cancellationToken = default)
     {
-        return AnalyzeProjectAsync(projectPath, ConfigurationLoader.CreateDefaultConfig(), cancellationToken);
-    }
+        SolutionAnalyzerLog.StartingProjectAnalysis(_logger, projectPath);
 
-    /// <summary>
-    /// Analyzes a project with specified configuration.
-    /// </summary>
-    public async Task<AnalysisReport> AnalyzeProjectAsync(string projectPath, StructuraLensConfig config, CancellationToken cancellationToken = default)
-    {
-        _logger.LogInformation("Starting project analysis: {ProjectPath}", projectPath);
-        EnsureMSBuildRegistered();
-
-        var fullPath = Path.GetFullPath(projectPath);
-        if (!File.Exists(fullPath))
+        var fullPath = _fileSystem.GetFullPath(projectPath);
+        if (!_fileSystem.FileExists(fullPath))
         {
             throw new FileNotFoundException($"Project file not found: {fullPath}");
         }
 
-        // Restore NuGet packages to ensure all references are available
-        _logger.LogInformation("Restoring NuGet packages...");
-        await RestorePackagesAsync(fullPath, cancellationToken);
+        // Restore NuGet packages
+        SolutionAnalyzerLog.RestoringNuGetPackages(_logger);
+        await _nugetRestorer.RestorePackagesAsync(fullPath, cancellationToken);
 
-        _logger.LogInformation("Loading project into MSBuild workspace...");
-        using var workspace = MSBuildWorkspace.Create();
+        SolutionAnalyzerLog.LoadingProjectIntoWorkspace(_logger);
+        using var workspace = _workspaceFactory.Create();
         workspace.RegisterWorkspaceFailedHandler(e =>
         {
             if (e.Diagnostic.Kind == WorkspaceDiagnosticKind.Warning)
             {
                 _warnings.Add($"Workspace warning: {e.Diagnostic.Message}");
-                _logger.LogWarning("Workspace warning: {Message}", e.Diagnostic.Message);
+                SolutionAnalyzerLog.WorkspaceWarning(_logger, e.Diagnostic.Message);
             }
         });
 
         var project = await workspace.OpenProjectAsync(fullPath, cancellationToken: cancellationToken);
-        _logger.LogInformation("Analyzing project: {ProjectName}", project.Name);
+        SolutionAnalyzerLog.AnalyzingProjectSingle(_logger, project.Name);
         
         // For single project, create an empty cache (compilation will be fetched on demand)
         var compilationCache = new System.Collections.Concurrent.ConcurrentDictionary<string, Compilation>();
         var projectMetrics = await AnalyzeProjectAsync(project, compilationCache, cancellationToken);
 
-        // Analyze internal coupling within the project with configuration
-        _logger.LogInformation("Analyzing project coupling with mode: {CouplingMode}", config.Coupling.Mode);
-        var couplingAnalysis = await CouplingAnalyzer.AnalyzeProjectCouplingAsync(project, config, _logger, cancellationToken);
-
-        // Run architecture linting if rules are configured
-        LintingResults? lintingResults = null;
-        if (config.Rules.Count > 0)
-        {
-            _logger.LogInformation("Evaluating {RuleCount} architecture rules...", config.Rules.Count);
-            lintingResults = ArchitectureLinter.Evaluate(couplingAnalysis, config.Rules);
-            _logger.LogInformation("Linting complete: {ErrorCount} errors, {WarningCount} warnings", 
-                lintingResults.ErrorCount, 
-                lintingResults.WarningCount);
-        }
+        SolutionAnalyzerLog.AnalyzingProjectCoupling(_logger);
+        var couplingAnalysis = await _couplingAnalyzer.AnalyzeProjectCouplingAsync(project, cancellationToken);
 
         return new AnalysisReport(
             SolutionPath: fullPath,
@@ -242,26 +194,26 @@ public sealed class SolutionAnalyzer
             Projects: [projectMetrics],
             Warnings: _warnings.ToList())
         {
-            CouplingAnalysis = couplingAnalysis,
-            LintingResults = lintingResults
+            CouplingAnalysis = couplingAnalysis
         };
     }
 
-    private async Task<(ProjectMetrics metrics, List<DependencyEdge> dependencies)> AnalyzeProjectWithCouplingAsync(
+    private async Task<ProjectMetrics> AnalyzeProjectWithCouplingAsync(
         Project project, 
-        System.Collections.Concurrent.ConcurrentDictionary<string, Compilation> compilationCache, 
+        System.Collections.Concurrent.ConcurrentDictionary<string, Compilation> compilationCache,
+        IDependencyCollector dependencyCollector,
         CancellationToken cancellationToken)
     {
         // Use cached compilation if available
         if (!compilationCache.TryGetValue(project.Name, out var compilation))
         {
-            _logger.LogDebug("Getting compilation for project: {ProjectName}", project.Name);
+            SolutionAnalyzerLog.GettingCompilationForProject(_logger, project.Name);
             compilation = await project.GetCompilationAsync(cancellationToken);
             if (compilation == null)
             {
                 _warnings.Add($"Could not get compilation for project: {project.Name}");
-                _logger.LogWarning("Could not get compilation for project: {ProjectName}", project.Name);
-                return (new ProjectMetrics(project.Name, project.FilePath ?? "", []), []);
+                SolutionAnalyzerLog.CouldNotGetCompilation(_logger, project.Name);
+                return new ProjectMetrics(project.Name, project.FilePath ?? "", []);
             }
         }
 
@@ -271,11 +223,10 @@ public sealed class SolutionAnalyzer
         var documents = project.Documents.Where(d => d.SourceCodeKind == SourceCodeKind.Regular).ToList();
         var documentCount = documents.Count;
 
-        _logger.LogDebug("Analyzing {DocumentCount} documents in project {ProjectName}", documentCount, project.Name);
+        SolutionAnalyzerLog.AnalyzingDocumentsInProject(_logger, documentCount, project.Name);
 
-        // Analyze documents in parallel for performance - collect both metrics AND dependencies in single pass
+        // Analyze documents in parallel - stream dependencies directly to collector
         var typeMetricsBag = new System.Collections.Concurrent.ConcurrentBag<TypeMetrics>();
-        var dependenciesBag = new System.Collections.Concurrent.ConcurrentBag<List<DependencyEdge>>();
         var processedCount = 0;
 
         await Parallel.ForEachAsync(documents, new ParallelOptions
@@ -287,8 +238,7 @@ public sealed class SolutionAnalyzer
             var currentCount = Interlocked.Increment(ref processedCount);
             if (currentCount % 50 == 0)
             {
-                _logger.LogDebug("Progress: {DocumentIndex}/{DocumentCount} documents processed in {ProjectName}", 
-                    currentCount, documentCount, project.Name);
+                SolutionAnalyzerLog.DocumentProcessingProgress(_logger, currentCount, documentCount, project.Name);
             }
 
             var syntaxTree = await document.GetSyntaxTreeAsync(ct);
@@ -300,9 +250,8 @@ public sealed class SolutionAnalyzer
             var root = await syntaxTree.GetRootAsync(ct);
             var filePath = document.FilePath ?? "";
             
-            // Analyze coupling dependencies in same pass
-            var docDependencies = CouplingAnalyzer.AnalyzeDocumentCoupling(semanticModel, filePath, root);
-            dependenciesBag.Add(docDependencies.ToList());
+            // Analyze coupling dependencies - stream directly to shared collector
+            CouplingAnalyzer.AnalyzeDocumentCouplingStreaming(semanticModel, filePath, root, dependencyCollector);
             
             // Analyze traditional type declarations
             var typeDeclarations = root.DescendantNodes()
@@ -330,13 +279,6 @@ public sealed class SolutionAnalyzer
         });
 
         var typeMetricsList = typeMetricsBag.ToList();
-        
-        // Merge all dependencies from this project
-        var allDependencies = new List<DependencyEdge>();
-        foreach (var deps in dependenciesBag)
-        {
-            allDependencies.AddRange(deps);
-        }
 
         var projectMetrics = new ProjectMetrics(
             Name: project.Name,
@@ -346,13 +288,14 @@ public sealed class SolutionAnalyzer
             Diagnostics = diagnosticSummary
         };
 
-        return (projectMetrics, allDependencies);
+        return projectMetrics;
     }
 
     private async Task<ProjectMetrics> AnalyzeProjectAsync(Project project, System.Collections.Concurrent.ConcurrentDictionary<string, Compilation> compilationCache, CancellationToken cancellationToken)
     {
-        var (metrics, _) = await AnalyzeProjectWithCouplingAsync(project, compilationCache, cancellationToken);
-        return metrics;
+        // For single project analysis, create a temporary collector that we don't use
+        using var tempCollector = new InMemoryDependencyCollector();
+        return await AnalyzeProjectWithCouplingAsync(project, compilationCache, tempCollector, cancellationToken);
     }
 
     private static DiagnosticSummary CollectDiagnostics(Compilation compilation)
@@ -396,7 +339,7 @@ public sealed class SolutionAnalyzer
     private TypeMetrics AnalyzeTypeDeclaration(TypeDeclarationSyntax typeDecl, SemanticModel semanticModel, string filePath)
     {
         var typeSymbol = semanticModel.GetDeclaredSymbol(typeDecl) as INamedTypeSymbol;
-        var dit = DepthOfInheritanceCalculator.Calculate(typeSymbol);
+        var dit = _metricsCalculator.CalculateDepthOfInheritance(typeSymbol);
 
         var methodMetricsList = new List<MethodMetrics>();
 
@@ -435,7 +378,7 @@ public sealed class SolutionAnalyzer
         var firstStatement = topLevelStatements.First();
         var lastStatement = topLevelStatements.Last();
 
-        var metrics = UnifiedMetricsCalculator.Calculate(root);
+        var metrics = _metricsCalculator.CalculateUnifiedMetrics(root);
         var cc = metrics.CyclomaticComplexity;
         var loc = metrics.LinesOfCode;
         var halsteadVolume = metrics.HalsteadVolume;
@@ -482,7 +425,7 @@ public sealed class SolutionAnalyzer
 
         if (method.Body != null || method.ExpressionBody != null)
         {
-            var metrics = UnifiedMetricsCalculator.Calculate(method);
+            var metrics = _metricsCalculator.CalculateUnifiedMetrics(method);
             cc = metrics.CyclomaticComplexity;
             loc = method.Body != null ? metrics.LinesOfCode : 1;
             halsteadVolume = metrics.HalsteadVolume;
@@ -519,7 +462,7 @@ public sealed class SolutionAnalyzer
 
         if (ctor.Body != null || ctor.ExpressionBody != null)
         {
-            var metrics = UnifiedMetricsCalculator.Calculate(ctor);
+            var metrics = _metricsCalculator.CalculateUnifiedMetrics(ctor);
             cc = metrics.CyclomaticComplexity;
             loc = ctor.Body != null ? metrics.LinesOfCode : 1;
             halsteadVolume = metrics.HalsteadVolume;
@@ -555,7 +498,7 @@ public sealed class SolutionAnalyzer
 
         if (localFunc.Body != null || localFunc.ExpressionBody != null)
         {
-            var metrics = UnifiedMetricsCalculator.Calculate(localFunc);
+            var metrics = _metricsCalculator.CalculateUnifiedMetrics(localFunc);
             cc = metrics.CyclomaticComplexity;
             loc = localFunc.Body != null ? metrics.LinesOfCode : 1;
             halsteadVolume = metrics.HalsteadVolume;
@@ -582,63 +525,4 @@ public sealed class SolutionAnalyzer
             MaintainabilityIndex: mi);
     }
 
-    private async Task RestorePackagesAsync(string projectOrSolutionPath, CancellationToken cancellationToken)
-    {
-        _logger.LogDebug("Starting package restore for {Path}", projectOrSolutionPath);
-        
-        var startInfo = new System.Diagnostics.ProcessStartInfo
-        {
-            FileName = "dotnet",
-            Arguments = $"restore \"{projectOrSolutionPath}\" --verbosity normal --interactive",
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-
-        using var process = System.Diagnostics.Process.Start(startInfo);
-        if (process == null)
-        {
-            _logger.LogError("Failed to start dotnet restore process. Ensure the .NET SDK is installed and 'dotnet' is available in PATH.");
-            return;
-        }
-
-        // Read stdout and stderr concurrently to avoid deadlocks
-        var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
-        var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
-        
-        await process.WaitForExitAsync(cancellationToken);
-        
-        var stdout = await stdoutTask;
-        var stderr = await stderrTask;
-        
-        if (process.ExitCode != 0)
-        {
-            _logger.LogError("Package restore failed with exit code {ExitCode} for {Path}", process.ExitCode, projectOrSolutionPath);
-            
-            if (!string.IsNullOrWhiteSpace(stderr))
-            {
-                _logger.LogError("Restore stderr: {Error}", stderr);
-            }
-            
-            if (!string.IsNullOrWhiteSpace(stdout))
-            {
-                _logger.LogError("Restore stdout: {Output}", stdout);
-            }
-            
-            // Log common troubleshooting hints
-            if (stderr.Contains("401") || stdout.Contains("401") || 
-                stderr.Contains("Unable to load the service index") || stdout.Contains("Unable to load the service index"))
-            {
-                _logger.LogError("Authentication failure detected. For private NuGet feeds, ensure credentials are configured. " +
-                    "Options: (1) Use 'dotnet nuget add source' with credentials, (2) Configure nuget.config with credentials, " +
-                    "(3) Use Azure Artifacts Credential Provider or similar for your feed type. " +
-                    "See: https://learn.microsoft.com/en-us/nuget/consume-packages/consuming-packages-authenticated-feeds");
-            }
-        }
-        else
-        {
-            _logger.LogDebug("Package restore completed successfully for {Path}", projectOrSolutionPath);
-        }
-    }
 }

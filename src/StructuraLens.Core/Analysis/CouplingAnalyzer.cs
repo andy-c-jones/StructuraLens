@@ -2,8 +2,8 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
-using StructuraLens.Core.Configuration;
+using StructuraLens.Core.Abstractions;
+using StructuraLens.Core.Analysis.Logging;
 using StructuraLens.Core.Models;
 
 namespace StructuraLens.Core.Analysis;
@@ -11,34 +11,21 @@ namespace StructuraLens.Core.Analysis;
 /// <summary>
 /// Analyzes coupling between projects, assemblies, namespaces, and types.
 /// </summary>
-public static class CouplingAnalyzer
+public sealed class CouplingAnalyzer : ICouplingAnalyzer
 {
-    /// <summary>
-    /// Analyzes coupling for an entire solution using default configuration.
-    /// </summary>
-    public static Task<CouplingAnalysis> AnalyzeSolutionAsync(Solution solution, CancellationToken cancellationToken = default)
+    private readonly ILogger<CouplingAnalyzer> _logger;
+
+    public CouplingAnalyzer(ILogger<CouplingAnalyzer> logger)
     {
-        return AnalyzeSolutionAsync(solution, ConfigurationLoader.CreateDefaultConfig(), NullLogger.Instance, null, cancellationToken);
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
-    /// <summary>
-    /// Analyzes coupling for an entire solution with specified configuration.
-    /// </summary>
-    public static Task<CouplingAnalysis> AnalyzeSolutionAsync(Solution solution, StructuraLensConfig config, ILogger logger, CancellationToken cancellationToken = default)
-    {
-        return AnalyzeSolutionAsync(solution, config, logger, null, cancellationToken);
-    }
-
-    /// <summary>
-    /// Analyzes coupling for an entire solution with specified configuration and pre-cached compilations.
-    /// </summary>
-    public static async Task<CouplingAnalysis> AnalyzeSolutionAsync(
-        Solution solution, 
-        StructuraLensConfig config, 
-        ILogger logger, 
-        IReadOnlyDictionary<string, Compilation>? compilationCache,
+    /// <inheritdoc />
+    public async Task<CouplingAnalysis> AnalyzeSolutionAsync(
+        Solution solution,
+        IReadOnlyDictionary<string, Compilation>? compilationCache = null,
         CancellationToken cancellationToken = default)
-    {
+    {     
         var projectNames = solution.Projects.Select(p => p.Name).ToList();
 
         // Analyze project-to-project dependencies
@@ -57,12 +44,12 @@ public static class CouplingAnalyzer
         }, async (project, ct) =>
         {
             var currentIndex = Interlocked.Increment(ref completedCount);
-            logger.LogDebug("Analyzing coupling in project {Index}/{Total}: {ProjectName}", currentIndex, totalProjects, project.Name);
+            CouplingAnalyzerLog.AnalyzingCouplingInProject(_logger, currentIndex, totalProjects, project.Name);
             
-            var projectCoupling = await AnalyzeProjectInternalCouplingAsync(project, compilationCache, logger, ct);
+            var projectCoupling = await AnalyzeProjectInternalCouplingAsync(project, compilationCache, ct);
             dependenciesBag.Add(projectCoupling.dependencies);
             
-            logger.LogDebug("Project {ProjectName}: {DependencyCount} dependencies found", project.Name, projectCoupling.dependencies.Count);
+            CouplingAnalyzerLog.ProjectDependenciesFound(_logger, project.Name, projectCoupling.dependencies.Count);
         });
 
         // Merge all dependencies
@@ -72,17 +59,14 @@ public static class CouplingAnalyzer
             allDependencies.AddRange(deps);
         }
 
-        return BuildCouplingAnalysisFromDependencies(solution, allDependencies, config);
+        return BuildCouplingAnalysisFromDependencies(solution, allDependencies);
     }
 
-    /// <summary>
-    /// Builds coupling analysis from pre-collected dependencies (used when dependencies are collected during metrics analysis).
-    /// </summary>
-    public static CouplingAnalysis BuildCouplingAnalysisFromDependencies(
+    /// <inheritdoc />
+    public CouplingAnalysis BuildCouplingAnalysisFromDependencies(
         Solution solution,
-        IReadOnlyList<DependencyEdge> allDependencies,
-        StructuraLensConfig config)
-    {
+        IReadOnlyList<DependencyEdge> allDependencies)
+    {     
         var projectNames = solution.Projects.Select(p => p.Name).ToList();
 
         // Add project-to-project dependencies if not already included
@@ -90,15 +74,18 @@ public static class CouplingAnalyzer
         var combinedDependencies = new List<DependencyEdge>(projectDependencies);
         combinedDependencies.AddRange(allDependencies);
 
-        // Apply filtering based on configuration
-        var filteredDependencies = DependencyFilter.FilterDependencies(combinedDependencies, config.Coupling, projectNames);
+        // Always analyze all dependencies (no filtering)
+        DependencyEdge.EnableDetails = true;
 
-        // Build coupling metrics from filtered dependencies
-        var projectCouplingMetrics = BuildProjectCouplingMetrics(solution, filteredDependencies);
-        var namespaceCouplingMetrics = BuildNamespaceCouplingMetrics(filteredDependencies);
-        var typeCouplingMetrics = BuildTypeCouplingMetrics(filteredDependencies);
+        // Aggregate duplicate edges to reduce memory pressure
+        var aggregatedDependencies = AggregateDependencies(combinedDependencies);
 
-        var summary = BuildCouplingSummary(projectCouplingMetrics, namespaceCouplingMetrics, typeCouplingMetrics, filteredDependencies, config);
+        // Build coupling metrics from aggregated dependencies
+        var projectCouplingMetrics = BuildProjectCouplingMetrics(solution, aggregatedDependencies);
+        var namespaceCouplingMetrics = BuildNamespaceCouplingMetrics(aggregatedDependencies);
+        var typeCouplingMetrics = BuildTypeCouplingMetrics(aggregatedDependencies);
+
+        var summary = BuildCouplingSummary(projectCouplingMetrics, namespaceCouplingMetrics, typeCouplingMetrics, aggregatedDependencies);
 
         return new CouplingAnalysis(
             AnalyzedEntity: solution.FilePath ?? "Solution",
@@ -107,47 +94,43 @@ public static class CouplingAnalyzer
             ProjectCoupling = projectCouplingMetrics,
             NamespaceCoupling = namespaceCouplingMetrics,
             TypeCoupling = typeCouplingMetrics,
-            AllDependencies = filteredDependencies,
+            AllDependencies = aggregatedDependencies,
             Summary = summary
         };
     }
 
-    /// <summary>
-    /// Analyzes a single document for coupling dependencies. Can be called from external analyzers.
-    /// </summary>
-    public static IReadOnlyList<DependencyEdge> AnalyzeDocumentCoupling(SemanticModel semanticModel, string filePath, SyntaxNode root)
+    /// <inheritdoc />
+    public CouplingAnalysis BuildCouplingAnalysisFromCollector(
+        Solution solution,
+        IDependencyCollector collector)
     {
-        var analyzer = new DocumentCouplingAnalyzer(semanticModel, filePath, root);
-        analyzer.Visit(root);
-        return analyzer.Dependencies;
+        // Get already-aggregated dependencies from collector
+        var aggregatedDependencies = collector.GetAggregatedDependencies();
+        
+        // Use existing method to build analysis from these edges
+        return BuildCouplingAnalysisFromDependencies(solution, aggregatedDependencies);
     }
 
-    /// <summary>
-    /// Analyzes coupling for a single project using default configuration.
-    /// </summary>
-    public static Task<CouplingAnalysis> AnalyzeProjectCouplingAsync(Project project, CancellationToken cancellationToken = default)
-    {
-        return AnalyzeProjectCouplingAsync(project, ConfigurationLoader.CreateDefaultConfig(), NullLogger.Instance, cancellationToken);
-    }
-
-    /// <summary>
-    /// Analyzes coupling for a single project with specified configuration.
-    /// </summary>
-    public static async Task<CouplingAnalysis> AnalyzeProjectCouplingAsync(Project project, StructuraLensConfig config, ILogger logger, CancellationToken cancellationToken = default)
-    {
+    /// <inheritdoc />
+    public async Task<CouplingAnalysis> AnalyzeProjectCouplingAsync(
+        Project project,
+        CancellationToken cancellationToken = default)
+    {     
         var allDependencies = new List<DependencyEdge>();
         var projectNames = new List<string> { project.Name };
 
         // Analyze internal coupling within the project (no compilation cache for single project)
-        var projectCoupling = await AnalyzeProjectInternalCouplingAsync(project, null, logger, cancellationToken);
+        var projectCoupling = await AnalyzeProjectInternalCouplingAsync(project, null, cancellationToken);
         allDependencies.AddRange(projectCoupling.dependencies);
 
-        // Apply filtering based on configuration
-        var filteredDependencies = DependencyFilter.FilterDependencies(allDependencies, config.Coupling, projectNames);
+        DependencyEdge.EnableDetails = true;
 
-        // Build coupling metrics from filtered dependencies
-        var namespaceCouplingMetrics = BuildNamespaceCouplingMetrics(filteredDependencies);
-        var typeCouplingMetrics = BuildTypeCouplingMetrics(filteredDependencies);
+        // Aggregate duplicate edges to reduce memory pressure
+        var aggregatedDependencies = AggregateDependencies(allDependencies);
+
+        // Build coupling metrics from aggregated dependencies
+        var namespaceCouplingMetrics = BuildNamespaceCouplingMetrics(aggregatedDependencies);
+        var typeCouplingMetrics = BuildTypeCouplingMetrics(aggregatedDependencies);
 
         // For single project, create a simple project coupling metric
         var projectCouplingMetrics = new List<CouplingMetrics>
@@ -159,7 +142,7 @@ public static class CouplingAnalyzer
             }
         };
 
-        var summary = BuildCouplingSummary(projectCouplingMetrics, namespaceCouplingMetrics, typeCouplingMetrics, filteredDependencies, config);
+        var summary = BuildCouplingSummary(projectCouplingMetrics, namespaceCouplingMetrics, typeCouplingMetrics, aggregatedDependencies);
 
         return new CouplingAnalysis(
             AnalyzedEntity: project.FilePath ?? project.Name,
@@ -168,7 +151,7 @@ public static class CouplingAnalyzer
             ProjectCoupling = projectCouplingMetrics,
             NamespaceCoupling = namespaceCouplingMetrics,
             TypeCoupling = typeCouplingMetrics,
-            AllDependencies = filteredDependencies,
+            AllDependencies = aggregatedDependencies,
             Summary = summary
         };
     }
@@ -176,7 +159,7 @@ public static class CouplingAnalyzer
     /// <summary>
     /// Analyzes project-to-project dependencies based on project references.
     /// </summary>
-    private static List<DependencyEdge> AnalyzeProjectDependencies(Solution solution)
+    private List<DependencyEdge> AnalyzeProjectDependencies(Solution solution)
     {
         var dependencies = new List<DependencyEdge>();
 
@@ -202,11 +185,11 @@ public static class CouplingAnalyzer
         return dependencies;
     }
 
-    /// <summary>
-    /// Analyzes internal coupling within a single project.
-    /// </summary>
-    private static async Task<(List<DependencyEdge> dependencies, List<CouplingMetrics> namespaceCoupling, List<CouplingMetrics> typeCoupling)>
-        AnalyzeProjectInternalCouplingAsync(Project project, IReadOnlyDictionary<string, Compilation>? compilationCache, ILogger logger, CancellationToken cancellationToken)
+    /// <inheritdoc />
+    public async Task<(List<CouplingMetrics> namespaceCoupling, List<DependencyEdge> dependencies)> AnalyzeProjectInternalCouplingAsync(
+        Project project,
+        IReadOnlyDictionary<string, Compilation>? compilationCache = null,
+        CancellationToken cancellationToken = default)
     {
         // Use cached compilation if available, otherwise fetch it
         Compilation? compilation;
@@ -221,14 +204,14 @@ public static class CouplingAnalyzer
 
         if (compilation == null)
         {
-            logger.LogWarning("Could not get compilation for project: {ProjectName}", project.Name);
-            return ([], [], []);
+            CouplingAnalyzerLog.CouldNotGetCompilation(_logger, project.Name);
+            return ([], []);
         }
 
         var documents = project.Documents.Where(d => d.SourceCodeKind == SourceCodeKind.Regular).ToList();
         var documentCount = documents.Count;
         
-        logger.LogDebug("Analyzing {DocumentCount} documents for coupling in {ProjectName}", documentCount, project.Name);
+        CouplingAnalyzerLog.AnalyzingDocumentsForCoupling(_logger, documentCount, project.Name);
 
         // Analyze documents in parallel for performance
         var dependenciesBag = new System.Collections.Concurrent.ConcurrentBag<List<DependencyEdge>>();
@@ -243,8 +226,7 @@ public static class CouplingAnalyzer
             var currentCount = Interlocked.Increment(ref processedCount);
             if (currentCount % 100 == 0)
             {
-                logger.LogDebug("Coupling analysis progress: {DocumentIndex}/{DocumentCount} documents in {ProjectName}", 
-                    currentCount, documentCount, project.Name);
+                CouplingAnalyzerLog.CouplingAnalysisProgress(_logger, currentCount, documentCount, project.Name);
             }
 
             var syntaxTree = await document.GetSyntaxTreeAsync(ct);
@@ -264,14 +246,13 @@ public static class CouplingAnalyzer
             dependencies.AddRange(deps);
         }
 
-        // Group and build metrics at namespace and type level
+        // Group and build metrics at namespace level
         var namespaceCoupling = BuildNamespaceCouplingMetrics(dependencies);
-        var typeCoupling = BuildTypeCouplingMetrics(dependencies);
 
-        return (dependencies, namespaceCoupling, typeCoupling);
+        return (namespaceCoupling, dependencies);
     }
 
-    private static List<CouplingMetrics> BuildProjectCouplingMetrics(Solution solution, List<DependencyEdge> allDependencies)
+    private List<CouplingMetrics> BuildProjectCouplingMetrics(Solution solution, List<DependencyEdge> allDependencies)
     {
         var projectNames = solution.Projects.Select(p => p.Name).ToHashSet();
         var metrics = new List<CouplingMetrics>();
@@ -319,7 +300,7 @@ public static class CouplingAnalyzer
         return metrics;
     }
 
-    private static List<CouplingMetrics> BuildNamespaceCouplingMetrics(List<DependencyEdge> allDependencies)
+    private List<CouplingMetrics> BuildNamespaceCouplingMetrics(List<DependencyEdge> allDependencies)
     {
         var namespaceDeps = allDependencies.Where(d => d.Type == DependencyType.NamespaceReference).ToList();
         
@@ -340,7 +321,7 @@ public static class CouplingAnalyzer
         }).ToList();
     }
 
-    private static List<CouplingMetrics> BuildTypeCouplingMetrics(List<DependencyEdge> allDependencies)
+    private List<CouplingMetrics> BuildTypeCouplingMetrics(List<DependencyEdge> allDependencies)
     {
         var typeDeps = allDependencies.Where(d => d.Type == DependencyType.TypeReference).ToList();
         
@@ -361,13 +342,35 @@ public static class CouplingAnalyzer
         }).ToList();
     }
 
-    private static CouplingSummary BuildCouplingSummary(
+    private List<DependencyEdge> AggregateDependencies(List<DependencyEdge> dependencies)
+    {
+        if (dependencies.Count == 0) return dependencies;
+
+        var aggregated = new Dictionary<(string From, string To, DependencyType Type), int>(dependencies.Count);
+        foreach (var d in dependencies)
+        {
+            var key = (d.FromEntity, d.ToEntity, d.Type);
+            if (aggregated.TryGetValue(key, out var current))
+                aggregated[key] = current + d.ReferenceCount;
+            else
+                aggregated[key] = d.ReferenceCount;
+        }
+
+        var result = new List<DependencyEdge>(aggregated.Count);
+        foreach (var (key, count) in aggregated)
+        {
+            result.Add(new DependencyEdge(key.From, key.To, key.Type, count));
+        }
+
+        return result;
+    }
+
+    private CouplingSummary BuildCouplingSummary(
         List<CouplingMetrics> projectCoupling,
         List<CouplingMetrics> namespaceCoupling, 
         List<CouplingMetrics> typeCoupling,
-        List<DependencyEdge> allDependencies,
-        StructuraLensConfig config)
-    {
+        List<DependencyEdge> allDependencies)
+    {     
         var allMetrics = projectCoupling.Concat(namespaceCoupling).Concat(typeCoupling).ToList();
         
         return new CouplingSummary
@@ -378,8 +381,33 @@ public static class CouplingAnalyzer
             AverageInstability = allMetrics.Count > 0 ? allMetrics.Average(m => m.Instability) : 0,
             MostCoupledEntity = allMetrics.OrderByDescending(m => m.TotalCouplingStrength).FirstOrDefault()?.EntityName,
             MostUnstableEntity = allMetrics.OrderByDescending(m => m.Instability).FirstOrDefault()?.EntityName,
-            CouplingMode = config.Coupling.Mode.ToString()
+            CouplingMode = "All"
         };
+    }
+
+    /// <summary>
+    /// Analyzes a single document for coupling dependencies. Can be called from external analyzers.
+    /// This is a static helper method for use in SolutionAnalyzer.
+    /// </summary>
+    public static IReadOnlyList<DependencyEdge> AnalyzeDocumentCoupling(SemanticModel semanticModel, string filePath, SyntaxNode root)
+    {
+        var analyzer = new DocumentCouplingAnalyzer(semanticModel, filePath, root, null);
+        analyzer.Visit(root);
+        return analyzer.Dependencies;
+    }
+
+    /// <summary>
+    /// Analyzes a single document for coupling dependencies, streaming to a collector.
+    /// Memory-efficient version for large codebases.
+    /// </summary>
+    public static void AnalyzeDocumentCouplingStreaming(
+        SemanticModel semanticModel,
+        string filePath,
+        SyntaxNode root,
+        IDependencyCollector collector)
+    {
+        var analyzer = new DocumentCouplingAnalyzer(semanticModel, filePath, root, collector);
+        analyzer.Visit(root);
     }
 }
 
@@ -390,7 +418,8 @@ internal sealed class DocumentCouplingAnalyzer : CSharpSyntaxWalker
 {
     private readonly SemanticModel _semanticModel;
     private readonly string _filePath;
-    private readonly List<DependencyEdge> _dependencies = [];
+    private readonly List<DependencyEdge>? _dependencies;
+    private readonly IDependencyCollector? _collector;
     private readonly string? _primaryNamespace;
     
     // Cache for ToDisplayString() results to avoid repeated expensive calls
@@ -398,12 +427,37 @@ internal sealed class DocumentCouplingAnalyzer : CSharpSyntaxWalker
     // Cache containing type per TypeDeclarationSyntax to avoid repeated lookups
     private readonly Dictionary<TypeDeclarationSyntax, string?> _containingTypeCache = [];
 
-    public IReadOnlyList<DependencyEdge> Dependencies => _dependencies;
+    /// <summary>
+    /// Gets collected dependencies. Only valid when using list-based collection (not streaming).
+    /// </summary>
+    public IReadOnlyList<DependencyEdge> Dependencies => _dependencies ?? [];
 
+    /// <summary>
+    /// Constructor for list-based collection (backward compatibility).
+    /// </summary>
     public DocumentCouplingAnalyzer(SemanticModel semanticModel, string filePath, SyntaxNode root)
+        : this(semanticModel, filePath, root, null)
+    {
+    }
+
+    /// <summary>
+    /// Constructor for streaming collection (memory-efficient).
+    /// </summary>
+    public DocumentCouplingAnalyzer(
+        SemanticModel semanticModel,
+        string filePath,
+        SyntaxNode root,
+        IDependencyCollector? collector)
     {
         _semanticModel = semanticModel;
         _filePath = filePath;
+        _collector = collector;
+        
+        // Only create list if not using collector
+        if (collector == null)
+        {
+            _dependencies = [];
+        }
         
         // Pre-scan for file-level namespace (file-scoped or first traditional namespace)
         _primaryNamespace = root.DescendantNodes()
@@ -412,6 +466,21 @@ internal sealed class DocumentCouplingAnalyzer : CSharpSyntaxWalker
             ?? root.DescendantNodes()
                 .OfType<NamespaceDeclarationSyntax>()
                 .FirstOrDefault()?.Name.ToString();
+    }
+
+    /// <summary>
+    /// Adds a dependency edge, routing to collector or list based on mode.
+    /// </summary>
+    private void AddDependencyEdge(DependencyEdge edge)
+    {
+        if (_collector != null)
+        {
+            _collector.AddDependency(edge);
+        }
+        else
+        {
+            _dependencies?.Add(edge);
+        }
     }
 
     /// <summary>
@@ -436,14 +505,16 @@ internal sealed class DocumentCouplingAnalyzer : CSharpSyntaxWalker
 
             if (!string.IsNullOrEmpty(containingNamespace) && containingNamespace != namespaceName)
             {
-                _dependencies.Add(new DependencyEdge(
-                    FromEntity: containingNamespace,
-                    ToEntity: namespaceName,
-                    Type: DependencyType.NamespaceReference,
-                    ReferenceCount: 1)
-                {
-                    SourceLocation = $"{_filePath}:{node.GetLocation().GetLineSpan().StartLinePosition.Line + 1}"
-                });
+            AddDependencyEdge(new DependencyEdge(
+                FromEntity: containingNamespace,
+                ToEntity: namespaceName,
+                Type: DependencyType.NamespaceReference,
+                ReferenceCount: 1)
+            {
+                SourceLocation = DependencyEdge.EnableDetails
+                    ? $"{_filePath}:{node.GetLocation().GetLineSpan().StartLinePosition.Line + 1}"
+                    : null
+            });
             }
         }
 
@@ -479,14 +550,16 @@ internal sealed class DocumentCouplingAnalyzer : CSharpSyntaxWalker
 
         if (fromType != null && fromType != toType)
         {
-            _dependencies.Add(new DependencyEdge(
+            AddDependencyEdge(new DependencyEdge(
                 FromEntity: fromType,
                 ToEntity: toType,
                 Type: DependencyType.TypeReference,
                 ReferenceCount: 1)
             {
-                SourceLocation = $"{_filePath}:{node.GetLocation().GetLineSpan().StartLinePosition.Line + 1}",
-                ReferencedSymbol = typeSymbol.Name
+                SourceLocation = DependencyEdge.EnableDetails
+                    ? $"{_filePath}:{node.GetLocation().GetLineSpan().StartLinePosition.Line + 1}"
+                    : null,
+                ReferencedSymbol = DependencyEdge.EnableDetails ? typeSymbol.Name : null
             });
 
             var fromNamespace = GetNamespace(fromType);
@@ -496,14 +569,16 @@ internal sealed class DocumentCouplingAnalyzer : CSharpSyntaxWalker
             
             if (fromNamespace != toNamespace && !string.IsNullOrEmpty(toNamespace))
             {
-                _dependencies.Add(new DependencyEdge(
+                AddDependencyEdge(new DependencyEdge(
                     FromEntity: fromNamespace,
                     ToEntity: toNamespace,
                     Type: DependencyType.NamespaceReference,
                     ReferenceCount: 1)
                 {
-                    SourceLocation = $"{_filePath}:{node.GetLocation().GetLineSpan().StartLinePosition.Line + 1}",
-                    ReferencedSymbol = typeSymbol.Name
+                    SourceLocation = DependencyEdge.EnableDetails
+                        ? $"{_filePath}:{node.GetLocation().GetLineSpan().StartLinePosition.Line + 1}"
+                        : null,
+                    ReferencedSymbol = DependencyEdge.EnableDetails ? typeSymbol.Name : null
                 });
             }
         }

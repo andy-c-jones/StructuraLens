@@ -10,6 +10,12 @@ public record DependencyEdge(
     int ReferenceCount)
 {
     /// <summary>
+    /// Enables skipping per-occurrence details (locations/symbols) in large solutions.
+    /// When true, analyzers should avoid populating optional fields.
+    /// </summary>
+    public static bool EnableDetails { get; set; } = true;
+
+    /// <summary>
     /// Source location where this dependency was found (optional).
     /// </summary>
     public string? SourceLocation { get; init; }
@@ -153,5 +159,5 @@ public record CouplingSummary
     public string? MostUnstableEntity { get; init; }
     
     /// <summary>The coupling mode used for this analysis.</summary>
-    public string CouplingMode { get; init; } = "Filtered";
+    public string CouplingMode { get; init; } = "All";
 }
