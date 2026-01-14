@@ -642,7 +642,7 @@ public sealed class HtmlReportGenerator : IReportGenerator
           <label>Color by:</label>
           <select id="colorMetric">
             <option value="none">None</option>
-            <option value="diagnostics">Diagnostics Count</option>
+            <option value="diagnostics" data-project-only="true">Diagnostics Count</option>
             <option value="coupling">Coupling (Ce)</option>
             <option value="complexity">Cyclomatic Complexity</option>
             <option value="loc">Lines of Code</option>
@@ -651,7 +651,7 @@ public sealed class HtmlReportGenerator : IReportGenerator
           <label>Size by:</label>
           <select id="sizeMetric">
             <option value="dependencies">Dependencies</option>
-            <option value="diagnostics">Diagnostics Count</option>
+            <option value="diagnostics" data-project-only="true">Diagnostics Count</option>
             <option value="coupling">Coupling (Ce)</option>
             <option value="complexity">Cyclomatic Complexity</option>
             <option value="loc">Lines of Code</option>
@@ -661,6 +661,7 @@ public sealed class HtmlReportGenerator : IReportGenerator
         <div id="graphContainer" class="graph-container graph-fullpage"></div>
       `;
       document.getElementById('graphSelector').addEventListener('change', () => {
+        updateMetricOptions();
         renderCurrentGraph();
       });
       document.getElementById('colorMetric').addEventListener('change', () => {
@@ -668,6 +669,29 @@ public sealed class HtmlReportGenerator : IReportGenerator
       });
       document.getElementById('sizeMetric').addEventListener('change', () => {
         renderCurrentGraph();
+      });
+      updateMetricOptions();
+    }
+
+    function updateMetricOptions() {
+      const graphType = document.getElementById('graphSelector').value;
+      const isNamespace = graphType === 'namespace';
+      
+      // Hide/show diagnostics options based on graph type
+      const colorSelect = document.getElementById('colorMetric');
+      const sizeSelect = document.getElementById('sizeMetric');
+      
+      [colorSelect, sizeSelect].forEach(select => {
+        const options = select.querySelectorAll('option');
+        options.forEach(option => {
+          if (option.dataset.projectOnly === 'true') {
+            option.style.display = isNamespace ? 'none' : '';
+            if (isNamespace && option.selected) {
+              // Switch to a different option if diagnostics was selected
+              select.value = 'none';
+            }
+          }
+        });
       });
     }
 
@@ -727,44 +751,55 @@ public sealed class HtmlReportGenerator : IReportGenerator
     function getNodeColor(node, colorMetric, graphType) {
       if (colorMetric === 'none') return 'var(--node-default)';
       
-      // For namespace view, try to find project by prefix match
       let metrics = null;
+      let allMetrics = [];
+      
       if (graphType === 'project') {
         metrics = getProjectMetrics(node.name);
+        allMetrics = reportData.prj;
       } else {
-        // Find best matching project for namespace
-        const matchingProjects = reportData.prj.filter(p => node.name.startsWith(p.n.replace('.', '')));
-        if (matchingProjects.length > 0) {
-          metrics = matchingProjects.reduce((a, b) => a.n.length > b.n.length ? a : b);
-        }
+        // For namespace view, use the metrics directly from the node
+        metrics = {
+          cc: node.cc,
+          loc: node.loc,
+          mi: node.mi,
+          ce: node.ce,
+          ca: node.ca,
+          instability: node.instability
+        };
+        // Get all namespace metrics for normalization
+        allMetrics = reportData.g.ns.n.map(([id, name, loc, cc, mi, tc, mc, ce, ca, instability]) => 
+          ({ cc, loc, mi, ce, ca, instability })
+        );
       }
       
       if (!metrics) return 'var(--node-default)';
       
-      const allProjects = reportData.prj;
       let value, values;
       
       switch (colorMetric) {
         case 'diagnostics':
+          // Diagnostics not available for namespaces
+          if (graphType === 'namespace') return 'var(--node-default)';
           value = (metrics.err || 0) * 5 + (metrics.warn || 0); // Errors weighted 5x
-          values = allProjects.map(p => (p.err || 0) * 5 + (p.warn || 0));
+          values = allMetrics.map(p => (p.err || 0) * 5 + (p.warn || 0));
           break;
         case 'coupling':
           value = metrics.ce || 0;
-          values = allProjects.map(p => p.ce || 0);
+          values = allMetrics.map(m => m.ce || 0);
           break;
         case 'complexity':
           value = metrics.cc || 0;
-          values = allProjects.map(p => p.cc || 0);
+          values = allMetrics.map(m => m.cc || 0);
           break;
         case 'loc':
           value = metrics.loc || 0;
-          values = allProjects.map(p => p.loc || 0);
+          values = allMetrics.map(m => m.loc || 0);
           break;
         case 'maintainability':
           // Maintainability is inverse - lower MI is worse
           value = 100 - (metrics.mi || 100);
-          values = allProjects.map(p => 100 - (p.mi || 100));
+          values = allMetrics.map(m => 100 - (m.mi || 100));
           break;
         default:
           return 'var(--node-default)';
@@ -780,21 +815,28 @@ public sealed class HtmlReportGenerator : IReportGenerator
     function getNodeSizeValue(node, sizeMetric, graphType, outboundCount) {
       if (sizeMetric === 'dependencies') return outboundCount;
       
-      // For namespace view, try to find project by prefix match
       let metrics = null;
+      
       if (graphType === 'project') {
         metrics = getProjectMetrics(node.name);
       } else {
-        const matchingProjects = reportData.prj.filter(p => node.name.startsWith(p.n.replace('.', '')));
-        if (matchingProjects.length > 0) {
-          metrics = matchingProjects.reduce((a, b) => a.n.length > b.n.length ? a : b);
-        }
+        // For namespace view, use the metrics directly from the node
+        metrics = {
+          cc: node.cc,
+          loc: node.loc,
+          mi: node.mi,
+          ce: node.ce,
+          ca: node.ca,
+          instability: node.instability
+        };
       }
       
       if (!metrics) return outboundCount; // Fallback to dependencies
       
       switch (sizeMetric) {
         case 'diagnostics':
+          // Diagnostics not available for namespaces
+          if (graphType === 'namespace') return outboundCount;
           return (metrics.err || 0) * 5 + (metrics.warn || 0);
         case 'coupling':
           return metrics.ce || 0;
@@ -827,8 +869,23 @@ public sealed class HtmlReportGenerator : IReportGenerator
         outboundCounts[l.source] = (outboundCounts[l.source] || 0) + l.weight;
       });
       
-      // Build preliminary nodes to compute size values
-      const prelimNodes = graphData.n.map(([id, name, size]) => ({ id, name, size, depCount: outboundCounts[id] || 0 }));
+      // Parse node data based on graph type
+      // Project nodes: [id, name, size]
+      // Namespace nodes: [id, name, loc, cc, mi, tc, mc, ce, ca, instability]
+      const prelimNodes = graphData.n.map(nodeData => {
+        if (graphType === 'project') {
+          const [id, name, size] = nodeData;
+          return { id, name, size, depCount: outboundCounts[id] || 0 };
+        } else {
+          const [id, name, loc, cc, mi, tc, mc, ce, ca, instability] = nodeData;
+          return { 
+            id, name, 
+            loc, cc, mi, tc, mc, ce, ca, instability,
+            size: loc, // Default size to LOC for compatibility
+            depCount: outboundCounts[id] || 0 
+          };
+        }
+      });
       
       // Calculate size values based on selected metric
       const sizeValues = prelimNodes.map(n => getNodeSizeValue(n, sizeMetric, graphType, n.depCount));

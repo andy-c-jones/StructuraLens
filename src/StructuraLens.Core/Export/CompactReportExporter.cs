@@ -218,8 +218,9 @@ public sealed class CompactReportExporter : IReportExporter
         IReadOnlyList<ProjectMetrics> projects,
         CouplingAnalysis coupling)
     {
-        // Get internal namespaces from our projects
-        var internalNamespaces = new HashSet<string>();
+        // Get internal namespaces from our projects and build complete metrics
+        var namespaceMetrics = new Dictionary<string, (int TypeCount, int MethodCount, int CC, int LOC, double MI)>();
+        
         foreach (var project in projects)
         {
             foreach (var type in project.Types)
@@ -227,40 +228,38 @@ public sealed class CompactReportExporter : IReportExporter
                 var ns = GetNamespace(type.FullName);
                 if (!string.IsNullOrEmpty(ns))
                 {
-                    internalNamespaces.Add(ns);
+                    if (!namespaceMetrics.ContainsKey(ns))
+                    {
+                        namespaceMetrics[ns] = (0, 0, 0, 0, 0.0);
+                    }
+                    
+                    var current = namespaceMetrics[ns];
+                    namespaceMetrics[ns] = (
+                        TypeCount: current.TypeCount + 1,
+                        MethodCount: current.MethodCount + type.Methods.Count,
+                        CC: current.CC + type.TotalCyclomaticComplexity,
+                        LOC: current.LOC + type.TotalLinesOfExecutableCode,
+                        MI: current.MI + type.Methods.Sum(m => m.MaintainabilityIndex)
+                    );
                 }
             }
         }
 
-        // Build namespace -> LOC mapping for node sizes
-        var namespaceLoc = new Dictionary<string, int>();
-        foreach (var project in projects)
-        {
-            foreach (var type in project.Types)
-            {
-                var ns = GetNamespace(type.FullName);
-                if (!string.IsNullOrEmpty(ns))
-                {
-                    namespaceLoc.TryAdd(ns, 0);
-                    namespaceLoc[ns] += type.TotalLinesOfExecutableCode;
-                }
-            }
-        }
+        // Calculate average MI for each namespace
+        var namespaceMetricsWithAvgMI = namespaceMetrics.ToDictionary(
+            kvp => kvp.Key,
+            kvp => (
+                kvp.Value.TypeCount,
+                kvp.Value.MethodCount,
+                kvp.Value.CC,
+                kvp.Value.LOC,
+                AvgMI: kvp.Value.MethodCount > 0 ? kvp.Value.MI / kvp.Value.MethodCount : 0.0
+            )
+        );
 
-        var nodeIndex = new Dictionary<string, int>();
-        var nodes = new List<object[]>();
+        var internalNamespaces = namespaceMetricsWithAvgMI.Keys.ToHashSet();
 
-        // Create nodes for internal namespaces
-        int id = 0;
-        foreach (var ns in internalNamespaces.OrderBy(n => n))
-        {
-            nodeIndex[ns] = id;
-            nodes.Add(new object[] { id, ns, namespaceLoc.GetValueOrDefault(ns, 0) });
-            id++;
-        }
-
-        // Create edges for namespace-to-namespace dependencies (internal only)
-        var edges = new List<int[]>();
+        // Build edges first to calculate coupling metrics
         var nsDeps = coupling.AllDependencies
             .Where(d => d.Type == DependencyType.NamespaceReference)
             .Where(d => internalNamespaces.Contains(d.FromEntity) && internalNamespaces.Contains(d.ToEntity))
@@ -268,6 +267,54 @@ public sealed class CompactReportExporter : IReportExporter
             .GroupBy(d => (d.FromEntity, d.ToEntity))
             .ToList();
 
+        // Calculate coupling metrics for each namespace
+        var namespaceCouplingMetrics = new Dictionary<string, (int Ce, int Ca, double Instability)>();
+        
+        foreach (var ns in internalNamespaces)
+        {
+            // Efferent coupling: count of unique outbound dependencies
+            var efferent = nsDeps.Count(g => g.Key.FromEntity == ns);
+            
+            // Afferent coupling: count of unique inbound dependencies
+            var afferent = nsDeps.Count(g => g.Key.ToEntity == ns);
+            
+            // Instability: Ce / (Ce + Ca)
+            var total = efferent + afferent;
+            var instability = total > 0 ? (double)efferent / total : 0.0;
+            
+            namespaceCouplingMetrics[ns] = (efferent, afferent, instability);
+        }
+
+        var nodeIndex = new Dictionary<string, int>();
+        var nodes = new List<object[]>();
+
+        // Create nodes for internal namespaces with full metrics
+        // Node format: [id, name, loc, cc, mi, tc, mc, ce, ca, instability]
+        int id = 0;
+        foreach (var ns in internalNamespaces.OrderBy(n => n))
+        {
+            nodeIndex[ns] = id;
+            var metrics = namespaceMetricsWithAvgMI[ns];
+            var couplingData = namespaceCouplingMetrics.GetValueOrDefault(ns, (0, 0, 0.0));
+            
+            nodes.Add(new object[] 
+            { 
+                id, 
+                ns, 
+                metrics.LOC,
+                metrics.CC,
+                Math.Round(metrics.AvgMI, 1),
+                metrics.TypeCount,
+                metrics.MethodCount,
+                couplingData.Item1, // Ce
+                couplingData.Item2, // Ca
+                Math.Round(couplingData.Item3, 2) // Instability
+            });
+            id++;
+        }
+
+        // Create edges for namespace-to-namespace dependencies (internal only)
+        var edges = new List<int[]>();
         foreach (var group in nsDeps)
         {
             if (nodeIndex.TryGetValue(group.Key.FromEntity, out var fromId) &&
