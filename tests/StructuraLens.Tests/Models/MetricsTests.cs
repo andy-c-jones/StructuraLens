@@ -204,4 +204,237 @@ public class MetricsTests
 
         await Assert.That(report.TotalMethods).IsEqualTo(3);
     }
+
+    [Test]
+    public async Task TypeMetrics_Namespace_ExtractsCorrectly_WithFullyQualifiedName()
+    {
+        var typeMetrics = new TypeMetrics(
+            FullName: "MyProject.Services.UserService",
+            FilePath: "/file.cs",
+            DepthOfInheritance: 0,
+            Methods: []);
+
+        await Assert.That(typeMetrics.Namespace).IsEqualTo("MyProject.Services");
+    }
+
+    [Test]
+    public async Task TypeMetrics_Namespace_ReturnsGlobal_WhenNoNamespace()
+    {
+        var typeMetrics = new TypeMetrics(
+            FullName: "SimpleClass",
+            FilePath: "/file.cs",
+            DepthOfInheritance: 0,
+            Methods: []);
+
+        await Assert.That(typeMetrics.Namespace).IsEqualTo("(global)");
+    }
+
+    [Test]
+    public async Task TypeMetrics_Namespace_HandlesNestedTypes()
+    {
+        var typeMetrics = new TypeMetrics(
+            FullName: "Outer.Inner.Nested",
+            FilePath: "/file.cs",
+            DepthOfInheritance: 0,
+            Methods: []);
+
+        await Assert.That(typeMetrics.Namespace).IsEqualTo("Outer.Inner");
+    }
+
+    [Test]
+    public async Task NamespaceMetrics_TotalCyclomaticComplexity_AggregatesFromAllTypes()
+    {
+        var types = new List<TypeMetrics>
+        {
+            new("NS.Class1", "/f1.cs", 0, new List<MethodMetrics>
+            {
+                new("M1", "/f1.cs", 1, 5, CyclomaticComplexity: 3, LinesOfExecutableCode: 10, HalsteadVolume: 50, MaintainabilityIndex: 80)
+            }),
+            new("NS.Class2", "/f2.cs", 0, new List<MethodMetrics>
+            {
+                new("M2", "/f2.cs", 1, 5, CyclomaticComplexity: 5, LinesOfExecutableCode: 8, HalsteadVolume: 60, MaintainabilityIndex: 70)
+            })
+        };
+
+        var namespaceMetrics = new NamespaceMetrics("NS", types);
+
+        await Assert.That(namespaceMetrics.TotalCyclomaticComplexity).IsEqualTo(8);
+    }
+
+    [Test]
+    public async Task NamespaceMetrics_TotalLinesOfExecutableCode_AggregatesFromAllTypes()
+    {
+        var types = new List<TypeMetrics>
+        {
+            new("NS.Class1", "/f1.cs", 0, new List<MethodMetrics>
+            {
+                new("M1", "/f1.cs", 1, 5, 1, LinesOfExecutableCode: 10, 50, 80)
+            }),
+            new("NS.Class2", "/f2.cs", 0, new List<MethodMetrics>
+            {
+                new("M2", "/f2.cs", 1, 5, 1, LinesOfExecutableCode: 15, 60, 70)
+            })
+        };
+
+        var namespaceMetrics = new NamespaceMetrics("NS", types);
+
+        await Assert.That(namespaceMetrics.TotalLinesOfExecutableCode).IsEqualTo(25);
+    }
+
+    [Test]
+    public async Task NamespaceMetrics_TotalMethods_CountsAllMethodsInAllTypes()
+    {
+        var types = new List<TypeMetrics>
+        {
+            new("NS.Class1", "/f1.cs", 0, new List<MethodMetrics>
+            {
+                new("M1", "/f1.cs", 1, 5, 1, 10, 50, 80),
+                new("M2", "/f1.cs", 6, 10, 1, 8, 40, 75)
+            }),
+            new("NS.Class2", "/f2.cs", 0, new List<MethodMetrics>
+            {
+                new("M3", "/f2.cs", 1, 5, 1, 15, 60, 70)
+            })
+        };
+
+        var namespaceMetrics = new NamespaceMetrics("NS", types);
+
+        await Assert.That(namespaceMetrics.TotalMethods).IsEqualTo(3);
+    }
+
+    [Test]
+    public async Task NamespaceMetrics_MaxDepthOfInheritance_ReturnsMaxFromTypes()
+    {
+        var types = new List<TypeMetrics>
+        {
+            new("NS.Class1", "/f1.cs", DepthOfInheritance: 1, Methods: []),
+            new("NS.Class2", "/f2.cs", DepthOfInheritance: 3, Methods: []),
+            new("NS.Class3", "/f3.cs", DepthOfInheritance: 0, Methods: [])
+        };
+
+        var namespaceMetrics = new NamespaceMetrics("NS", types);
+
+        await Assert.That(namespaceMetrics.MaxDepthOfInheritance).IsEqualTo(3);
+    }
+
+    [Test]
+    public async Task NamespaceMetrics_AvgMaintainabilityIndex_CalculatesCorrectly()
+    {
+        var types = new List<TypeMetrics>
+        {
+            new("NS.Class1", "/f1.cs", 0, new List<MethodMetrics>
+            {
+                new("M1", "/f1.cs", 1, 5, 1, 10, 50, MaintainabilityIndex: 80.0),
+                new("M2", "/f1.cs", 6, 10, 1, 10, 50, MaintainabilityIndex: 60.0)
+            }),
+            new("NS.Class2", "/f2.cs", 0, new List<MethodMetrics>
+            {
+                new("M3", "/f2.cs", 1, 5, 1, 10, 50, MaintainabilityIndex: 70.0)
+            })
+        };
+
+        var namespaceMetrics = new NamespaceMetrics("NS", types);
+
+        // (80 + 60 + 70) / 3 = 70
+        await Assert.That(namespaceMetrics.AvgMaintainabilityIndex).IsEqualTo(70.0);
+    }
+
+    [Test]
+    public async Task NamespaceMetrics_EmptyTypes_ReturnsZeros()
+    {
+        var namespaceMetrics = new NamespaceMetrics("EmptyNS", []);
+
+        await Assert.That(namespaceMetrics.TotalCyclomaticComplexity).IsEqualTo(0);
+        await Assert.That(namespaceMetrics.TotalLinesOfExecutableCode).IsEqualTo(0);
+        await Assert.That(namespaceMetrics.TotalMethods).IsEqualTo(0);
+        await Assert.That(namespaceMetrics.MaxDepthOfInheritance).IsEqualTo(0);
+        await Assert.That(namespaceMetrics.AvgMaintainabilityIndex).IsEqualTo(0.0);
+    }
+
+    [Test]
+    public async Task ProjectMetrics_GetNamespaceMetrics_GroupsTypesByNamespace()
+    {
+        var types = new List<TypeMetrics>
+        {
+            new("NS1.Class1", "/f1.cs", 0, []),
+            new("NS1.Class2", "/f2.cs", 0, []),
+            new("NS2.Class3", "/f3.cs", 0, []),
+            new("NS2.Class4", "/f4.cs", 0, [])
+        };
+
+        var projectMetrics = new ProjectMetrics("TestProject", "/project.csproj", types);
+        var namespaces = projectMetrics.GetNamespaceMetrics();
+
+        await Assert.That(namespaces.Count).IsEqualTo(2);
+        await Assert.That(namespaces[0].Name).IsEqualTo("NS1");
+        await Assert.That(namespaces[0].Types.Count).IsEqualTo(2);
+        await Assert.That(namespaces[1].Name).IsEqualTo("NS2");
+        await Assert.That(namespaces[1].Types.Count).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task ProjectMetrics_GetNamespaceMetrics_SortsNamespacesAlphabetically()
+    {
+        var types = new List<TypeMetrics>
+        {
+            new("Zebra.Class1", "/f1.cs", 0, []),
+            new("Alpha.Class2", "/f2.cs", 0, []),
+            new("Beta.Class3", "/f3.cs", 0, [])
+        };
+
+        var projectMetrics = new ProjectMetrics("TestProject", "/project.csproj", types);
+        var namespaces = projectMetrics.GetNamespaceMetrics();
+
+        await Assert.That(namespaces.Count).IsEqualTo(3);
+        await Assert.That(namespaces[0].Name).IsEqualTo("Alpha");
+        await Assert.That(namespaces[1].Name).IsEqualTo("Beta");
+        await Assert.That(namespaces[2].Name).IsEqualTo("Zebra");
+    }
+
+    [Test]
+    public async Task ProjectMetrics_GetNamespaceMetrics_HandlesGlobalNamespace()
+    {
+        var types = new List<TypeMetrics>
+        {
+            new("SimpleClass", "/f1.cs", 0, []),
+            new("NS.Class2", "/f2.cs", 0, [])
+        };
+
+        var projectMetrics = new ProjectMetrics("TestProject", "/project.csproj", types);
+        var namespaces = projectMetrics.GetNamespaceMetrics();
+
+        await Assert.That(namespaces.Count).IsEqualTo(2);
+        await Assert.That(namespaces[0].Name).IsEqualTo("(global)");
+        await Assert.That(namespaces[0].Types.Count).IsEqualTo(1);
+        await Assert.That(namespaces[1].Name).IsEqualTo("NS");
+        await Assert.That(namespaces[1].Types.Count).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task ProjectMetrics_GetNamespaceMetrics_AggregatesMetricsCorrectly()
+    {
+        var types = new List<TypeMetrics>
+        {
+            new("NS.Class1", "/f1.cs", DepthOfInheritance: 2, new List<MethodMetrics>
+            {
+                new("M1", "/f1.cs", 1, 5, CyclomaticComplexity: 3, LinesOfExecutableCode: 10, HalsteadVolume: 50, MaintainabilityIndex: 80)
+            }),
+            new("NS.Class2", "/f2.cs", DepthOfInheritance: 1, new List<MethodMetrics>
+            {
+                new("M2", "/f2.cs", 1, 5, CyclomaticComplexity: 5, LinesOfExecutableCode: 15, HalsteadVolume: 60, MaintainabilityIndex: 60)
+            })
+        };
+
+        var projectMetrics = new ProjectMetrics("TestProject", "/project.csproj", types);
+        var namespaces = projectMetrics.GetNamespaceMetrics();
+
+        await Assert.That(namespaces.Count).IsEqualTo(1);
+        var ns = namespaces[0];
+        await Assert.That(ns.Name).IsEqualTo("NS");
+        await Assert.That(ns.TotalCyclomaticComplexity).IsEqualTo(8); // 3 + 5
+        await Assert.That(ns.TotalLinesOfExecutableCode).IsEqualTo(25); // 10 + 15
+        await Assert.That(ns.TotalMethods).IsEqualTo(2);
+        await Assert.That(ns.MaxDepthOfInheritance).IsEqualTo(2);
+        await Assert.That(ns.AvgMaintainabilityIndex).IsEqualTo(70.0); // (80 + 60) / 2
+    }
 }

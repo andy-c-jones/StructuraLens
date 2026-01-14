@@ -20,7 +20,11 @@ public sealed class HtmlReportGenerator : IReportGenerator
     /// <inheritdoc />
     public string GenerateHtml(AnalysisReport report)
     {
-        var compactReport = _reportExporter.Export(report);
+        // Cast to CompactReportExporter to access the hierarchical export method
+        var exporter = _reportExporter as CompactReportExporter;
+        var compactReport = exporter?.ExportHierarchical(report, includeMethodDetails: true, includeTypeDetails: true)
+                            ?? _reportExporter.Export(report, includeMethodDetails: true, includeTypeDetails: true);
+        
         var jsonData = JsonSerializer.Serialize(compactReport, new JsonSerializerOptions
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -167,9 +171,34 @@ public sealed class HtmlReportGenerator : IReportGenerator
     .mi-medium { background: var(--warning); }
     .mi-poor { background: var(--error); }
     .copyright { text-align: center; padding: 20px; color: var(--text-muted); font-size: 12px; border-top: 1px solid var(--border); margin-top: 30px; }
+    
+    /* Tree structure styles */
+    .tree { list-style: none; padding-left: 0; }
+    .tree-node { margin: 0; padding: 0; }
+    .tree-item { display: flex; align-items: center; padding: 8px 12px; cursor: pointer; border-radius: 4px; transition: background 0.2s; }
+    .tree-item:hover { background: var(--bg-hover); }
+    .tree-toggle { margin-right: 8px; color: var(--text-muted); font-size: 12px; width: 16px; text-align: center; user-select: none; }
+    .tree-toggle.expandable { cursor: pointer; }
+    .tree-toggle.expanded::before { content: '▼'; }
+    .tree-toggle.collapsed::before { content: '▶'; }
+    .tree-label { flex: 1; display: flex; align-items: center; gap: 8px; font-size: 0.9rem; }
+    .tree-label-text { font-weight: 500; }
+    .tree-metrics { display: flex; gap: 12px; font-size: 0.85rem; color: var(--text-muted); }
+    .tree-metric { display: flex; align-items: center; gap: 4px; }
+    .tree-metric-label { font-weight: 400; }
+    .tree-metric-value { font-weight: 500; color: var(--text); }
+    .tree-children { list-style: none; padding-left: 24px; display: none; }
+    .tree-children.expanded { display: block; }
+    .tree-icon { color: var(--accent); font-size: 14px; }
+    .tree-level-project .tree-label-text { color: var(--accent); font-weight: 600; font-size: 1rem; }
+    .tree-level-namespace .tree-label-text { color: var(--text); }
+    .tree-level-type .tree-label-text { color: var(--text); font-weight: 400; }
+    .tree-level-method .tree-label-text { color: var(--text-muted); font-weight: 400; font-size: 0.85rem; }
+    
     @media (max-width: 768px) {
       .cards { grid-template-columns: repeat(2, 1fr); }
       .header { flex-direction: column; align-items: flex-start; gap: 10px; }
+      .tree-metrics { flex-direction: column; gap: 4px; }
     }
   </style>
 """;
@@ -304,7 +333,7 @@ public sealed class HtmlReportGenerator : IReportGenerator
         <div class="section">
           <h2>Projects Overview</h2>
           <table>
-            <thead><tr><th>Project</th><th>Types</th><th>Methods</th><th>CC</th><th>LOC</th><th>MI</th><th>Instability</th><th>Issues</th></tr></thead>
+             <thead><tr><th>Project</th><th>Types</th><th>Methods</th><th>Cyclomatic Complexity</th><th>Lines of Code</th><th>Maintainability Index</th><th>Instability</th><th>Issues</th></tr></thead>
             <tbody>${d.prj.map(p => `
               <tr>
                 <td>${p.n}</td>
@@ -335,11 +364,51 @@ public sealed class HtmlReportGenerator : IReportGenerator
             <option value="">All Projects</option>
             ${d.prj.map(p => `<option value="${p.n}">${p.n}</option>`).join('')}
           </select>
+          <label style="margin-left: 20px;">View:</label>
+          <select id="viewMode">
+            <option value="tree">Tree View (Recommended)</option>
+            <option value="table">Table View</option>
+          </select>
+          <button id="expandAll" style="margin-left: 10px; padding: 6px 12px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 4px; color: var(--text); cursor: pointer;">Expand All</button>
+          <button id="collapseAll" style="margin-left: 5px; padding: 6px 12px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 4px; color: var(--text); cursor: pointer;">Collapse All</button>
         </div>
-        <div id="projectsTable"></div>
+        <div id="projectsTree"></div>
+        <div id="projectsTable" style="display: none;"></div>
       `;
-      document.getElementById('projectFilter').addEventListener('change', updateProjectsTable);
-      updateProjectsTable();
+      document.getElementById('projectFilter').addEventListener('change', updateProjectsView);
+      document.getElementById('viewMode').addEventListener('change', updateProjectsView);
+      document.getElementById('expandAll').addEventListener('click', () => expandCollapseAll(true));
+      document.getElementById('collapseAll').addEventListener('click', () => expandCollapseAll(false));
+      updateProjectsView();
+    }
+
+    function updateProjectsView() {
+      const viewMode = document.getElementById('viewMode').value;
+      const treeContainer = document.getElementById('projectsTree');
+      const tableContainer = document.getElementById('projectsTable');
+      const expandBtn = document.getElementById('expandAll');
+      const collapseBtn = document.getElementById('collapseAll');
+      
+      if (viewMode === 'tree') {
+        treeContainer.style.display = 'block';
+        tableContainer.style.display = 'none';
+        expandBtn.style.display = 'inline-block';
+        collapseBtn.style.display = 'inline-block';
+        updateProjectsTree();
+      } else {
+        treeContainer.style.display = 'none';
+        tableContainer.style.display = 'block';
+        expandBtn.style.display = 'none';
+        collapseBtn.style.display = 'none';
+        updateProjectsTable();
+      }
+    }
+
+    function updateProjectsTree() {
+      const filter = document.getElementById('projectFilter').value;
+      const projects = filter ? reportData.prj.filter(p => p.n === filter) : reportData.prj;
+      document.getElementById('projectsTree').innerHTML = renderTree(projects);
+      attachTreeHandlers();
     }
 
     function updateProjectsTable() {
@@ -347,7 +416,7 @@ public sealed class HtmlReportGenerator : IReportGenerator
       const projects = filter ? reportData.prj.filter(p => p.n === filter) : reportData.prj;
       document.getElementById('projectsTable').innerHTML = `
         <table>
-          <thead><tr><th>Project</th><th>Types</th><th>Methods</th><th>Cyclomatic Complexity</th><th>Lines of Code</th><th>Max DIT</th><th>Maintainability</th><th>Efferent (Ce)</th><th>Afferent (Ca)</th><th>Instability</th></tr></thead>
+           <thead><tr><th>Project</th><th>Types</th><th>Methods</th><th>Cyclomatic Complexity</th><th>Lines of Code</th><th>Max Depth of Inheritance</th><th>Maintainability Index</th><th>Efferent (Ce)</th><th>Afferent (Ca)</th><th>Instability</th></tr></thead>
           <tbody>${projects.map(p => `
             <tr>
               <td><strong>${p.n}</strong></td>
@@ -365,6 +434,153 @@ public sealed class HtmlReportGenerator : IReportGenerator
         </table>
       `;
       enableSorting();
+    }
+
+    function renderTree(projects) {
+      return `<ul class="tree">${projects.map(p => renderProjectNode(p)).join('')}</ul>`;
+    }
+
+    function renderProjectNode(project) {
+      const hasNamespaces = project.ns && project.ns.length > 0;
+      const hasTypes = project.types && project.types.length > 0;
+      const hasChildren = hasNamespaces || hasTypes;
+      
+      return `
+        <li class="tree-node tree-level-project">
+          <div class="tree-item" data-level="project">
+            <span class="tree-toggle ${hasChildren ? 'expandable collapsed' : ''}" data-node-id="p-${project.n}"></span>
+            <div class="tree-label">
+              <span class="tree-icon">📦</span>
+              <span class="tree-label-text">${project.n}</span>
+               <div class="tree-metrics">
+                <span class="tree-metric"><span class="tree-metric-label">Types:</span> <span class="tree-metric-value">${project.tc}</span></span>
+                <span class="tree-metric"><span class="tree-metric-label">Methods:</span> <span class="tree-metric-value">${project.mc}</span></span>
+                <span class="tree-metric"><span class="tree-metric-label">Cyclomatic Complexity:</span> <span class="tree-metric-value">${project.cc}</span></span>
+                <span class="tree-metric"><span class="tree-metric-label">Lines of Code:</span> <span class="tree-metric-value">${project.loc.toLocaleString()}</span></span>
+                <span class="tree-metric"><span class="tree-metric-label">Maintainability Index:</span> <span class="tree-metric-value">${project.mi}</span></span>
+              </div>
+            </div>
+          </div>
+          ${hasChildren ? `<ul class="tree-children" data-parent="p-${project.n}">
+            ${hasNamespaces ? project.ns.map(ns => renderNamespaceNode(ns, project.n)).join('') : ''}
+            ${hasTypes ? project.types.map(t => renderTypeNode(t, project.n)).join('') : ''}
+          </ul>` : ''}
+        </li>`;
+    }
+
+    function renderNamespaceNode(namespace, projectName) {
+      const hasTypes = namespace.types && namespace.types.length > 0;
+      const nodeId = `ns-${projectName}-${namespace.n}`;
+      
+      return `
+        <li class="tree-node tree-level-namespace">
+          <div class="tree-item" data-level="namespace">
+            <span class="tree-toggle ${hasTypes ? 'expandable collapsed' : ''}" data-node-id="${nodeId}"></span>
+            <div class="tree-label">
+              <span class="tree-icon">📁</span>
+              <span class="tree-label-text">${namespace.n}</span>
+               <div class="tree-metrics">
+                <span class="tree-metric"><span class="tree-metric-label">Types:</span> <span class="tree-metric-value">${namespace.tc}</span></span>
+                <span class="tree-metric"><span class="tree-metric-label">Methods:</span> <span class="tree-metric-value">${namespace.mc}</span></span>
+                <span class="tree-metric"><span class="tree-metric-label">Cyclomatic Complexity:</span> <span class="tree-metric-value">${namespace.cc}</span></span>
+                <span class="tree-metric"><span class="tree-metric-label">Lines of Code:</span> <span class="tree-metric-value">${namespace.loc.toLocaleString()}</span></span>
+                <span class="tree-metric"><span class="tree-metric-label">Maintainability Index:</span> <span class="tree-metric-value">${namespace.mi}</span></span>
+              </div>
+            </div>
+          </div>
+          ${hasTypes ? `<ul class="tree-children" data-parent="${nodeId}">
+            ${namespace.types.map(t => renderTypeNode(t, nodeId)).join('')}
+          </ul>` : ''}
+        </li>`;
+    }
+
+    function renderTypeNode(type, parentId) {
+      const hasMethods = type.m && type.m.length > 0;
+      const fullName = type.fn || type.n;
+      const nodeId = `t-${parentId}-${fullName.replace(/[^a-zA-Z0-9]/g, '_')}`;
+      
+      return `
+        <li class="tree-node tree-level-type">
+          <div class="tree-item" data-level="type">
+            <span class="tree-toggle ${hasMethods ? 'expandable collapsed' : ''}" data-node-id="${nodeId}"></span>
+            <div class="tree-label">
+              <span class="tree-icon">🔷</span>
+              <span class="tree-label-text">${type.n}</span>
+               <div class="tree-metrics">
+                <span class="tree-metric"><span class="tree-metric-label">Methods:</span> <span class="tree-metric-value">${hasMethods ? type.m.length : 0}</span></span>
+                <span class="tree-metric"><span class="tree-metric-label">Cyclomatic Complexity:</span> <span class="tree-metric-value">${type.cc}</span></span>
+                <span class="tree-metric"><span class="tree-metric-label">Lines of Code:</span> <span class="tree-metric-value">${type.loc.toLocaleString()}</span></span>
+                <span class="tree-metric"><span class="tree-metric-label">Maintainability Index:</span> <span class="tree-metric-value">${type.mi}</span></span>
+                <span class="tree-metric"><span class="tree-metric-label">Depth of Inheritance:</span> <span class="tree-metric-value">${type.dit}</span></span>
+              </div>
+            </div>
+          </div>
+          ${hasMethods ? `<ul class="tree-children" data-parent="${nodeId}">
+            ${type.m.map(m => renderMethodNode(m)).join('')}
+          </ul>` : ''}
+        </li>`;
+    }
+
+    function renderMethodNode(method) {
+      return `
+        <li class="tree-node tree-level-method">
+          <div class="tree-item" data-level="method">
+            <span class="tree-toggle"></span>
+            <div class="tree-label">
+              <span class="tree-icon">⚡</span>
+              <span class="tree-label-text">${method.n}</span>
+               <div class="tree-metrics">
+                <span class="tree-metric"><span class="tree-metric-label">Cyclomatic Complexity:</span> <span class="tree-metric-value">${method.cc}</span></span>
+                <span class="tree-metric"><span class="tree-metric-label">Lines of Code:</span> <span class="tree-metric-value">${method.loc}</span></span>
+                <span class="tree-metric"><span class="tree-metric-label">Maintainability Index:</span> <span class="tree-metric-value">${method.mi}</span></span>
+                <span class="tree-metric"><span class="tree-metric-label">Lines:</span> <span class="tree-metric-value">${method.sl}-${method.el}</span></span>
+              </div>
+            </div>
+          </div>
+        </li>`;
+    }
+
+    function attachTreeHandlers() {
+      document.querySelectorAll('.tree-toggle.expandable').forEach(toggle => {
+        toggle.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const nodeId = toggle.getAttribute('data-node-id');
+          const children = document.querySelector(`[data-parent="${nodeId}"]`);
+          
+          if (children) {
+            const isExpanded = toggle.classList.contains('expanded');
+            if (isExpanded) {
+              toggle.classList.remove('expanded');
+              toggle.classList.add('collapsed');
+              children.classList.remove('expanded');
+            } else {
+              toggle.classList.remove('collapsed');
+              toggle.classList.add('expanded');
+              children.classList.add('expanded');
+            }
+          }
+        });
+      });
+    }
+
+    function expandCollapseAll(expand) {
+      const toggles = document.querySelectorAll('.tree-toggle.expandable');
+      toggles.forEach(toggle => {
+        const nodeId = toggle.getAttribute('data-node-id');
+        const children = document.querySelector(`[data-parent="${nodeId}"]`);
+        
+        if (children) {
+          if (expand) {
+            toggle.classList.remove('collapsed');
+            toggle.classList.add('expanded');
+            children.classList.add('expanded');
+          } else {
+            toggle.classList.remove('expanded');
+            toggle.classList.add('collapsed');
+            children.classList.remove('expanded');
+          }
+        }
+      });
     }
 
     // Render coupling tab with table data
@@ -423,11 +639,11 @@ public sealed class HtmlReportGenerator : IReportGenerator
             <option value="project">Project Dependencies</option>
             <option value="namespace">Namespace Dependencies</option>
           </select>
-          <label>Color by:</label>
+           <label>Color by:</label>
           <select id="colorMetric">
             <option value="none">None</option>
-            <option value="diagnostics">Diagnostics Count</option>
-            <option value="coupling">Coupling (Ce)</option>
+            <option value="diagnostics" data-project-only="true">Diagnostics Count</option>
+            <option value="coupling">Efferent Coupling (Ce)</option>
             <option value="complexity">Cyclomatic Complexity</option>
             <option value="loc">Lines of Code</option>
             <option value="maintainability">Maintainability Index</option>
@@ -435,8 +651,8 @@ public sealed class HtmlReportGenerator : IReportGenerator
           <label>Size by:</label>
           <select id="sizeMetric">
             <option value="dependencies">Dependencies</option>
-            <option value="diagnostics">Diagnostics Count</option>
-            <option value="coupling">Coupling (Ce)</option>
+            <option value="diagnostics" data-project-only="true">Diagnostics Count</option>
+            <option value="coupling">Efferent Coupling (Ce)</option>
             <option value="complexity">Cyclomatic Complexity</option>
             <option value="loc">Lines of Code</option>
             <option value="maintainability">Maintainability Index</option>
@@ -445,6 +661,7 @@ public sealed class HtmlReportGenerator : IReportGenerator
         <div id="graphContainer" class="graph-container graph-fullpage"></div>
       `;
       document.getElementById('graphSelector').addEventListener('change', () => {
+        updateMetricOptions();
         renderCurrentGraph();
       });
       document.getElementById('colorMetric').addEventListener('change', () => {
@@ -452,6 +669,29 @@ public sealed class HtmlReportGenerator : IReportGenerator
       });
       document.getElementById('sizeMetric').addEventListener('change', () => {
         renderCurrentGraph();
+      });
+      updateMetricOptions();
+    }
+
+    function updateMetricOptions() {
+      const graphType = document.getElementById('graphSelector').value;
+      const isNamespace = graphType === 'namespace';
+      
+      // Hide/show diagnostics options based on graph type
+      const colorSelect = document.getElementById('colorMetric');
+      const sizeSelect = document.getElementById('sizeMetric');
+      
+      [colorSelect, sizeSelect].forEach(select => {
+        const options = select.querySelectorAll('option');
+        options.forEach(option => {
+          if (option.dataset.projectOnly === 'true') {
+            option.style.display = isNamespace ? 'none' : '';
+            if (isNamespace && option.selected) {
+              // Switch to a different option if diagnostics was selected
+              select.value = 'none';
+            }
+          }
+        });
       });
     }
 
@@ -511,44 +751,55 @@ public sealed class HtmlReportGenerator : IReportGenerator
     function getNodeColor(node, colorMetric, graphType) {
       if (colorMetric === 'none') return 'var(--node-default)';
       
-      // For namespace view, try to find project by prefix match
       let metrics = null;
+      let allMetrics = [];
+      
       if (graphType === 'project') {
         metrics = getProjectMetrics(node.name);
+        allMetrics = reportData.prj;
       } else {
-        // Find best matching project for namespace
-        const matchingProjects = reportData.prj.filter(p => node.name.startsWith(p.n.replace('.', '')));
-        if (matchingProjects.length > 0) {
-          metrics = matchingProjects.reduce((a, b) => a.n.length > b.n.length ? a : b);
-        }
+        // For namespace view, use the metrics directly from the node
+        metrics = {
+          cc: node.cc,
+          loc: node.loc,
+          mi: node.mi,
+          ce: node.ce,
+          ca: node.ca,
+          instability: node.instability
+        };
+        // Get all namespace metrics for normalization
+        allMetrics = reportData.g.ns.n.map(([id, name, loc, cc, mi, tc, mc, ce, ca, instability]) => 
+          ({ cc, loc, mi, ce, ca, instability })
+        );
       }
       
       if (!metrics) return 'var(--node-default)';
       
-      const allProjects = reportData.prj;
       let value, values;
       
       switch (colorMetric) {
         case 'diagnostics':
+          // Diagnostics not available for namespaces
+          if (graphType === 'namespace') return 'var(--node-default)';
           value = (metrics.err || 0) * 5 + (metrics.warn || 0); // Errors weighted 5x
-          values = allProjects.map(p => (p.err || 0) * 5 + (p.warn || 0));
+          values = allMetrics.map(p => (p.err || 0) * 5 + (p.warn || 0));
           break;
         case 'coupling':
           value = metrics.ce || 0;
-          values = allProjects.map(p => p.ce || 0);
+          values = allMetrics.map(m => m.ce || 0);
           break;
         case 'complexity':
           value = metrics.cc || 0;
-          values = allProjects.map(p => p.cc || 0);
+          values = allMetrics.map(m => m.cc || 0);
           break;
         case 'loc':
           value = metrics.loc || 0;
-          values = allProjects.map(p => p.loc || 0);
+          values = allMetrics.map(m => m.loc || 0);
           break;
         case 'maintainability':
           // Maintainability is inverse - lower MI is worse
           value = 100 - (metrics.mi || 100);
-          values = allProjects.map(p => 100 - (p.mi || 100));
+          values = allMetrics.map(m => 100 - (m.mi || 100));
           break;
         default:
           return 'var(--node-default)';
@@ -564,21 +815,28 @@ public sealed class HtmlReportGenerator : IReportGenerator
     function getNodeSizeValue(node, sizeMetric, graphType, outboundCount) {
       if (sizeMetric === 'dependencies') return outboundCount;
       
-      // For namespace view, try to find project by prefix match
       let metrics = null;
+      
       if (graphType === 'project') {
         metrics = getProjectMetrics(node.name);
       } else {
-        const matchingProjects = reportData.prj.filter(p => node.name.startsWith(p.n.replace('.', '')));
-        if (matchingProjects.length > 0) {
-          metrics = matchingProjects.reduce((a, b) => a.n.length > b.n.length ? a : b);
-        }
+        // For namespace view, use the metrics directly from the node
+        metrics = {
+          cc: node.cc,
+          loc: node.loc,
+          mi: node.mi,
+          ce: node.ce,
+          ca: node.ca,
+          instability: node.instability
+        };
       }
       
       if (!metrics) return outboundCount; // Fallback to dependencies
       
       switch (sizeMetric) {
         case 'diagnostics':
+          // Diagnostics not available for namespaces
+          if (graphType === 'namespace') return outboundCount;
           return (metrics.err || 0) * 5 + (metrics.warn || 0);
         case 'coupling':
           return metrics.ce || 0;
@@ -611,8 +869,23 @@ public sealed class HtmlReportGenerator : IReportGenerator
         outboundCounts[l.source] = (outboundCounts[l.source] || 0) + l.weight;
       });
       
-      // Build preliminary nodes to compute size values
-      const prelimNodes = graphData.n.map(([id, name, size]) => ({ id, name, size, depCount: outboundCounts[id] || 0 }));
+      // Parse node data based on graph type
+      // Project nodes: [id, name, size]
+      // Namespace nodes: [id, name, loc, cc, mi, tc, mc, ce, ca, instability]
+      const prelimNodes = graphData.n.map(nodeData => {
+        if (graphType === 'project') {
+          const [id, name, size] = nodeData;
+          return { id, name, size, depCount: outboundCounts[id] || 0 };
+        } else {
+          const [id, name, loc, cc, mi, tc, mc, ce, ca, instability] = nodeData;
+          return { 
+            id, name, 
+            loc, cc, mi, tc, mc, ce, ca, instability,
+            size: loc, // Default size to LOC for compatibility
+            depCount: outboundCounts[id] || 0 
+          };
+        }
+      });
       
       // Calculate size values based on selected metric
       const sizeValues = prelimNodes.map(n => getNodeSizeValue(n, sizeMetric, graphType, n.depCount));
