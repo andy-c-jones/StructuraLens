@@ -1055,7 +1055,6 @@ public sealed class HtmlReportGenerator : IReportGenerator
     renderProjects();
     renderCoupling();
     renderGraphTab();
-    renderLinting();
     renderDiagnostics();
     enableSorting();
   </script>
