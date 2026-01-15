@@ -195,10 +195,21 @@ public sealed class HtmlReportGenerator : IReportGenerator
     .tree-level-type .tree-label-text { color: var(--text); font-weight: 400; }
     .tree-level-method .tree-label-text { color: var(--text-muted); font-weight: 400; font-size: 0.85rem; }
     
+    /* Search and pagination styles */
+    .search-box { padding: 8px 12px; background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 4px; font-size: 0.9rem; width: 300px; }
+    .search-box:focus { outline: none; border-color: var(--accent); }
+    .pagination { display: flex; align-items: center; gap: 8px; margin-top: 15px; flex-wrap: wrap; }
+    .pagination-btn { padding: 6px 12px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 4px; color: var(--text); cursor: pointer; font-size: 0.9rem; transition: all 0.2s; }
+    .pagination-btn:hover:not(:disabled) { background: var(--bg-hover); border-color: var(--accent); }
+    .pagination-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .pagination-btn.active { background: var(--accent); color: var(--bg); border-color: var(--accent); font-weight: 600; }
+    .pagination-info { color: var(--text-muted); font-size: 0.9rem; }
+    
     @media (max-width: 768px) {
       .cards { grid-template-columns: repeat(2, 1fr); }
       .header { flex-direction: column; align-items: flex-start; gap: 10px; }
       .tree-metrics { flex-direction: column; gap: 4px; }
+      .search-box { width: 100%; }
     }
   </style>
 """;
@@ -303,6 +314,65 @@ public sealed class HtmlReportGenerator : IReportGenerator
     // Apply sorting to all tables after render
     function enableSorting() {
       document.querySelectorAll('table').forEach(makeSortable);
+    }
+
+    // Utility function to render pagination controls
+    function renderPagination(currentPage, totalPages, onPageChange) {
+      if (totalPages <= 1) return '';
+      
+      const pages = [];
+      const maxVisible = 7;
+      
+      if (totalPages <= maxVisible) {
+        for (let i = 1; i <= totalPages; i++) {
+          pages.push(i);
+        }
+      } else {
+        if (currentPage <= 4) {
+          for (let i = 1; i <= 5; i++) pages.push(i);
+          pages.push('...');
+          pages.push(totalPages);
+        } else if (currentPage >= totalPages - 3) {
+          pages.push(1);
+          pages.push('...');
+          for (let i = totalPages - 4; i <= totalPages; i++) pages.push(i);
+        } else {
+          pages.push(1);
+          pages.push('...');
+          for (let i = currentPage - 1; i <= currentPage + 1; i++) pages.push(i);
+          pages.push('...');
+          pages.push(totalPages);
+        }
+      }
+      
+      const buttons = pages.map(page => {
+        if (page === '...') {
+          return '<span class="pagination-info">...</span>';
+        }
+        const isActive = page === currentPage;
+        return `<button class="pagination-btn ${isActive ? 'active' : ''}" data-page="${page}" ${isActive ? 'disabled' : ''}>${page}</button>`;
+      }).join('');
+      
+      return `
+        <div class="pagination">
+          <button class="pagination-btn" data-page="${currentPage - 1}" ${currentPage === 1 ? 'disabled' : ''}>Previous</button>
+          ${buttons}
+          <button class="pagination-btn" data-page="${currentPage + 1}" ${currentPage === totalPages ? 'disabled' : ''}>Next</button>
+        </div>
+      `;
+    }
+
+    // Attach pagination event listeners
+    function attachPaginationListeners(containerId, callback) {
+      const container = document.getElementById(containerId);
+      if (!container) return;
+      
+      container.querySelectorAll('.pagination-btn[data-page]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const page = parseInt(btn.dataset.page);
+          if (!isNaN(page)) callback(page);
+        });
+      });
     }
 
     // Render summary tab
@@ -584,6 +654,10 @@ public sealed class HtmlReportGenerator : IReportGenerator
     }
 
     // Render coupling tab with table data
+    let nsCurrentPage = 1;
+    let nsSearchQuery = '';
+    const nsPageSize = 100;
+    
     function renderCoupling() {
       const g = reportData.g;
       // Build coupling table from graph edges
@@ -618,15 +692,70 @@ public sealed class HtmlReportGenerator : IReportGenerator
         <div class="section">
           <h2>Namespace Dependencies</h2>
           ${namespaceEdges.length > 0 ? `
-          <table>
-            <thead><tr><th>From</th><th>To</th><th>References</th></tr></thead>
-            <tbody>${namespaceEdges.slice(0, 100).map(e => `
-              <tr><td>${e.from}</td><td>${e.to}</td><td>${e.weight}</td></tr>`).join('')}
-            </tbody>
-          </table>
-          ${namespaceEdges.length > 100 ? `<p style="color:var(--text-muted);margin-top:10px">Showing first 100 of ${namespaceEdges.length} dependencies</p>` : ''}` : '<p style="color:var(--text-muted)">No namespace dependencies</p>'}
+            <div class="filter-bar" style="margin-bottom: 15px;">
+              <label>Search:</label>
+              <input type="text" id="nsSearchBox" class="search-box" placeholder="Search in any column..." value="${nsSearchQuery}">
+            </div>
+            <div id="namespaceDepsTable"></div>
+          ` : '<p style="color:var(--text-muted)">No namespace dependencies</p>'}
         </div>
       `;
+      
+      if (namespaceEdges.length > 0) {
+        // Store namespace edges globally for filtering/pagination
+        window.namespaceEdgesData = namespaceEdges;
+        
+        document.getElementById('nsSearchBox').addEventListener('input', (e) => {
+          nsSearchQuery = e.target.value;
+          nsCurrentPage = 1;
+          updateNamespaceDepsTable();
+        });
+        
+        updateNamespaceDepsTable();
+      }
+      
+      enableSorting();
+    }
+    
+    function updateNamespaceDepsTable() {
+      const searchQuery = nsSearchQuery.toLowerCase();
+      let filtered = window.namespaceEdgesData;
+      
+      if (searchQuery) {
+        filtered = filtered.filter(e => 
+          e.from.toLowerCase().includes(searchQuery) ||
+          e.to.toLowerCase().includes(searchQuery) ||
+          e.weight.toString().includes(searchQuery)
+        );
+      }
+      
+      const totalPages = Math.ceil(filtered.length / nsPageSize);
+      const startIdx = (nsCurrentPage - 1) * nsPageSize;
+      const endIdx = startIdx + nsPageSize;
+      const pageData = filtered.slice(startIdx, endIdx);
+      
+      document.getElementById('namespaceDepsTable').innerHTML = `
+        <p style="color:var(--text-muted);margin-bottom:10px">
+          ${filtered.length} dependenc${filtered.length !== 1 ? 'ies' : 'y'}
+          ${filtered.length > nsPageSize ? ` (showing ${startIdx + 1}-${Math.min(endIdx, filtered.length)})` : ''}
+        </p>
+        <table>
+          <thead><tr><th>From</th><th>To</th><th>References</th></tr></thead>
+          <tbody>${pageData.map(e => `
+            <tr><td>${e.from}</td><td>${e.to}</td><td>${e.weight}</td></tr>`).join('')}
+          </tbody>
+        </table>
+        ${renderPagination(nsCurrentPage, totalPages, (page) => {
+          nsCurrentPage = page;
+          updateNamespaceDepsTable();
+        })}
+      `;
+      
+      attachPaginationListeners('namespaceDepsTable', (page) => {
+        nsCurrentPage = page;
+        updateNamespaceDepsTable();
+      });
+      
       enableSorting();
     }
 
@@ -995,6 +1124,10 @@ public sealed class HtmlReportGenerator : IReportGenerator
 
 
     // Render diagnostics tab
+    let diagCurrentPage = 1;
+    let diagSearchQuery = '';
+    const diagPageSize = 100;
+    
     function renderDiagnostics() {
       if (!diagnosticsData || diagnosticsData.length === 0) {
         document.getElementById('diagnostics').innerHTML = '<p class="passed">✅ No compiler diagnostics</p>';
@@ -1003,7 +1136,9 @@ public sealed class HtmlReportGenerator : IReportGenerator
       const projects = [...new Set(diagnosticsData.map(d => d.project))];
       document.getElementById('diagnostics').innerHTML = `
         <div class="filter-bar">
-          <label>Filter by project:</label>
+          <label>Search:</label>
+          <input type="text" id="diagSearchBox" class="search-box" placeholder="Search in any column..." value="${diagSearchQuery}">
+          <label style="margin-left: 15px;">Filter by project:</label>
           <select id="diagProjectFilter">
             <option value="">All Projects</option>
             ${projects.map(p => `<option value="${p}">${p}</option>`).join('')}
@@ -1018,23 +1153,55 @@ public sealed class HtmlReportGenerator : IReportGenerator
         </div>
         <div id="diagnosticsTable"></div>
       `;
-      document.getElementById('diagProjectFilter').addEventListener('change', updateDiagnosticsTable);
-      document.getElementById('diagSeverityFilter').addEventListener('change', updateDiagnosticsTable);
+      
+      document.getElementById('diagSearchBox').addEventListener('input', (e) => {
+        diagSearchQuery = e.target.value;
+        diagCurrentPage = 1;
+        updateDiagnosticsTable();
+      });
+      document.getElementById('diagProjectFilter').addEventListener('change', () => {
+        diagCurrentPage = 1;
+        updateDiagnosticsTable();
+      });
+      document.getElementById('diagSeverityFilter').addEventListener('change', () => {
+        diagCurrentPage = 1;
+        updateDiagnosticsTable();
+      });
       updateDiagnosticsTable();
     }
 
     function updateDiagnosticsTable() {
       const projFilter = document.getElementById('diagProjectFilter').value;
       const sevFilter = document.getElementById('diagSeverityFilter').value;
+      const searchQuery = diagSearchQuery.toLowerCase();
+      
       let filtered = diagnosticsData;
       if (projFilter) filtered = filtered.filter(d => d.project === projFilter);
       if (sevFilter) filtered = filtered.filter(d => d.severity === sevFilter);
+      if (searchQuery) {
+        filtered = filtered.filter(d => 
+          d.project.toLowerCase().includes(searchQuery) ||
+          d.id.toLowerCase().includes(searchQuery) ||
+          d.severity.toLowerCase().includes(searchQuery) ||
+          d.message.toLowerCase().includes(searchQuery) ||
+          d.file.toLowerCase().includes(searchQuery) ||
+          d.line.toString().includes(searchQuery)
+        );
+      }
+      
+      const totalPages = Math.ceil(filtered.length / diagPageSize);
+      const startIdx = (diagCurrentPage - 1) * diagPageSize;
+      const endIdx = startIdx + diagPageSize;
+      const pageData = filtered.slice(startIdx, endIdx);
       
       document.getElementById('diagnosticsTable').innerHTML = `
-        <p style="color:var(--text-muted);margin-bottom:10px">${filtered.length} diagnostics</p>
+        <p style="color:var(--text-muted);margin-bottom:10px">
+          ${filtered.length} diagnostic${filtered.length !== 1 ? 's' : ''}
+          ${filtered.length > diagPageSize ? ` (showing ${startIdx + 1}-${Math.min(endIdx, filtered.length)})` : ''}
+        </p>
         <table>
           <thead><tr><th>Project</th><th>ID</th><th>Severity</th><th>Message</th><th>File</th><th>Line</th></tr></thead>
-          <tbody>${filtered.slice(0, 100).map(d => `
+          <tbody>${pageData.map(d => `
             <tr>
               <td>${d.project}</td>
               <td><code>${d.id}</code></td>
@@ -1045,8 +1212,17 @@ public sealed class HtmlReportGenerator : IReportGenerator
             </tr>`).join('')}
           </tbody>
         </table>
-        ${filtered.length > 100 ? `<p style="color:var(--text-muted);margin-top:10px">Showing first 100 of ${filtered.length} diagnostics</p>` : ''}
+        ${renderPagination(diagCurrentPage, totalPages, (page) => {
+          diagCurrentPage = page;
+          updateDiagnosticsTable();
+        })}
       `;
+      
+      attachPaginationListeners('diagnosticsTable', (page) => {
+        diagCurrentPage = page;
+        updateDiagnosticsTable();
+      });
+      
       enableSorting();
     }
 
