@@ -131,7 +131,7 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
             var metrics = await AnalyzeProjectWithCouplingAsync(project, compilationCache, dependencyCollector, ct);
             projectMetricsList.Add(metrics);
             
-            SolutionAnalyzerLog.CompletedProject(_logger, project.Name, metrics.Types.Count, metrics.TotalMethods, 0);
+            SolutionAnalyzerLog.CompletedProject(_logger, project.Name, metrics.Types.Count, metrics.TotalMethods);
         });
 
         // Build coupling analysis from streaming collector (already aggregated)
