@@ -495,18 +495,19 @@ static void PrintSummary(AnalysisReport report, ILogger logger)
 
 static string SanitizeBranchName(string branchName)
 {
-    // Replace invalid filename characters with underscores
-    char[] invalidChars = Path.GetInvalidFileNameChars();
-    var result = branchName;
+    // Use a unified set of invalid characters that works across all platforms
+    // This includes all Windows-invalid chars for maximum cross-platform compatibility
+    // Characters: < > : " | ? * / \ and control characters (0-31)
+    char[] invalidChars = new[] { '<', '>', ':', '"', '|', '?', '*', '/', '\\', '\0' }
+        .Concat(Enumerable.Range(1, 31).Select(i => (char)i))
+        .Distinct()
+        .ToArray();
     
+    var result = branchName;
     foreach (char c in invalidChars)
     {
         result = result.Replace(c, '_');
     }
-    
-    // Replace forward slashes (common in branch names: feature/foo)
-    result = result.Replace('/', '_');
-    result = result.Replace('\\', '_');
     
     return result;
 }
