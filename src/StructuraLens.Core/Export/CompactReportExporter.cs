@@ -26,7 +26,11 @@ public sealed class CompactReportExporter : IReportExporter
             Timestamp = new DateTimeOffset(report.AnalyzedAt).ToUnixTimeMilliseconds(),
             Projects = projects,
             Graph = graph,
-            Diagnostics = diagnostics
+            Diagnostics = diagnostics,
+            GitCommitSha = report.GitInfo?.CommitSha,
+            GitBranch = report.GitInfo?.BranchName,
+            GitRemoteUrl = report.GitInfo?.RemoteUrl,
+            GitIsDirty = report.GitInfo?.IsDirty ?? false
         };
     }
 
@@ -49,7 +53,11 @@ public sealed class CompactReportExporter : IReportExporter
             Timestamp = new DateTimeOffset(report.AnalyzedAt).ToUnixTimeMilliseconds(),
             Projects = projects,
             Graph = graph,
-            Diagnostics = diagnostics
+            Diagnostics = diagnostics,
+            GitCommitSha = report.GitInfo?.CommitSha,
+            GitBranch = report.GitInfo?.BranchName,
+            GitRemoteUrl = report.GitInfo?.RemoteUrl,
+            GitIsDirty = report.GitInfo?.IsDirty ?? false
         };
     }
 

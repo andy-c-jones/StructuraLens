@@ -101,4 +101,18 @@ public record AnalysisReport(
     /// Statistics about dependency aggregation performance.
     /// </summary>
     public DependencyCollectorStats? AggregationStats { get; init; }
+
+    /// <summary>
+    /// Git repository metadata if analyzed path is in a git repository.
+    /// </summary>
+    public GitRepositoryInfo? GitInfo { get; init; }
 }
+
+/// <summary>
+/// Represents git repository metadata for an analysis report.
+/// </summary>
+public record GitRepositoryInfo(
+    string CommitSha,
+    string BranchName,
+    string? RemoteUrl = null,
+    bool IsDirty = false);

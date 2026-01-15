@@ -918,4 +918,69 @@ public class CompactReportExporterTests
         await Assert.That((int)nsNode[5]).IsEqualTo(1);   // Type count
         await Assert.That((int)nsNode[6]).IsEqualTo(0);   // Method count
     }
+
+    [Test]
+    public async Task Export_WithGitInfo_IncludesGitMetadata()
+    {
+        // Arrange
+        var exporter = CreateExporter();
+        var report = CreateMinimalReport() with
+        {
+            GitInfo = new GitRepositoryInfo(
+                CommitSha: "1234567890abcdef1234567890abcdef12345678",
+                BranchName: "feature/test-branch",
+                RemoteUrl: "https://github.com/test/repo.git",
+                IsDirty: true)
+        };
+
+        // Act
+        var compactReport = exporter.Export(report);
+
+        // Assert
+        await Assert.That(compactReport.GitCommitSha).IsEqualTo("1234567890abcdef1234567890abcdef12345678");
+        await Assert.That(compactReport.GitBranch).IsEqualTo("feature/test-branch");
+        await Assert.That(compactReport.GitRemoteUrl).IsEqualTo("https://github.com/test/repo.git");
+        await Assert.That(compactReport.GitIsDirty).IsTrue();
+    }
+
+    [Test]
+    public async Task Export_WithoutGitInfo_GitFieldsAreNull()
+    {
+        // Arrange
+        var exporter = CreateExporter();
+        var report = CreateMinimalReport(); // No git info
+
+        // Act
+        var compactReport = exporter.Export(report);
+
+        // Assert
+        await Assert.That(compactReport.GitCommitSha).IsNull();
+        await Assert.That(compactReport.GitBranch).IsNull();
+        await Assert.That(compactReport.GitRemoteUrl).IsNull();
+        await Assert.That(compactReport.GitIsDirty).IsFalse(); // Default value for bool
+    }
+
+    [Test]
+    public async Task ExportHierarchical_WithGitInfo_IncludesGitMetadata()
+    {
+        // Arrange
+        var exporter = CreateExporter();
+        var report = CreateMinimalReport() with
+        {
+            GitInfo = new GitRepositoryInfo(
+                CommitSha: "abcdef1234567890abcdef1234567890abcdef12",
+                BranchName: "main",
+                RemoteUrl: null, // Test with null remote
+                IsDirty: false)
+        };
+
+        // Act
+        var compactReport = exporter.ExportHierarchical(report);
+
+        // Assert
+        await Assert.That(compactReport.GitCommitSha).IsEqualTo("abcdef1234567890abcdef1234567890abcdef12");
+        await Assert.That(compactReport.GitBranch).IsEqualTo("main");
+        await Assert.That(compactReport.GitRemoteUrl).IsNull();
+        await Assert.That(compactReport.GitIsDirty).IsFalse();
+    }
 }

@@ -33,6 +33,26 @@ public record CompactReport
     [JsonPropertyName("diag")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public CompactDiagnostics? Diagnostics { get; init; }
+
+    /// <summary>Git commit SHA (full 40 characters).</summary>
+    [JsonPropertyName("gitSha")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? GitCommitSha { get; init; }
+
+    /// <summary>Git branch name.</summary>
+    [JsonPropertyName("gitBranch")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? GitBranch { get; init; }
+
+    /// <summary>Git remote URL (typically origin).</summary>
+    [JsonPropertyName("gitRemote")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? GitRemoteUrl { get; init; }
+
+    /// <summary>Has uncommitted changes in working tree.</summary>
+    [JsonPropertyName("gitDirty")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool GitIsDirty { get; init; }
 }
 
 /// <summary>Compact project metrics.</summary>

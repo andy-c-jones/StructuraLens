@@ -21,6 +21,7 @@ public class SolutionAnalyzerTests
         var couplingAnalyzer = new CouplingAnalyzer(new NullLogger<CouplingAnalyzer>());
         var metricsCalculator = new MetricsCalculator();
         var fileSystem = new FileSystemService();
+        var gitService = new GitRepositoryService(new NullLogger<GitRepositoryService>());
 
         return new SolutionAnalyzer(
             logger,
@@ -28,7 +29,8 @@ public class SolutionAnalyzerTests
             workspaceFactory,
             couplingAnalyzer,
             metricsCalculator,
-            fileSystem);
+            fileSystem,
+            gitService);
     }
 
     [Test]
@@ -104,6 +106,7 @@ public class SolutionAnalyzerIntegrationTests
         var couplingAnalyzer = new CouplingAnalyzer(new NullLogger<CouplingAnalyzer>());
         var metricsCalculator = new MetricsCalculator();
         var fileSystem = new FileSystemService();
+        var gitService = new GitRepositoryService(new NullLogger<GitRepositoryService>());
 
         return new SolutionAnalyzer(
             logger,
@@ -111,7 +114,8 @@ public class SolutionAnalyzerIntegrationTests
             workspaceFactory,
             couplingAnalyzer,
             metricsCalculator,
-            fileSystem);
+            fileSystem,
+            gitService);
     }
 
     private static string GetSolutionPath()
