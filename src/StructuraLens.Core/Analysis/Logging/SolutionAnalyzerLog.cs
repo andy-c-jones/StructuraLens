@@ -66,8 +66,8 @@ internal static partial class SolutionAnalyzerLog
     [LoggerMessage(
         EventId = 1009,
         Level = LogLevel.Information,
-        Message = "Completed {projectName}: {typeCount} types, {methodCount} methods, {depCount} dependencies")]
-    public static partial void CompletedProject(ILogger logger, string projectName, int typeCount, int methodCount, int depCount);
+        Message = "Completed {projectName}: {typeCount} types, {methodCount} methods")]
+    public static partial void CompletedProject(ILogger logger, string projectName, int typeCount, int methodCount);
 
     [LoggerMessage(
         EventId = 1010,
