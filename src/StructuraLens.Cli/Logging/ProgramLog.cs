@@ -46,13 +46,37 @@ internal static partial class ProgramLog
     public static partial void MemoryThreshold(ILogger logger, long thresholdMB);
 
     [LoggerMessage(
-        EventId = 4009,
+        EventId = 4010,
         Level = LogLevel.Information,
         Message = "=== Dependency Aggregation Stats ===")]
     public static partial void AggregationStatsHeader(ILogger logger);
 
     [LoggerMessage(
-        EventId = 4010,
+        EventId = 4016,
+        Level = LogLevel.Debug,
+        Message = "Git repository detected: {branch} @ {commit}")]
+    public static partial void GitRepositoryDetected(ILogger logger, string branch, string commit);
+
+    [LoggerMessage(
+        EventId = 4017,
+        Level = LogLevel.Information,
+        Message = "Generated default output filename: {filename}")]
+    public static partial void GeneratedDefaultFilename(ILogger logger, string filename);
+
+    [LoggerMessage(
+        EventId = 4018,
+        Level = LogLevel.Debug,
+        Message = "Not in a git repository, using timestamp-based filename")]
+    public static partial void NotInGitRepository(ILogger logger);
+
+    [LoggerMessage(
+        EventId = 4019,
+        Level = LogLevel.Warning,
+        Message = "Analyzing uncommitted changes (dirty working tree)")]
+    public static partial void DirtyWorkingTree(ILogger logger);
+
+    [LoggerMessage(
+        EventId = 4011,
         Level = LogLevel.Information,
         Message = "Strategy: {strategy}")]
     public static partial void AggregationStatsStrategy(ILogger logger, string strategy);

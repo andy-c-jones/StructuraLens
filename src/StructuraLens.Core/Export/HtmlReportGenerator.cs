@@ -219,12 +219,23 @@ public sealed class HtmlReportGenerator : IReportGenerator
     {
         var timestamp = report.AnalyzedAt.ToString("yyyy-MM-dd HH:mm:ss UTC");
         var solutionName = Path.GetFileName(report.SolutionPath);
+        
+        var gitInfoHtml = "";
+        if (report.GitInfo != null)
+        {
+            var dirtyBadge = report.GitInfo.IsDirty ? " <span class=\"badge badge-warning\">Uncommitted Changes</span>" : "";
+            gitInfoHtml = $@"
+        <div style='font-size: 0.85rem; color: var(--text-muted); margin-top: 5px;'>
+          <div><strong>Git:</strong> {report.GitInfo.BranchName} @ {report.GitInfo.CommitSha[..7]}{dirtyBadge}</div>
+        </div>";
+        }
+        
         return $"""
     <div class="header">
       <h1>📊 StructuraLens Report</h1>
       <div class="header-info">
         <div><strong>{solutionName}</strong></div>
-        <div>Analyzed: {timestamp}</div>
+        <div>Analyzed: {timestamp}</div>{gitInfoHtml}
       </div>
     </div>
 """;

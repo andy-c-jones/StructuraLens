@@ -38,6 +38,7 @@ services.AddSingleton<INuGetRestorer, NuGetRestorer>();
 services.AddSingleton<IMSBuildRegistrationService, MSBuildRegistrationService>();
 services.AddSingleton<IMSBuildWorkspaceFactory, MSBuildWorkspaceFactory>();
 services.AddSingleton<IFileSystemService, FileSystemService>();
+services.AddSingleton<IGitRepositoryService, GitRepositoryService>();
 
 // Export services
 services.AddSingleton<IReportExporter, CompactReportExporter>();
@@ -144,6 +145,7 @@ analyzeCommand.SetAction(async (parseResult, cancellationToken) =>
         verboseServices.AddSingleton<IMSBuildRegistrationService, MSBuildRegistrationService>();
         verboseServices.AddSingleton<IMSBuildWorkspaceFactory, MSBuildWorkspaceFactory>();
         verboseServices.AddSingleton<IFileSystemService, FileSystemService>();
+        verboseServices.AddSingleton<IGitRepositoryService, GitRepositoryService>();
         verboseServices.AddSingleton<IReportExporter, CompactReportExporter>();
         verboseServices.AddSingleton<IReportGenerator, HtmlReportGenerator>();
         
@@ -188,6 +190,7 @@ static async Task<int> ExecuteAnalysisAsync(
             serviceProvider.GetRequiredService<ICouplingAnalyzer>(),
             serviceProvider.GetRequiredService<IMetricsCalculator>(),
             serviceProvider.GetRequiredService<IFileSystemService>(),
+            serviceProvider.GetRequiredService<IGitRepositoryService>(),
             analysisOptions);
             
         var report = path.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)
@@ -203,6 +206,50 @@ static async Task<int> ExecuteAnalysisAsync(
             if (report.Warnings.Count > 10)
             {
                 ProgramLog.AdditionalWarnings(logger, report.Warnings.Count - 10);
+            }
+        }
+
+        // Warn if analyzing dirty working tree
+        if (report.GitInfo?.IsDirty == true)
+        {
+            ProgramLog.DirtyWorkingTree(logger);
+        }
+
+        // Generate default filename if output not specified
+        string? effectiveOutput = output;
+        if (string.IsNullOrEmpty(output) && format != "summary")
+        {
+            if (report.GitInfo != null)
+            {
+                // Use git metadata for filename
+                var sanitizedBranch = SanitizeBranchName(report.GitInfo.BranchName);
+                var extension = format switch
+                {
+                    "html" => "html",
+                    "compact" => "slr",
+                    "json" => "json",
+                    _ => "json"
+                };
+                
+                effectiveOutput = $"{report.GitInfo.CommitSha[..7]}-{sanitizedBranch}.{extension}";
+                ProgramLog.GitRepositoryDetected(logger, report.GitInfo.BranchName, report.GitInfo.CommitSha[..7]);
+                ProgramLog.GeneratedDefaultFilename(logger, effectiveOutput);
+            }
+            else
+            {
+                // Fallback to timestamp-based filename
+                var timestamp = DateTime.Now.ToString("yyyy-MM-dd-HHmmss");
+                var extension = format switch
+                {
+                    "html" => "html",
+                    "compact" => "slr",
+                    "json" => "json",
+                    _ => "json"
+                };
+                
+                effectiveOutput = $"report-{timestamp}.{extension}";
+                ProgramLog.NotInGitRepository(logger);
+                ProgramLog.GeneratedDefaultFilename(logger, effectiveOutput);
             }
         }
 
@@ -236,10 +283,10 @@ static async Task<int> ExecuteAnalysisAsync(
 
             var json = JsonSerializer.Serialize(compactReport, jsonOptions);
 
-            if (!string.IsNullOrEmpty(output))
+            if (!string.IsNullOrEmpty(effectiveOutput))
             {
-                await File.WriteAllTextAsync(output, json, cancellationToken);
-                ProgramLog.CompactReportWritten(logger, output, json.Length);
+                await File.WriteAllTextAsync(effectiveOutput, json, cancellationToken);
+                ProgramLog.CompactReportWritten(logger, effectiveOutput, json.Length);
             }
             else
             {
@@ -251,10 +298,10 @@ static async Task<int> ExecuteAnalysisAsync(
             var generator = serviceProvider.GetRequiredService<IReportGenerator>();
             var html = generator.GenerateHtml(report);
 
-            if (!string.IsNullOrEmpty(output))
+            if (!string.IsNullOrEmpty(effectiveOutput))
             {
-                await File.WriteAllTextAsync(output, html, cancellationToken);
-                ProgramLog.HtmlReportWritten(logger, output, html.Length);
+                await File.WriteAllTextAsync(effectiveOutput, html, cancellationToken);
+                ProgramLog.HtmlReportWritten(logger, effectiveOutput, html.Length);
             }
             else
             {
@@ -272,10 +319,10 @@ static async Task<int> ExecuteAnalysisAsync(
 
             var json = JsonSerializer.Serialize(report, jsonOptions);
 
-            if (!string.IsNullOrEmpty(output))
+            if (!string.IsNullOrEmpty(effectiveOutput))
             {
-                await File.WriteAllTextAsync(output, json, cancellationToken);
-                ProgramLog.ReportWritten(logger, output);
+                await File.WriteAllTextAsync(effectiveOutput, json, cancellationToken);
+                ProgramLog.ReportWritten(logger, effectiveOutput);
             }
             else
             {
@@ -446,3 +493,21 @@ static void PrintSummary(AnalysisReport report, ILogger logger)
     }
 }
 
+static string SanitizeBranchName(string branchName)
+{
+    // Use a unified set of invalid characters that works across all platforms
+    // This includes all Windows-invalid chars for maximum cross-platform compatibility
+    // Characters: < > : " | ? * / \ and control characters (0-31)
+    char[] invalidChars = new[] { '<', '>', ':', '"', '|', '?', '*', '/', '\\', '\0' }
+        .Concat(Enumerable.Range(1, 31).Select(i => (char)i))
+        .Distinct()
+        .ToArray();
+    
+    var result = branchName;
+    foreach (char c in invalidChars)
+    {
+        result = result.Replace(c, '_');
+    }
+    
+    return result;
+}

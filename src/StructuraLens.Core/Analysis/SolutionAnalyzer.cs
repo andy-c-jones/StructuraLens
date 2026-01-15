@@ -20,6 +20,7 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
     private readonly ICouplingAnalyzer _couplingAnalyzer;
     private readonly IMetricsCalculator _metricsCalculator;
     private readonly IFileSystemService _fileSystem;
+    private readonly IGitRepositoryService _gitService;
     private readonly AnalysisOptions _options;
 
     public SolutionAnalyzer(
@@ -29,6 +30,7 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
         ICouplingAnalyzer couplingAnalyzer,
         IMetricsCalculator metricsCalculator,
         IFileSystemService fileSystem,
+        IGitRepositoryService gitService,
         AnalysisOptions? options = null)
     {
         _logger = logger;
@@ -37,6 +39,7 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
         _couplingAnalyzer = couplingAnalyzer;
         _metricsCalculator = metricsCalculator;
         _fileSystem = fileSystem;
+        _gitService = gitService;
         _options = options ?? new AnalysisOptions();
     }
 
@@ -141,6 +144,18 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
 
         SolutionAnalyzerLog.AnalysisComplete(_logger, projectMetricsList.Count, projectMetricsList.Sum(p => p.Types.Count), projectMetricsList.Sum(p => p.TotalMethods));
 
+        // Collect git metadata for the analyzed solution
+        var gitMetadata = _gitService.GetGitMetadata(fullPath);
+        GitRepositoryInfo? gitInfo = null;
+        if (gitMetadata != null)
+        {
+            gitInfo = new GitRepositoryInfo(
+                CommitSha: gitMetadata.CommitSha,
+                BranchName: gitMetadata.BranchName,
+                RemoteUrl: gitMetadata.RemoteUrl,
+                IsDirty: gitMetadata.IsDirty);
+        }
+
         return new AnalysisReport(
             SolutionPath: fullPath,
             AnalyzedAt: DateTime.UtcNow,
@@ -148,7 +163,8 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
             Warnings: _warnings.ToList())
         {
             CouplingAnalysis = couplingAnalysis,
-            AggregationStats = collectorStats
+            AggregationStats = collectorStats,
+            GitInfo = gitInfo
         };
     }
 
@@ -188,13 +204,26 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
         SolutionAnalyzerLog.AnalyzingProjectCoupling(_logger);
         var couplingAnalysis = await _couplingAnalyzer.AnalyzeProjectCouplingAsync(project, cancellationToken);
 
+        // Collect git metadata for the analyzed project
+        var gitMetadata = _gitService.GetGitMetadata(fullPath);
+        GitRepositoryInfo? gitInfo = null;
+        if (gitMetadata != null)
+        {
+            gitInfo = new GitRepositoryInfo(
+                CommitSha: gitMetadata.CommitSha,
+                BranchName: gitMetadata.BranchName,
+                RemoteUrl: gitMetadata.RemoteUrl,
+                IsDirty: gitMetadata.IsDirty);
+        }
+
         return new AnalysisReport(
             SolutionPath: fullPath,
             AnalyzedAt: DateTime.UtcNow,
             Projects: [projectMetrics],
             Warnings: _warnings.ToList())
         {
-            CouplingAnalysis = couplingAnalysis
+            CouplingAnalysis = couplingAnalysis,
+            GitInfo = gitInfo
         };
     }
 
