@@ -14,7 +14,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Generate Token
+        id: generate-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.MY_APP_ID }}
+          private-key: ${{ secrets.MY_APP_PRIVATE_KEY }}
       - uses: andy-c-jones/StructuraLensAction@v1
         with:
           solution: StructuraLens.slnx
+          token: ${{ steps.generate-token.outputs.token }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
