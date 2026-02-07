@@ -34,7 +34,31 @@ public sealed class HtmlReportGenerator : IReportGenerator
         // Build full diagnostics data for the HTML report
         var diagnosticsData = BuildDiagnosticsJson(report);
 
-        return GenerateHtml(report, jsonData, diagnosticsData);
+        return GenerateHtml(report, jsonData, diagnosticsData, null);
+    }
+
+    /// <inheritdoc />
+    public string GenerateHtml(AnalysisReport report, AnalysisDiffReport diff)
+    {
+        // Cast to CompactReportExporter to access the hierarchical export method
+        var exporter = _reportExporter as CompactReportExporter;
+        var compactReport = exporter?.ExportHierarchical(report, includeMethodDetails: true, includeTypeDetails: true)
+                            ?? _reportExporter.Export(report, includeMethodDetails: true, includeTypeDetails: true);
+
+        var jsonData = JsonSerializer.Serialize(compactReport, new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            WriteIndented = false
+        });
+
+        var diagnosticsData = BuildDiagnosticsJson(report);
+        var diffJson = JsonSerializer.Serialize(diff, new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            WriteIndented = false
+        });
+
+        return GenerateHtml(report, jsonData, diagnosticsData, diffJson);
     }
 
     private string BuildDiagnosticsJson(AnalysisReport report)
@@ -56,7 +80,7 @@ public sealed class HtmlReportGenerator : IReportGenerator
         return JsonSerializer.Serialize(diagnostics);
     }
 
-    private string GenerateHtml(AnalysisReport report, string compactJson, string diagnosticsJson)
+    private string GenerateHtml(AnalysisReport report, string compactJson, string diagnosticsJson, string? diffJson)
     {
         var sb = new StringBuilder();
         sb.AppendLine("<!DOCTYPE html>");
@@ -71,12 +95,16 @@ public sealed class HtmlReportGenerator : IReportGenerator
         sb.AppendLine("<body>");
         sb.AppendLine("  <div class=\"container\">");
         sb.AppendLine(GenerateHeader(report));
-        sb.AppendLine(GenerateTabs());
+        sb.AppendLine(GenerateTabs(diffJson != null));
         sb.AppendLine(GenerateTabContents());
         sb.AppendLine("  </div>");
         sb.AppendLine("  <footer class=\"copyright\">&copy; " + DateTime.UtcNow.Year + " Dark Peak Development. All rights reserved.</footer>");
         sb.AppendLine($"  <script>const reportData = {compactJson};</script>");
         sb.AppendLine($"  <script>const diagnosticsData = {diagnosticsJson};</script>");
+        if (diffJson != null)
+        {
+            sb.AppendLine($"  <script>const diffData = {diffJson};</script>");
+        }
         sb.AppendLine(GenerateJavaScript());
         sb.AppendLine("</body>");
         sb.AppendLine("</html>");
@@ -155,6 +183,8 @@ public sealed class HtmlReportGenerator : IReportGenerator
     .badge-warning { background: var(--warning); color: #000; }
     .badge-info { background: var(--accent); color: #000; }
     .badge-success { background: var(--success); color: #000; }
+    .badge-added { background: var(--success); color: #000; }
+    .badge-removed { background: var(--error); color: #fff; }
     .graph-container { width: 100%; height: 500px; background: var(--bg); border-radius: 8px; border: 1px solid var(--border); overflow: hidden; }
     .graph-fullpage { height: calc(100vh - 200px); min-height: 500px; }
     .graph-container svg { width: 100%; height: 100%; }
@@ -171,6 +201,10 @@ public sealed class HtmlReportGenerator : IReportGenerator
     .mi-medium { background: var(--warning); }
     .mi-poor { background: var(--error); }
     .copyright { text-align: center; padding: 20px; color: var(--text-muted); font-size: 12px; border-top: 1px solid var(--border); margin-top: 30px; }
+    .delta { font-size: 0.85rem; margin-left: 6px; }
+    .delta-up { color: var(--error); }
+    .delta-down { color: var(--success); }
+    .delta-flat { color: var(--text-muted); }
     
     /* Tree structure styles */
     .tree { list-style: none; padding-left: 0; }
@@ -241,15 +275,17 @@ public sealed class HtmlReportGenerator : IReportGenerator
 """;
     }
 
-    private string GenerateTabs()
+    private string GenerateTabs(bool includeDiff)
     {
-        return """
+        var diffTab = includeDiff ? "<div class=\"tab\" data-tab=\"diff\">Diff</div>" : "";
+        return $"""
     <div class="tabs">
       <div class="tab active" data-tab="summary">Summary</div>
       <div class="tab" data-tab="projects">Projects</div>
       <div class="tab" data-tab="coupling">Coupling</div>
       <div class="tab" data-tab="graph">Graph</div>
       <div class="tab" data-tab="diagnostics">Diagnostics</div>
+      {diffTab}
     </div>
 """;
     }
@@ -262,6 +298,7 @@ public sealed class HtmlReportGenerator : IReportGenerator
     <div id="coupling" class="tab-content"></div>
     <div id="graph" class="tab-content"></div>
     <div id="diagnostics" class="tab-content"></div>
+    <div id="diff" class="tab-content"></div>
 """;
     }
 
@@ -433,6 +470,72 @@ public sealed class HtmlReportGenerator : IReportGenerator
           </table>
         </div>
       `;
+    }
+
+    function formatDelta(value, inverseGood = false) {
+      if (value === 0) return '<span class="delta delta-flat">0</span>';
+      const isDown = value < 0;
+      const className = (isDown && !inverseGood) || (!isDown && inverseGood) ? 'delta-down' : 'delta-up';
+      const sign = value > 0 ? '+' : '';
+      return `<span class="delta ${className}">${sign}${value}</span>`;
+    }
+
+    function renderDiffTab() {
+      if (typeof diffData === 'undefined' || !diffData) {
+        document.getElementById('diff').innerHTML = '<p style="color:var(--text-muted)">No diff data available.</p>';
+        return;
+      }
+      const totals = diffData.totals;
+      const projects = diffData.projects || [];
+      const diagnostics = diffData.diagnostics || {};
+
+      const topMiChanges = projects
+        .filter(p => !p.isAdded && !p.isRemoved)
+        .sort((a, b) => Math.abs(b.maintainabilityDelta) - Math.abs(a.maintainabilityDelta))
+        .slice(0, 10);
+
+      document.getElementById('diff').innerHTML = `
+        <div class="section">
+          <h2>Summary Deltas</h2>
+          <div class="cards">
+            <div class="card"><div class="card-value">${totals.headProjects}</div><div class="card-label">Projects ${formatDelta(totals.projectsDelta)}</div></div>
+            <div class="card"><div class="card-value">${totals.headTypes}</div><div class="card-label">Types ${formatDelta(totals.typesDelta)}</div></div>
+            <div class="card"><div class="card-value">${totals.headMethods}</div><div class="card-label">Methods ${formatDelta(totals.methodsDelta)}</div></div>
+            <div class="card"><div class="card-value">${totals.headCyclomaticComplexity}</div><div class="card-label">Total Complexity ${formatDelta(totals.cyclomaticComplexityDelta)}</div></div>
+            <div class="card"><div class="card-value">${totals.headLinesOfCode.toLocaleString()}</div><div class="card-label">Lines of Code ${formatDelta(totals.linesOfCodeDelta)}</div></div>
+            <div class="card"><div class="card-value">${totals.headAvgMaintainabilityIndex}</div><div class="card-label">Avg Maintainability ${formatDelta(totals.avgMaintainabilityDelta, true)}</div></div>
+            <div class="card"><div class="card-value" style="color:${totals.headErrors > 0 ? 'var(--error)' : 'var(--success)'}">${totals.headErrors}</div><div class="card-label">Errors ${formatDelta(totals.errorsDelta, true)}</div></div>
+            <div class="card"><div class="card-value" style="color:${totals.headWarnings > 0 ? 'var(--warning)' : 'var(--success)'}">${totals.headWarnings}</div><div class="card-label">Warnings ${formatDelta(totals.warningsDelta, true)}</div></div>
+          </div>
+        </div>
+        <div class="section">
+          <h2>Projects with Biggest Maintainability Changes</h2>
+          ${topMiChanges.length > 0 ? `
+          <table>
+            <thead><tr><th>Project</th><th>MI</th><th>Delta</th><th>Complexity Δ</th><th>LOC Δ</th><th>Warnings Δ</th></tr></thead>
+            <tbody>${topMiChanges.map(p => `
+              <tr>
+                <td>${p.name}</td>
+                <td>${p.head.avgMaintainabilityIndex}</td>
+                <td>${formatDelta(p.maintainabilityDelta, true)}</td>
+                <td>${formatDelta(p.cyclomaticComplexityDelta)}</td>
+                <td>${formatDelta(p.linesOfCodeDelta)}</td>
+                <td>${formatDelta(p.warningsDelta, true)}</td>
+              </tr>`).join('')}
+            </tbody>
+          </table>` : '<p style="color:var(--text-muted)">No project deltas available.</p>'}
+        </div>
+        <div class="section">
+          <h2>Diagnostics Changes</h2>
+          <div class="cards">
+            <div class="card"><div class="card-value">${diagnostics.newErrors || 0}</div><div class="card-label">New Errors</div></div>
+            <div class="card"><div class="card-value">${diagnostics.resolvedErrors || 0}</div><div class="card-label">Resolved Errors</div></div>
+            <div class="card"><div class="card-value">${diagnostics.newWarnings || 0}</div><div class="card-label">New Warnings</div></div>
+            <div class="card"><div class="card-value">${diagnostics.resolvedWarnings || 0}</div><div class="card-label">Resolved Warnings</div></div>
+          </div>
+        </div>
+      `;
+      enableSorting();
     }
 
     // Render projects tab
@@ -1243,6 +1346,7 @@ public sealed class HtmlReportGenerator : IReportGenerator
     renderCoupling();
     renderGraphTab();
     renderDiagnostics();
+    renderDiffTab();
     enableSorting();
   </script>
 """;

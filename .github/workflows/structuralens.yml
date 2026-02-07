@@ -1,0 +1,42 @@
+name: StructuraLens
+
+on:
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  analyze:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run StructuraLens
+        uses: ./.github/actions/structuralens-action
+        with:
+          solution: StructuraLens.slnx
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-diff: true
+          report-html: true
+          report-json: true
+          post-comment: true
+
+      - name: Upload reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: structuralens-${{ matrix.os }}
+          path: |
+            .structuralens/**/*.json
+            .structuralens/**/*.html
+            structuralens-report.*
