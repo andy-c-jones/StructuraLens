@@ -35,6 +35,26 @@ Analyze a solution and generate an HTML report:
 structuralens analyze MySolution.sln --format html --out report.html
 ```
 
+### Diffing Reports (CI/PR)
+
+Compare a base report to a head report and generate a diff:
+
+```bash
+structuralens diff --base base.json --head head.json --format json --out diff.json
+```
+
+Generate an HTML report with visual diff overlays:
+
+```bash
+structuralens diff --base base.json --head head.json --format html --out diff.html
+```
+
+Generate a Markdown summary for PR comments:
+
+```bash
+structuralens diff --base base.json --head head.json --format markdown --out diff.md
+```
+
 Analyze with JSON output (default):
 
 ```bash
@@ -84,6 +104,23 @@ structuralens analyze <path> [options]
 - **html** - Interactive single-file HTML report with dependency graphs and filterable tables
 - **compact** - Optimized for size (~99% smaller), includes graph data for visualization
 - **summary** - Human-readable console output with key metrics and top complexity items
+
+### diff Command
+
+Compares two JSON analysis reports and produces a diff summary.
+
+**Syntax:**
+```bash
+structuralens diff --base <base.json> --head <head.json> [options]
+```
+
+**Options:**
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--format` | Output format: `json`, `html`, `summary`, `markdown` | `json` |
+| `--out` | Output file path | stdout |
+| `--max-projects` | Max projects in markdown table | `10` |
 
 See [Usage Guide](docs/usage.md) for detailed documentation.
 

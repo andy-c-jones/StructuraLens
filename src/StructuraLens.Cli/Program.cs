@@ -6,6 +6,8 @@ using Microsoft.Extensions.Logging;
 using StructuraLens.Cli.Logging;
 using StructuraLens.Core.Abstractions;
 using StructuraLens.Core.Analysis;
+using StructuraLens.Core.Diff;
+using StructuraLens.Cli.Diff;
 using StructuraLens.Core.Export;
 using StructuraLens.Core.Infrastructure;
 using StructuraLens.Core.Models;
@@ -83,6 +85,29 @@ var sqliteBatchSizeOption = new Option<int>("--sqlite-batch-size")
     DefaultValueFactory = _ => 1000
 };
 
+// Diff options
+var baseReportOption = new Option<string>("--base")
+{
+    Description = "Path to base JSON report"
+};
+
+var headReportOption = new Option<string>("--head")
+{
+    Description = "Path to head JSON report"
+};
+
+var diffFormatOption = new Option<string>("--format", "-f")
+{
+    Description = "Diff output format: json, html, summary, markdown",
+    DefaultValueFactory = _ => "json"
+};
+
+var diffMaxProjectsOption = new Option<int>("--max-projects")
+{
+    Description = "Max number of projects to include in markdown diff",
+    DefaultValueFactory = _ => 10
+};
+
 // Create path argument
 var pathArgument = new Argument<string>("path")
 {
@@ -157,6 +182,26 @@ analyzeCommand.SetAction(async (parseResult, cancellationToken) =>
     }
 
     return await ExecuteAnalysisAsync(path, output, format, analysisOptions, executionServiceProvider, cancellationToken);
+});
+
+// Create diff subcommand
+var diffCommand = new Command("diff", "Compare two JSON analysis reports and produce a diff");
+diffCommand.Options.Add(baseReportOption);
+diffCommand.Options.Add(headReportOption);
+diffCommand.Options.Add(outputOption);
+diffCommand.Options.Add(diffFormatOption);
+diffCommand.Options.Add(diffMaxProjectsOption);
+
+diffCommand.SetAction(async (parseResult, cancellationToken) =>
+{
+    var basePath = parseResult.GetValue(baseReportOption);
+    var headPath = parseResult.GetValue(headReportOption);
+    var output = parseResult.GetValue(outputOption);
+    var format = parseResult.GetValue(diffFormatOption) ?? "json";
+    var maxProjects = parseResult.GetValue(diffMaxProjectsOption);
+    format = format.ToLowerInvariant();
+
+    return await ExecuteDiffAsync(basePath ?? string.Empty, headPath ?? string.Empty, output, format, maxProjects, serviceProvider, cancellationToken);
 });
 
 static async Task<int> ExecuteAnalysisAsync(
@@ -339,10 +384,116 @@ static async Task<int> ExecuteAnalysisAsync(
     }
 }
 
+static async Task<int> ExecuteDiffAsync(
+    string basePath,
+    string headPath,
+    string? output,
+    string format,
+    int maxProjects,
+    IServiceProvider serviceProvider,
+    CancellationToken cancellationToken)
+{
+    try
+    {
+        if (string.IsNullOrWhiteSpace(basePath) || string.IsNullOrWhiteSpace(headPath))
+        {
+            Console.Error.WriteLine("Both --base and --head reports are required for diff.");
+            return 1;
+        }
+
+        var baseJson = await File.ReadAllTextAsync(basePath, cancellationToken);
+        var headJson = await File.ReadAllTextAsync(headPath, cancellationToken);
+
+        var jsonOptions = new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true
+        };
+
+        var baseReport = JsonSerializer.Deserialize<AnalysisReport>(baseJson, jsonOptions);
+        var headReport = JsonSerializer.Deserialize<AnalysisReport>(headJson, jsonOptions);
+
+        if (baseReport == null || headReport == null)
+        {
+            Console.Error.WriteLine("Unable to parse base or head report JSON.");
+            return 1;
+        }
+
+        var diffCalculator = new DiffCalculator();
+        var diff = diffCalculator.Compare(baseReport, headReport);
+
+        if (format == "summary")
+        {
+            PrintDiffSummary(diff);
+            return 0;
+        }
+
+        if (format != "json" && format != "html" && format != "markdown")
+        {
+            Console.Error.WriteLine("Unsupported diff format. Use json, html, markdown, or summary.");
+            return 1;
+        }
+
+        if (format == "markdown")
+        {
+            var renderer = new DiffReportRenderer();
+            var markdown = renderer.RenderMarkdown(diff, maxProjects);
+            if (!string.IsNullOrEmpty(output))
+            {
+                await File.WriteAllTextAsync(output, markdown, cancellationToken);
+            }
+            else
+            {
+                Console.WriteLine(markdown);
+            }
+            return 0;
+        }
+
+        if (format == "html")
+        {
+            var generator = serviceProvider.GetRequiredService<IReportGenerator>();
+            var html = generator.GenerateHtml(headReport, diff);
+            if (!string.IsNullOrEmpty(output))
+            {
+                await File.WriteAllTextAsync(output, html, cancellationToken);
+            }
+            else
+            {
+                Console.WriteLine(html);
+            }
+            return 0;
+        }
+
+        var diffJson = JsonSerializer.Serialize(diff, new JsonSerializerOptions
+        {
+            WriteIndented = true,
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        });
+
+        if (!string.IsNullOrEmpty(output))
+        {
+            await File.WriteAllTextAsync(output, diffJson, cancellationToken);
+        }
+        else
+        {
+            Console.WriteLine(diffJson);
+        }
+
+        return 0;
+    }
+    catch (Exception ex)
+    {
+        var logger = serviceProvider.GetRequiredService<ILogger<Program>>();
+        ProgramLog.AnalysisError(logger, ex.Message);
+        return 1;
+    }
+}
+
 
 // Create root command
 var rootCommand = new RootCommand("StructuraLens - C# code complexity analyzer");
 rootCommand.Subcommands.Add(analyzeCommand);
+rootCommand.Subcommands.Add(diffCommand);
 
 rootCommand.SetAction(_ =>
 {
@@ -351,6 +502,7 @@ rootCommand.SetAction(_ =>
     Console.WriteLine();
     Console.WriteLine("Commands:");
     Console.WriteLine("  analyze <path>   Analyze a solution or project for code metrics");
+    Console.WriteLine("  diff             Compare two JSON analysis reports");
     Console.WriteLine();
     Console.WriteLine("Run 'structuralens <command> --help' for more information on a command.");
     return 0;
@@ -491,6 +643,24 @@ static void PrintSummary(AnalysisReport report, ILogger logger)
         }
         Console.WriteLine();
     }
+}
+
+static void PrintDiffSummary(AnalysisDiffReport diff)
+{
+    Console.WriteLine("=== Diff Summary ===");
+    Console.WriteLine($"Base: {diff.Base.BranchName ?? "(unknown)"} @ {diff.Base.CommitSha ?? "(unknown)"}");
+    Console.WriteLine($"Head: {diff.Head.BranchName ?? "(unknown)"} @ {diff.Head.CommitSha ?? "(unknown)"}");
+    Console.WriteLine();
+    Console.WriteLine($"Projects: {diff.Totals.HeadProjects} (Δ {diff.Totals.ProjectsDelta:+#;-#;0})");
+    Console.WriteLine($"Types: {diff.Totals.HeadTypes} (Δ {diff.Totals.TypesDelta:+#;-#;0})");
+    Console.WriteLine($"Methods: {diff.Totals.HeadMethods} (Δ {diff.Totals.MethodsDelta:+#;-#;0})");
+    Console.WriteLine($"Cyclomatic Complexity: {diff.Totals.HeadCyclomaticComplexity} (Δ {diff.Totals.CyclomaticComplexityDelta:+#;-#;0})");
+    Console.WriteLine($"Lines of Code: {diff.Totals.HeadLinesOfCode} (Δ {diff.Totals.LinesOfCodeDelta:+#;-#;0})");
+    Console.WriteLine($"Avg Maintainability: {diff.Totals.HeadAvgMaintainabilityIndex:0.0} (Δ {diff.Totals.AvgMaintainabilityDelta:+0.0;-0.0;0.0})");
+    Console.WriteLine();
+    Console.WriteLine($"Errors: {diff.Totals.HeadErrors} (Δ {diff.Totals.ErrorsDelta:+#;-#;0})");
+    Console.WriteLine($"Warnings: {diff.Totals.HeadWarnings} (Δ {diff.Totals.WarningsDelta:+#;-#;0})");
+    Console.WriteLine($"Info: {diff.Totals.HeadInfo} (Δ {diff.Totals.InfoDelta:+#;-#;0})");
 }
 
 static string SanitizeBranchName(string branchName)
