@@ -20,6 +20,8 @@ jobs:
         with:
           app-id: ${{ secrets.MY_APP_ID }}
           private-key: ${{ secrets.MY_APP_PRIVATE_KEY }}
+          owner: "andy-c-jones"
+          repositories: "StructuraLens"
       - uses: andy-c-jones/StructuraLensAction@v1
         with:
           solution: StructuraLens.slnx
