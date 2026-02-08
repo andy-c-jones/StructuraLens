@@ -9,6 +9,7 @@ namespace StructuraLens.Core.Analysis;
 /// Computes Cyclomatic Complexity for methods using syntax analysis.
 /// CC = 1 + number of decision points (if, while, for, foreach, case, catch, &&, ||, ?:, ??)
 /// </summary>
+/// <remarks>Minor update to trigger analysis.</remarks>
 public static class CyclomaticComplexityCalculator
 {
     public static int Calculate(SyntaxNode node)
