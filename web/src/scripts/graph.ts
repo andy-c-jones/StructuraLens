@@ -76,6 +76,9 @@ function getNodeColor(
       mi: pm.mi,
       id: pm.id,
       idx: pm.idx,
+      ed: pm.ed,
+      edb: pm.edb,
+      edp: pm.edp,
       err: pm.err ?? 0,
       warn: pm.warn ?? 0,
     };
@@ -85,6 +88,9 @@ function getNodeColor(
       mi: p.mi,
       id: p.id,
       idx: p.idx,
+      ed: p.ed,
+      edb: p.edb,
+      edp: p.edp,
       err: p.err ?? 0,
       warn: p.warn ?? 0,
     }));
@@ -95,6 +101,7 @@ function getNodeColor(
       mi?: number;
       internalDependencies?: number;
       internalDependents?: number;
+      externalDependencies?: number;
     };
     metrics = {
       cc: nsNode.cc ?? 0,
@@ -102,14 +109,16 @@ function getNodeColor(
       mi: nsNode.mi ?? 0,
       id: nsNode.internalDependencies ?? 0,
       idx: nsNode.internalDependents ?? 0,
+      ed: nsNode.externalDependencies ?? 0,
     };
     allMetrics = reportData.g.ns.n.map(
-      ([, , loc, cc, mi, , , id, idx]: (number | string)[]) => ({
+      ([, , loc, cc, mi, , , id, idx, , ed]: (number | string)[]) => ({
         cc: cc as number,
         loc: loc as number,
         mi: mi as number,
         id: id as number,
         idx: idx as number,
+        ed: ed as number,
       }),
     );
   }
@@ -128,6 +137,20 @@ function getNodeColor(
     case "coupling":
       value = metrics.id || 0;
       values = allMetrics.map((m) => m.id || 0);
+      break;
+    case "external-deps":
+      value = metrics.ed || 0;
+      values = allMetrics.map((m) => m.ed || 0);
+      break;
+    case "bcl-deps":
+      if (graphType === "namespace") return "var(--node-default)";
+      value = (metrics as { edb?: number }).edb || 0;
+      values = allMetrics.map((m) => (m as { edb?: number }).edb || 0);
+      break;
+    case "package-deps":
+      if (graphType === "namespace") return "var(--node-default)";
+      value = (metrics as { edp?: number }).edp || 0;
+      values = allMetrics.map((m) => (m as { edp?: number }).edp || 0);
       break;
     case "complexity":
       value = metrics.cc || 0;
@@ -170,6 +193,9 @@ function getNodeSizeValue(
       loc: (node as { loc?: number }).loc ?? node.size ?? 0,
       mi: (node as { mi?: number }).mi ?? 0,
       id: (node as { internalDependencies?: number }).internalDependencies ?? 0,
+      ed: (node as { externalDependencies?: number }).externalDependencies ?? 0,
+      edb: (node as { externalBclDependencies?: number }).externalBclDependencies ?? 0,
+      edp: (node as { externalPackageDependencies?: number }).externalPackageDependencies ?? 0,
       err: (node as { err?: number }).err ?? 0,
       warn: (node as { warn?: number }).warn ?? 0,
     };
@@ -180,6 +206,7 @@ function getNodeSizeValue(
       mi?: number;
       internalDependencies?: number;
       internalDependents?: number;
+      externalDependencies?: number;
     };
     metrics = {
       cc: nsNode.cc ?? 0,
@@ -187,6 +214,7 @@ function getNodeSizeValue(
       mi: nsNode.mi ?? 0,
       id: nsNode.internalDependencies ?? 0,
       idx: nsNode.internalDependents ?? 0,
+      ed: nsNode.externalDependencies ?? 0,
     };
   }
 
@@ -198,6 +226,14 @@ function getNodeSizeValue(
       return (metrics.err || 0) * 5 + (metrics.warn || 0);
     case "coupling":
       return metrics.id || 0;
+    case "external-deps":
+      return metrics.ed || 0;
+    case "bcl-deps":
+      if (graphType === "namespace") return outboundCount;
+      return (metrics as { edb?: number }).edb || 0;
+    case "package-deps":
+      if (graphType === "namespace") return outboundCount;
+      return (metrics as { edp?: number }).edp || 0;
     case "complexity":
       return metrics.cc || 0;
     case "loc":
@@ -245,11 +281,21 @@ function renderGraph(
   const prelimNodes: any[] = graphData.n.map((nodeData) => {
     if (graphType === "project") {
       const [id, name, size] = nodeData;
+      const projectMetrics = reportData.prj.find(p => p.n === name);
       return {
         id,
         name,
         size,
         depCount: outboundCounts[id as number] || 0,
+        cc: projectMetrics?.cc ?? 0,
+        loc: projectMetrics?.loc ?? size,
+        mi: projectMetrics?.mi ?? 0,
+        internalDependencies: projectMetrics?.id ?? 0,
+        externalDependencies: projectMetrics?.ed ?? 0,
+        externalBclDependencies: projectMetrics?.edb ?? 0,
+        externalPackageDependencies: projectMetrics?.edp ?? 0,
+        err: projectMetrics?.err ?? 0,
+        warn: projectMetrics?.warn ?? 0,
       };
     } else {
       const [id, name, loc, cc, mi, tc, mc, internalDeps, internalDependents, depRatio, externalDeps] =
@@ -421,7 +467,19 @@ function renderGraph(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .text((d: any) => {
       if (graphType === "project") {
-        return `${d.name}\nOutbound deps: ${d.depCount}\nSize metric: ${d.sizeValue}\nLOC: ${d.size}`;
+        const lines = [
+          d.name,
+          `Internal Dependencies: ${d.internalDependencies ?? 0}`,
+          `External Dependencies: ${d.externalDependencies ?? 0}`,
+          `  - BCL: ${d.externalBclDependencies ?? 0}`,
+          `  - Packages: ${d.externalPackageDependencies ?? 0}`,
+          `Outbound deps: ${d.depCount}`,
+          `Size metric: ${d.sizeValue}`,
+          `LOC: ${d.loc ?? d.size}`,
+          `CC: ${d.cc ?? 0}`,
+          `MI: ${d.mi ?? 0}`
+        ];
+        return lines.join('\n');
       } else {
         return `${d.name}\nInternal Dependencies: ${d.internalDependencies ?? 0}\nInternal Dependents: ${d.internalDependents ?? 0}\nExternal Dependencies: ${d.externalDependencies ?? 0}\nDependency Ratio: ${d.dependencyRatio?.toFixed(2) ?? "0.00"}\nLOC: ${d.loc ?? 0}\nCC: ${d.cc ?? 0}\nMI: ${d.mi ?? 0}`;
       }
@@ -473,6 +531,9 @@ export function initGraphTab(reportData: CompactReport): void {
         <option value="none">None</option>
         <option value="diagnostics" data-project-only="true">Diagnostics Count</option>
         <option value="coupling">Internal Dependencies</option>
+        <option value="external-deps">External Dependencies (Total)</option>
+        <option value="bcl-deps" data-project-only="true">BCL Dependencies (System/Microsoft)</option>
+        <option value="package-deps" data-project-only="true">Package Dependencies (Third-party)</option>
         <option value="complexity">Cyclomatic Complexity</option>
         <option value="loc">Lines of Code</option>
         <option value="maintainability">Maintainability Index</option>
@@ -482,6 +543,9 @@ export function initGraphTab(reportData: CompactReport): void {
         <option value="dependencies">Dependencies</option>
         <option value="diagnostics" data-project-only="true">Diagnostics Count</option>
         <option value="coupling">Internal Dependencies</option>
+        <option value="external-deps">External Dependencies (Total)</option>
+        <option value="bcl-deps" data-project-only="true">BCL Dependencies (System/Microsoft)</option>
+        <option value="package-deps" data-project-only="true">Package Dependencies (Third-party)</option>
         <option value="complexity">Cyclomatic Complexity</option>
         <option value="loc">Lines of Code</option>
         <option value="maintainability">Maintainability Index</option>
