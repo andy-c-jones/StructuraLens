@@ -1,6 +1,7 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using System.Linq; // TEST: Unnecessary using - triggers info diagnostic
 
 namespace StructuraLens.Core.Analysis;
 
@@ -12,6 +13,7 @@ public static class CyclomaticComplexityCalculator
 {
     public static int Calculate(SyntaxNode node)
     {
+        int unusedTestVariable = 42; // TEST: Unused variable - triggers CS0219 warning
         var walker = new ComplexityWalker();
         walker.Visit(node);
         return walker.Complexity;
