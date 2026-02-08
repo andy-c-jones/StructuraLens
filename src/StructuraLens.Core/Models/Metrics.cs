@@ -64,7 +64,7 @@ public record ProjectMetrics(
     {
         return Types
             .GroupBy(t => t.Namespace)
-            .Select(g => new NamespaceMetrics(g.Key, g.ToList()))
+            .Select(g => new NamespaceMetrics(g.Key, [.. g]))
             .OrderBy(n => n.Name)
             .ToList();
     }
@@ -81,7 +81,7 @@ public record AnalysisReport(
 {
     public int TotalProjects => Projects.Count;
     public int TotalTypes => Projects.Sum(p => p.Types.Count);
-    public int TotalMethods => Projects.Sum(p => p.Types.Sum(t => t.Methods.Count));
+    public int TotalMethods => Projects.Sum(p => p.TotalMethods);
     public int TotalCyclomaticComplexity => Projects.Sum(p => p.TotalCyclomaticComplexity);
     public int TotalLinesOfExecutableCode => Projects.Sum(p => p.TotalLinesOfExecutableCode);
 
