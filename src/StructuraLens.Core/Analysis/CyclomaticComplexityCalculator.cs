@@ -53,7 +53,7 @@ public static class CyclomaticComplexityCalculator
 
         public override void VisitSwitchSection(SwitchSectionSyntax node)
         {
-            Complexity++;
+            Complexity += node.Labels.Count;
             base.VisitSwitchSection(node);
         }
 

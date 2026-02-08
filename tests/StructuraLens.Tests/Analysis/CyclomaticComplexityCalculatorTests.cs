@@ -165,6 +165,30 @@ public class CyclomaticComplexityCalculatorTests
     }
 
     [Test]
+    public async Task Calculate_SwitchSectionWithMultipleLabels_CountsEachLabel()
+    {
+        var code = """
+            public class TestClass
+            {
+                public void MethodWithSwitch(int value)
+                {
+                    switch (value)
+                    {
+                        case 1:
+                        case 2:
+                            break;
+                        default:
+                            break;
+                    }
+                }
+            }
+            """;
+
+        var cc = CalculateForMethod(code);
+        await Assert.That(cc).IsEqualTo(4);
+    }
+
+    [Test]
     public async Task Calculate_TryCatch_ReturnsTwo()
     {
         var code = """
