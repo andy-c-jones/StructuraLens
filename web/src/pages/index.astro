@@ -1,13 +1,156 @@
 ---
-// Placeholder page - will be replaced with the full report template
+/**
+ * StructuraLens HTML Report Template
+ *
+ * Dev mode  : loads test JSON from src/test-data/ for hot-reload iteration.
+ * Prod build: emits placeholder tokens that HtmlReportGenerator.cs replaces
+ *             at runtime with real serialised data.
+ */
+
+import "../styles/theme.css";
+import "../styles/layout.css";
+import "../styles/components.css";
+import "../styles/graph.css";
+
+const isDev = import.meta.env.DEV;
+
+// All dynamic tokens — either real dev values or C# placeholder strings.
+let reportJson: string;
+let diagnosticsJson: string;
+let diffJson: string;
+let reportTitle: string;
+let copyrightYear: string;
+let solutionName: string;
+let analyzedAt: string;
+let gitInfoHtml: string;
+let showDiffTab: boolean;
+
+if (isDev) {
+  const reportModule = await import("../test-data/report.json");
+  const diagModule   = await import("../test-data/diagnostics.json");
+  const diffModule   = await import("../test-data/diff.json");
+
+  reportJson      = JSON.stringify(reportModule.default);
+  diagnosticsJson = JSON.stringify(diagModule.default);
+  diffJson        = JSON.stringify(diffModule.default);
+  reportTitle     = "StructuraLens Report - TestSolution.sln";
+  copyrightYear   = new Date().getFullYear().toString();
+  solutionName    = "TestSolution.sln";
+  analyzedAt      = new Date().toISOString().replace("T", " ").slice(0, 19) + " UTC";
+  gitInfoHtml     = `<div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 5px;">
+    <div><strong>Git:</strong> main @ abc1234</div>
+  </div>`;
+  showDiffTab     = true;
+} else {
+  reportJson      = "{{REPORT_DATA}}";
+  diagnosticsJson = "{{DIAGNOSTICS_DATA}}";
+  diffJson        = "{{DIFF_DATA}}";
+  reportTitle     = "{{REPORT_TITLE}}";
+  copyrightYear   = "{{COPYRIGHT_YEAR}}";
+  solutionName    = "{{SOLUTION_NAME}}";
+  analyzedAt      = "{{ANALYZED_AT}}";
+  gitInfoHtml     = "{{GIT_INFO_HTML}}";
+  showDiffTab     = true; // Always include; C# removes the tab when no diff
+}
 ---
+
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>StructuraLens Report</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{reportTitle}</title>
 </head>
 <body>
-  <h1>StructuraLens Report Template</h1>
-  <p>Astro project initialized successfully.</p>
+  <div class="container">
+    <div class="header">
+      <h1>&#128202; StructuraLens Report</h1>
+      <div class="header-info">
+        <div><strong>{solutionName}</strong></div>
+        <div>Analyzed: {analyzedAt}</div>
+        <Fragment set:html={gitInfoHtml} />
+      </div>
+    </div>
+
+    <div class="tabs">
+      <div class="tab active" data-tab="summary">Summary</div>
+      <div class="tab" data-tab="projects">Projects</div>
+      <div class="tab" data-tab="coupling">Coupling</div>
+      <div class="tab" data-tab="graph">Graph</div>
+      <div class="tab" data-tab="diagnostics">Diagnostics</div>
+      {showDiffTab && <div class="tab" data-tab="diff">Diff</div>}
+    </div>
+
+    <div id="summary" class="tab-content active"></div>
+    <div id="projects" class="tab-content"></div>
+    <div id="coupling" class="tab-content"></div>
+    <div id="graph" class="tab-content"></div>
+    <div id="diagnostics" class="tab-content"></div>
+    <div id="diff" class="tab-content"></div>
+  </div>
+
+  <footer class="copyright">
+    &copy; {copyrightYear} Dark Peak Development. All rights reserved.
+  </footer>
+
+  <script is:inline define:vars={{ reportJson, diagnosticsJson, diffJson }}>
+    window.__STRUCTURALENS_REPORT__      = reportJson;
+    window.__STRUCTURALENS_DIAGNOSTICS__ = diagnosticsJson;
+    window.__STRUCTURALENS_DIFF__        = diffJson;
+  </script>
+
+  <script>
+    import type { CompactReport, DiagnosticItem, DiffReport } from "../scripts/types";
+    import { initTabs } from "../scripts/tabs";
+    import { renderSummary } from "../scripts/summary";
+    import { renderProjects } from "../scripts/projects";
+    import { renderCoupling } from "../scripts/coupling";
+    import { initGraphTab, tryRenderGraph } from "../scripts/graph";
+    import { renderDiagnostics } from "../scripts/diagnostics";
+    import { renderDiffTab } from "../scripts/diff";
+    import { enableSorting } from "../scripts/tables";
+
+    declare global {
+      interface Window {
+        __STRUCTURALENS_REPORT__: string;
+        __STRUCTURALENS_DIAGNOSTICS__: string;
+        __STRUCTURALENS_DIFF__: string;
+      }
+    }
+
+    function parseData<T>(raw: string): T | null {
+      if (!raw || raw.startsWith("{{")) return null;
+      try {
+        return JSON.parse(raw) as T;
+      } catch {
+        return null;
+      }
+    }
+
+    const reportData      = parseData<CompactReport>(window.__STRUCTURALENS_REPORT__);
+    const diagnosticsData = parseData<DiagnosticItem[]>(window.__STRUCTURALENS_DIAGNOSTICS__);
+    const diffData        = parseData<DiffReport>(window.__STRUCTURALENS_DIFF__);
+
+    if (reportData) {
+      renderSummary(reportData);
+      renderProjects(reportData);
+      renderCoupling(reportData);
+      initGraphTab(reportData);
+      renderDiagnostics(diagnosticsData ?? []);
+      renderDiffTab(diffData);
+
+      initTabs((tabId) => {
+        tryRenderGraph(tabId, reportData);
+      });
+
+      enableSorting();
+    } else {
+      const el = document.getElementById("summary");
+      if (el) {
+        el.innerHTML =
+          '<p style="color:var(--text-muted)">No report data available. ' +
+          "If you see this in production, the template placeholders were not replaced.</p>";
+      }
+    }
+  </script>
 </body>
 </html>

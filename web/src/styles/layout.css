@@ -1,0 +1,69 @@
+/* Reset and base layout */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.container {
+  width: 100%;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+h1 {
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+h2 {
+  font-size: 1.2rem;
+  font-weight: 500;
+  margin-bottom: 1rem;
+  color: var(--accent);
+}
+
+/* Header */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid var(--border);
+}
+
+.header-info {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+/* Footer */
+.copyright {
+  text-align: center;
+  padding: 20px;
+  color: var(--text-muted);
+  font-size: 12px;
+  border-top: 1px solid var(--border);
+  margin-top: 30px;
+}
+
+.section {
+  margin-bottom: 30px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+}
