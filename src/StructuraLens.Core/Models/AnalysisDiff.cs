@@ -86,6 +86,8 @@ public record ProjectDiff
     public int InternalDependentsDelta => Head.InternalDependents - Base.InternalDependents;
     public double DependencyRatioDelta => Math.Round(Head.DependencyRatio - Base.DependencyRatio, 2);
     public int ExternalDependenciesDelta => Head.ExternalDependencies - Base.ExternalDependencies;
+    public int ExternalBclDependenciesDelta => Head.ExternalBclDependencies - Base.ExternalBclDependencies;
+    public int ExternalPackageDependenciesDelta => Head.ExternalPackageDependencies - Base.ExternalPackageDependencies;
 }
 
 /// <summary>Project metrics used in diff output.</summary>

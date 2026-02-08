@@ -714,6 +714,349 @@ public sealed class DiffReportRendererTests
         await Assert.That(metricsIndex).IsGreaterThan(topChangesIndex);
     }
 
+    [Test]
+    public async Task RenderMarkdown_ExternalBclDependenciesIncrease_ShowsNeedsReview()
+    {
+        // Arrange
+        var renderer = new DiffReportRenderer();
+        var diff = new AnalysisDiffReport
+        {
+            Base = new DiffMetadata { CommitSha = "abc123", BranchName = "main", AnalyzedAt = DateTime.UtcNow },
+            Head = new DiffMetadata { CommitSha = "def456", BranchName = "feature", AnalyzedAt = DateTime.UtcNow },
+            Totals = new DiffTotals
+            {
+                BaseProjects = 1, HeadProjects = 1,
+                BaseTypes = 10, HeadTypes = 10,
+                BaseMethods = 50, HeadMethods = 50,
+                BaseCyclomaticComplexity = 100, HeadCyclomaticComplexity = 100,
+                BaseLinesOfCode = 1000, HeadLinesOfCode = 1000,
+                BaseAvgMaintainabilityIndex = 80.0, HeadAvgMaintainabilityIndex = 80.0,
+                BaseErrors = 0, HeadErrors = 0,
+                BaseWarnings = 0, HeadWarnings = 0,
+                BaseInfo = 0, HeadInfo = 0,
+                BaseHidden = 0, HeadHidden = 0
+            },
+            Projects =
+            [
+                new ProjectDiff
+                {
+                    Name = "TestProject",
+                    Base = new ProjectDiffMetrics
+                    {
+                        ExternalBclDependencies = 3,
+                        ExternalPackageDependencies = 5,
+                        ExternalDependencies = 8,
+                        AvgMaintainabilityIndex = 80.0
+                    },
+                    Head = new ProjectDiffMetrics
+                    {
+                        ExternalBclDependencies = 5,
+                        ExternalPackageDependencies = 5,
+                        ExternalDependencies = 10,
+                        AvgMaintainabilityIndex = 80.0
+                    }
+                }
+            ]
+        };
+
+        // Act
+        var markdown = renderer.RenderMarkdown(diff);
+
+        // Assert
+        await Assert.That(markdown).Contains("### External Dependencies Changes");
+        await Assert.That(markdown).Contains("🔍 **+2**"); // BCL increase
+    }
+
+    [Test]
+    public async Task RenderMarkdown_ExternalPackageDependenciesDecrease_ShowsSuccess()
+    {
+        // Arrange
+        var renderer = new DiffReportRenderer();
+        var diff = new AnalysisDiffReport
+        {
+            Base = new DiffMetadata { CommitSha = "abc123", BranchName = "main", AnalyzedAt = DateTime.UtcNow },
+            Head = new DiffMetadata { CommitSha = "def456", BranchName = "feature", AnalyzedAt = DateTime.UtcNow },
+            Totals = new DiffTotals
+            {
+                BaseProjects = 1, HeadProjects = 1,
+                BaseTypes = 10, HeadTypes = 10,
+                BaseMethods = 50, HeadMethods = 50,
+                BaseCyclomaticComplexity = 100, HeadCyclomaticComplexity = 100,
+                BaseLinesOfCode = 1000, HeadLinesOfCode = 1000,
+                BaseAvgMaintainabilityIndex = 80.0, HeadAvgMaintainabilityIndex = 80.0,
+                BaseErrors = 0, HeadErrors = 0,
+                BaseWarnings = 0, HeadWarnings = 0,
+                BaseInfo = 0, HeadInfo = 0,
+                BaseHidden = 0, HeadHidden = 0
+            },
+            Projects =
+            [
+                new ProjectDiff
+                {
+                    Name = "TestProject",
+                    Base = new ProjectDiffMetrics
+                    {
+                        ExternalBclDependencies = 3,
+                        ExternalPackageDependencies = 8,
+                        ExternalDependencies = 11,
+                        AvgMaintainabilityIndex = 80.0
+                    },
+                    Head = new ProjectDiffMetrics
+                    {
+                        ExternalBclDependencies = 3,
+                        ExternalPackageDependencies = 5,
+                        ExternalDependencies = 8,
+                        AvgMaintainabilityIndex = 80.0
+                    }
+                }
+            ]
+        };
+
+        // Act
+        var markdown = renderer.RenderMarkdown(diff);
+
+        // Assert
+        await Assert.That(markdown).Contains("### External Dependencies Changes");
+        await Assert.That(markdown).Contains("✅ -3"); // Package decrease
+    }
+
+    [Test]
+    public async Task RenderMarkdown_NoExternalDependencyChanges_OmitsExternalDependenciesSection()
+    {
+        // Arrange
+        var renderer = new DiffReportRenderer();
+        var diff = new AnalysisDiffReport
+        {
+            Base = new DiffMetadata { CommitSha = "abc123", BranchName = "main", AnalyzedAt = DateTime.UtcNow },
+            Head = new DiffMetadata { CommitSha = "def456", BranchName = "feature", AnalyzedAt = DateTime.UtcNow },
+            Totals = new DiffTotals
+            {
+                BaseProjects = 1, HeadProjects = 1,
+                BaseTypes = 10, HeadTypes = 10,
+                BaseMethods = 50, HeadMethods = 50,
+                BaseCyclomaticComplexity = 100, HeadCyclomaticComplexity = 100,
+                BaseLinesOfCode = 1000, HeadLinesOfCode = 1000,
+                BaseAvgMaintainabilityIndex = 80.0, HeadAvgMaintainabilityIndex = 80.0,
+                BaseErrors = 0, HeadErrors = 0,
+                BaseWarnings = 0, HeadWarnings = 0,
+                BaseInfo = 0, HeadInfo = 0,
+                BaseHidden = 0, HeadHidden = 0
+            },
+            Projects =
+            [
+                new ProjectDiff
+                {
+                    Name = "TestProject",
+                    Base = new ProjectDiffMetrics
+                    {
+                        ExternalBclDependencies = 3,
+                        ExternalPackageDependencies = 5,
+                        ExternalDependencies = 8,
+                        AvgMaintainabilityIndex = 80.0
+                    },
+                    Head = new ProjectDiffMetrics
+                    {
+                        ExternalBclDependencies = 3,
+                        ExternalPackageDependencies = 5,
+                        ExternalDependencies = 8,
+                        AvgMaintainabilityIndex = 80.0
+                    }
+                }
+            ]
+        };
+
+        // Act
+        var markdown = renderer.RenderMarkdown(diff);
+
+        // Assert - Should not have the section if no external dependency changes
+        await Assert.That(markdown).DoesNotContain("### External Dependencies Changes");
+    }
+
+    [Test]
+    public async Task RenderMarkdown_ExternalDependenciesSectionOrdering_AppearsAfterInternalDependencies()
+    {
+        // Arrange
+        var renderer = new DiffReportRenderer();
+        var diff = new AnalysisDiffReport
+        {
+            Base = new DiffMetadata { CommitSha = "abc123", BranchName = "main", AnalyzedAt = DateTime.UtcNow },
+            Head = new DiffMetadata { CommitSha = "def456", BranchName = "feature", AnalyzedAt = DateTime.UtcNow },
+            Totals = new DiffTotals
+            {
+                BaseProjects = 1, HeadProjects = 1,
+                BaseTypes = 10, HeadTypes = 10,
+                BaseMethods = 50, HeadMethods = 50,
+                BaseCyclomaticComplexity = 100, HeadCyclomaticComplexity = 100,
+                BaseLinesOfCode = 1000, HeadLinesOfCode = 1000,
+                BaseAvgMaintainabilityIndex = 80.0, HeadAvgMaintainabilityIndex = 75.0,
+                BaseErrors = 0, HeadErrors = 0,
+                BaseWarnings = 0, HeadWarnings = 0,
+                BaseInfo = 0, HeadInfo = 0,
+                BaseHidden = 0, HeadHidden = 0
+            },
+            Projects =
+            [
+                new ProjectDiff
+                {
+                    Name = "TestProject",
+                    Base = new ProjectDiffMetrics
+                    {
+                        InternalDependencies = 1,
+                        InternalDependents = 0,
+                        DependencyRatio = 1.0,
+                        ExternalBclDependencies = 3,
+                        ExternalPackageDependencies = 5,
+                        ExternalDependencies = 8,
+                        AvgMaintainabilityIndex = 80.0,
+                        CyclomaticComplexity = 100,
+                        LinesOfCode = 1000,
+                        Warnings = 0
+                    },
+                    Head = new ProjectDiffMetrics
+                    {
+                        InternalDependencies = 2,
+                        InternalDependents = 0,
+                        DependencyRatio = 2.0,
+                        ExternalBclDependencies = 5,
+                        ExternalPackageDependencies = 6,
+                        ExternalDependencies = 11,
+                        AvgMaintainabilityIndex = 75.0,
+                        CyclomaticComplexity = 120,
+                        LinesOfCode = 1200,
+                        Warnings = 0
+                    }
+                }
+            ]
+        };
+
+        // Act
+        var markdown = renderer.RenderMarkdown(diff);
+
+        // Assert - Verify section ordering
+        var internalDepsIndex = markdown.IndexOf("### Internal Dependencies Changes");
+        var externalDepsIndex = markdown.IndexOf("### External Dependencies Changes");
+        var maintainabilityIndex = markdown.IndexOf("### Top Maintainability Changes");
+        
+        await Assert.That(internalDepsIndex).IsGreaterThan(0);
+        await Assert.That(externalDepsIndex).IsGreaterThan(internalDepsIndex);
+        await Assert.That(maintainabilityIndex).IsGreaterThan(externalDepsIndex);
+    }
+
+    [Test]
+    public async Task RenderMarkdown_BothBclAndPackageChanges_ShowsSeparately()
+    {
+        // Arrange
+        var renderer = new DiffReportRenderer();
+        var diff = new AnalysisDiffReport
+        {
+            Base = new DiffMetadata { CommitSha = "abc123", BranchName = "main", AnalyzedAt = DateTime.UtcNow },
+            Head = new DiffMetadata { CommitSha = "def456", BranchName = "feature", AnalyzedAt = DateTime.UtcNow },
+            Totals = new DiffTotals
+            {
+                BaseProjects = 1, HeadProjects = 1,
+                BaseTypes = 10, HeadTypes = 10,
+                BaseMethods = 50, HeadMethods = 50,
+                BaseCyclomaticComplexity = 100, HeadCyclomaticComplexity = 100,
+                BaseLinesOfCode = 1000, HeadLinesOfCode = 1000,
+                BaseAvgMaintainabilityIndex = 80.0, HeadAvgMaintainabilityIndex = 80.0,
+                BaseErrors = 0, HeadErrors = 0,
+                BaseWarnings = 0, HeadWarnings = 0,
+                BaseInfo = 0, HeadInfo = 0,
+                BaseHidden = 0, HeadHidden = 0
+            },
+            Projects =
+            [
+                new ProjectDiff
+                {
+                    Name = "TestProject",
+                    Base = new ProjectDiffMetrics
+                    {
+                        ExternalBclDependencies = 3,
+                        ExternalPackageDependencies = 5,
+                        ExternalDependencies = 8,
+                        AvgMaintainabilityIndex = 80.0
+                    },
+                    Head = new ProjectDiffMetrics
+                    {
+                        ExternalBclDependencies = 5,
+                        ExternalPackageDependencies = 8,
+                        ExternalDependencies = 13,
+                        AvgMaintainabilityIndex = 80.0
+                    }
+                }
+            ]
+        };
+
+        // Act
+        var markdown = renderer.RenderMarkdown(diff);
+
+        // Assert - Both BCL and Packages columns should be present with correct deltas
+        await Assert.That(markdown).Contains("BCL Δ");
+        await Assert.That(markdown).Contains("Packages Δ");
+        await Assert.That(markdown).Contains("3→5"); // BCL Base→Head
+        await Assert.That(markdown).Contains("5→8"); // Packages Base→Head
+    }
+
+    [Test]
+    public async Task RenderMarkdown_AddedOrRemovedProjects_ExcludesThemFromExternalDependenciesSection()
+    {
+        // Arrange
+        var renderer = new DiffReportRenderer();
+        var diff = new AnalysisDiffReport
+        {
+            Base = new DiffMetadata { CommitSha = "abc123", BranchName = "main", AnalyzedAt = DateTime.UtcNow },
+            Head = new DiffMetadata { CommitSha = "def456", BranchName = "feature", AnalyzedAt = DateTime.UtcNow },
+            Totals = new DiffTotals
+            {
+                BaseProjects = 1, HeadProjects = 2,
+                BaseTypes = 10, HeadTypes = 20,
+                BaseMethods = 50, HeadMethods = 100,
+                BaseCyclomaticComplexity = 100, HeadCyclomaticComplexity = 200,
+                BaseLinesOfCode = 1000, HeadLinesOfCode = 2000,
+                BaseAvgMaintainabilityIndex = 80.0, HeadAvgMaintainabilityIndex = 80.0,
+                BaseErrors = 0, HeadErrors = 0,
+                BaseWarnings = 0, HeadWarnings = 0,
+                BaseInfo = 0, HeadInfo = 0,
+                BaseHidden = 0, HeadHidden = 0
+            },
+            Projects =
+            [
+                new ProjectDiff
+                {
+                    Name = "AddedProject",
+                    IsAdded = true,
+                    Base = new ProjectDiffMetrics(),
+                    Head = new ProjectDiffMetrics
+                    {
+                        ExternalBclDependencies = 5,
+                        ExternalPackageDependencies = 3,
+                        ExternalDependencies = 8,
+                        AvgMaintainabilityIndex = 80.0
+                    }
+                },
+                new ProjectDiff
+                {
+                    Name = "RemovedProject",
+                    IsRemoved = true,
+                    Base = new ProjectDiffMetrics
+                    {
+                        ExternalBclDependencies = 4,
+                        ExternalPackageDependencies = 6,
+                        ExternalDependencies = 10,
+                        AvgMaintainabilityIndex = 80.0
+                    },
+                    Head = new ProjectDiffMetrics()
+                }
+            ]
+        };
+
+        // Act
+        var markdown = renderer.RenderMarkdown(diff);
+
+        // Assert - Should not have the section since added/removed projects are excluded
+        await Assert.That(markdown).DoesNotContain("### External Dependencies Changes");
+    }
+
     private static AnalysisDiffReport CreateDiffReport(
         int baseErrors = 0, int headErrors = 0,
         int baseWarnings = 0, int headWarnings = 0,
