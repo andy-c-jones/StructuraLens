@@ -49,7 +49,10 @@ public sealed class DiffReportRenderer
         // Section 3: Internal Dependencies Changes
         RenderInternalDependenciesChanges(diff, sb, maxProjects);
 
-        // Section 4: Top Maintainability Changes (per-project breakdown)
+        // Section 4: External Dependencies Changes
+        RenderExternalDependenciesChanges(diff, sb, maxProjects);
+
+        // Section 5: Top Maintainability Changes (per-project breakdown)
         if (diff.Projects.Count > 0)
         {
             sb.AppendLine("### Top Maintainability Changes");
@@ -84,7 +87,7 @@ public sealed class DiffReportRenderer
             sb.AppendLine();
         }
 
-        // Section 3: Top Level Metrics (overall statistics)
+        // Section 6: Top Level Metrics (overall statistics)
         sb.AppendLine("### Top Level Metrics");
         sb.AppendLine();
         sb.AppendLine("| Metric | Base | Head | Delta |");
@@ -215,6 +218,73 @@ public sealed class DiffReportRenderer
         }
     }
 
+    private static void RenderExternalDependenciesChanges(AnalysisDiffReport diff, StringBuilder sb, int maxProjects)
+    {
+        // Find projects with external dependency changes
+        var projectsWithExternalChanges = diff.Projects
+            .Where(p => !p.IsAdded && !p.IsRemoved)
+            .Where(p => p.ExternalBclDependenciesDelta != 0 || p.ExternalPackageDependenciesDelta != 0)
+            .OrderByDescending(p => Math.Abs(p.ExternalDependenciesDelta))
+            .Take(maxProjects)
+            .ToList();
+
+        if (projectsWithExternalChanges.Count > 0)
+        {
+            sb.AppendLine("### External Dependencies Changes");
+            sb.AppendLine();
+
+            foreach (var project in projectsWithExternalChanges)
+            {
+                sb.AppendLine($"#### {Escape(project.Name)}");
+                sb.AppendLine();
+
+                // Show added BCL dependencies
+                if (project.AddedBclDependencies.Count > 0)
+                {
+                    sb.AppendLine($"**🔍 Added BCL Dependencies ({project.AddedBclDependencies.Count}):**");
+                    foreach (var dep in project.AddedBclDependencies)
+                    {
+                        sb.AppendLine($"- `{dep}`");
+                    }
+                    sb.AppendLine();
+                }
+
+                // Show removed BCL dependencies
+                if (project.RemovedBclDependencies.Count > 0)
+                {
+                    sb.AppendLine($"**✅ Removed BCL Dependencies ({project.RemovedBclDependencies.Count}):**");
+                    foreach (var dep in project.RemovedBclDependencies)
+                    {
+                        sb.AppendLine($"- `{dep}`");
+                    }
+                    sb.AppendLine();
+                }
+
+                // Show added packages
+                if (project.AddedPackageDependencies.Count > 0)
+                {
+                    sb.AppendLine($"**🔍 Added Third-Party Packages ({project.AddedPackageDependencies.Count}):**");
+                    foreach (var dep in project.AddedPackageDependencies)
+                    {
+                        sb.AppendLine($"- `{dep}`");
+                    }
+                    sb.AppendLine();
+                }
+
+                // Show removed packages
+                if (project.RemovedPackageDependencies.Count > 0)
+                {
+                    sb.AppendLine($"**✅ Removed Third-Party Packages ({project.RemovedPackageDependencies.Count}):**");
+                    foreach (var dep in project.RemovedPackageDependencies)
+                    {
+                        sb.AppendLine($"- `{dep}`");
+                    }
+                    sb.AppendLine();
+                }
+            }
+        }
+    }
+
     private static string BuildRow(string label, int baseValue, int headValue, int delta, DeltaSemantic semantic = DeltaSemantic.Neutral)
     {
         return $"| {label} | {baseValue} | {headValue} | {FormatDelta(delta, semantic)} |";
@@ -255,6 +325,7 @@ public sealed class DiffReportRenderer
             DeltaSemantic.ModerateDecrease => $"⚠️ **{value}**",
             DeltaSemantic.GoodDecrease => $"✅ {value}",
             DeltaSemantic.GoodIncrease => $"✅ {value}",
+            DeltaSemantic.NeedsReview => $"🔍 **{value}**",
             _ => value
         };
     }
@@ -309,5 +380,10 @@ internal enum DeltaSemantic
     /// <summary>
     /// Good increase (e.g., maintainability increased) - uses ✅ emoji.
     /// </summary>
-    GoodIncrease
+    GoodIncrease,
+
+    /// <summary>
+    /// Needs review/careful consideration (e.g., external dependencies added) - uses 🔍 emoji.
+    /// </summary>
+    NeedsReview
 }

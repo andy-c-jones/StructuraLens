@@ -714,6 +714,406 @@ public sealed class DiffReportRendererTests
         await Assert.That(metricsIndex).IsGreaterThan(topChangesIndex);
     }
 
+    [Test]
+    public async Task RenderMarkdown_ExternalBclDependenciesIncrease_ShowsNeedsReview()
+    {
+        // Arrange
+        var renderer = new DiffReportRenderer();
+        var diff = new AnalysisDiffReport
+        {
+            Base = new DiffMetadata { CommitSha = "abc123", BranchName = "main", AnalyzedAt = DateTime.UtcNow },
+            Head = new DiffMetadata { CommitSha = "def456", BranchName = "feature", AnalyzedAt = DateTime.UtcNow },
+            Totals = new DiffTotals
+            {
+                BaseProjects = 1, HeadProjects = 1,
+                BaseTypes = 10, HeadTypes = 10,
+                BaseMethods = 50, HeadMethods = 50,
+                BaseCyclomaticComplexity = 100, HeadCyclomaticComplexity = 100,
+                BaseLinesOfCode = 1000, HeadLinesOfCode = 1000,
+                BaseAvgMaintainabilityIndex = 80.0, HeadAvgMaintainabilityIndex = 80.0,
+                BaseErrors = 0, HeadErrors = 0,
+                BaseWarnings = 0, HeadWarnings = 0,
+                BaseInfo = 0, HeadInfo = 0,
+                BaseHidden = 0, HeadHidden = 0
+            },
+            Projects =
+            [
+                new ProjectDiff
+                {
+                    Name = "TestProject",
+                    Base = new ProjectDiffMetrics
+                    {
+                        ExternalBclDependencies = 3,
+                        ExternalPackageDependencies = 5,
+                        ExternalDependencies = 8,
+                        ExternalBclDependencyNames = ["System.Collections", "System.Linq", "Microsoft.Extensions.Hosting"],
+                        ExternalPackageDependencyNames = ["PackageA", "PackageB", "PackageC", "PackageD", "PackageE"],
+                        AvgMaintainabilityIndex = 80.0
+                    },
+                    Head = new ProjectDiffMetrics
+                    {
+                        ExternalBclDependencies = 5,
+                        ExternalPackageDependencies = 5,
+                        ExternalDependencies = 10,
+                        ExternalBclDependencyNames = ["System.Collections", "System.Linq", "Microsoft.Extensions.Hosting", "System.Text.Json", "Microsoft.Extensions.Logging"],
+                        ExternalPackageDependencyNames = ["PackageA", "PackageB", "PackageC", "PackageD", "PackageE"],
+                        AvgMaintainabilityIndex = 80.0
+                    },
+                    AddedBclDependencies = ["Microsoft.Extensions.Logging", "System.Text.Json"],
+                    RemovedBclDependencies = [],
+                    AddedPackageDependencies = [],
+                    RemovedPackageDependencies = []
+                }
+            ]
+        };
+
+        // Act
+        var markdown = renderer.RenderMarkdown(diff);
+
+        // Assert
+        await Assert.That(markdown).Contains("### External Dependencies Changes");
+        await Assert.That(markdown).Contains("🔍 Added BCL Dependencies (2)");
+        await Assert.That(markdown).Contains("`System.Text.Json`");
+        await Assert.That(markdown).Contains("`Microsoft.Extensions.Logging`");
+    }
+
+    [Test]
+    public async Task RenderMarkdown_ExternalPackageDependenciesDecrease_ShowsSuccess()
+    {
+        // Arrange
+        var renderer = new DiffReportRenderer();
+        var diff = new AnalysisDiffReport
+        {
+            Base = new DiffMetadata { CommitSha = "abc123", BranchName = "main", AnalyzedAt = DateTime.UtcNow },
+            Head = new DiffMetadata { CommitSha = "def456", BranchName = "feature", AnalyzedAt = DateTime.UtcNow },
+            Totals = new DiffTotals
+            {
+                BaseProjects = 1, HeadProjects = 1,
+                BaseTypes = 10, HeadTypes = 10,
+                BaseMethods = 50, HeadMethods = 50,
+                BaseCyclomaticComplexity = 100, HeadCyclomaticComplexity = 100,
+                BaseLinesOfCode = 1000, HeadLinesOfCode = 1000,
+                BaseAvgMaintainabilityIndex = 80.0, HeadAvgMaintainabilityIndex = 80.0,
+                BaseErrors = 0, HeadErrors = 0,
+                BaseWarnings = 0, HeadWarnings = 0,
+                BaseInfo = 0, HeadInfo = 0,
+                BaseHidden = 0, HeadHidden = 0
+            },
+            Projects =
+            [
+                new ProjectDiff
+                {
+                    Name = "TestProject",
+                    Base = new ProjectDiffMetrics
+                    {
+                        ExternalBclDependencies = 3,
+                        ExternalPackageDependencies = 8,
+                        ExternalDependencies = 11,
+                        ExternalBclDependencyNames = ["System.Collections", "System.Linq", "Microsoft.Extensions.Hosting"],
+                        ExternalPackageDependencyNames = ["Newtonsoft.Json", "Serilog", "AutoMapper", "FluentValidation", "Dapper", "Polly", "MediatR", "NLog"],
+                        AvgMaintainabilityIndex = 80.0
+                    },
+                    Head = new ProjectDiffMetrics
+                    {
+                        ExternalBclDependencies = 3,
+                        ExternalPackageDependencies = 5,
+                        ExternalDependencies = 8,
+                        ExternalBclDependencyNames = ["System.Collections", "System.Linq", "Microsoft.Extensions.Hosting"],
+                        ExternalPackageDependencyNames = ["Serilog", "AutoMapper", "FluentValidation", "MediatR", "NLog"],
+                        AvgMaintainabilityIndex = 80.0
+                    },
+                    AddedBclDependencies = [],
+                    RemovedBclDependencies = [],
+                    AddedPackageDependencies = [],
+                    RemovedPackageDependencies = ["Dapper", "Newtonsoft.Json", "Polly"]
+                }
+            ]
+        };
+
+        // Act
+        var markdown = renderer.RenderMarkdown(diff);
+
+        // Assert
+        await Assert.That(markdown).Contains("### External Dependencies Changes");
+        await Assert.That(markdown).Contains("✅ Removed Third-Party Packages (3)");
+        await Assert.That(markdown).Contains("`Newtonsoft.Json`");
+        await Assert.That(markdown).Contains("`Dapper`");
+        await Assert.That(markdown).Contains("`Polly`");
+    }
+
+    [Test]
+    public async Task RenderMarkdown_NoExternalDependencyChanges_OmitsExternalDependenciesSection()
+    {
+        // Arrange
+        var renderer = new DiffReportRenderer();
+        var diff = new AnalysisDiffReport
+        {
+            Base = new DiffMetadata { CommitSha = "abc123", BranchName = "main", AnalyzedAt = DateTime.UtcNow },
+            Head = new DiffMetadata { CommitSha = "def456", BranchName = "feature", AnalyzedAt = DateTime.UtcNow },
+            Totals = new DiffTotals
+            {
+                BaseProjects = 1, HeadProjects = 1,
+                BaseTypes = 10, HeadTypes = 10,
+                BaseMethods = 50, HeadMethods = 50,
+                BaseCyclomaticComplexity = 100, HeadCyclomaticComplexity = 100,
+                BaseLinesOfCode = 1000, HeadLinesOfCode = 1000,
+                BaseAvgMaintainabilityIndex = 80.0, HeadAvgMaintainabilityIndex = 80.0,
+                BaseErrors = 0, HeadErrors = 0,
+                BaseWarnings = 0, HeadWarnings = 0,
+                BaseInfo = 0, HeadInfo = 0,
+                BaseHidden = 0, HeadHidden = 0
+            },
+            Projects =
+            [
+                new ProjectDiff
+                {
+                    Name = "TestProject",
+                    Base = new ProjectDiffMetrics
+                    {
+                        ExternalBclDependencies = 3,
+                        ExternalPackageDependencies = 5,
+                        ExternalDependencies = 8,
+                        ExternalBclDependencyNames = ["System.Collections", "System.Linq", "Microsoft.Extensions.Hosting"],
+                        ExternalPackageDependencyNames = ["PackageA", "PackageB", "PackageC", "PackageD", "PackageE"],
+                        AvgMaintainabilityIndex = 80.0
+                    },
+                    Head = new ProjectDiffMetrics
+                    {
+                        ExternalBclDependencies = 3,
+                        ExternalPackageDependencies = 5,
+                        ExternalDependencies = 8,
+                        ExternalBclDependencyNames = ["System.Collections", "System.Linq", "Microsoft.Extensions.Hosting"],
+                        ExternalPackageDependencyNames = ["PackageA", "PackageB", "PackageC", "PackageD", "PackageE"],
+                        AvgMaintainabilityIndex = 80.0
+                    },
+                    AddedBclDependencies = [],
+                    RemovedBclDependencies = [],
+                    AddedPackageDependencies = [],
+                    RemovedPackageDependencies = []
+                }
+            ]
+        };
+
+        // Act
+        var markdown = renderer.RenderMarkdown(diff);
+
+        // Assert - Should not have the section if no external dependency changes
+        await Assert.That(markdown).DoesNotContain("### External Dependencies Changes");
+    }
+
+    [Test]
+    public async Task RenderMarkdown_ExternalDependenciesSectionOrdering_AppearsAfterInternalDependencies()
+    {
+        // Arrange
+        var renderer = new DiffReportRenderer();
+        var diff = new AnalysisDiffReport
+        {
+            Base = new DiffMetadata { CommitSha = "abc123", BranchName = "main", AnalyzedAt = DateTime.UtcNow },
+            Head = new DiffMetadata { CommitSha = "def456", BranchName = "feature", AnalyzedAt = DateTime.UtcNow },
+            Totals = new DiffTotals
+            {
+                BaseProjects = 1, HeadProjects = 1,
+                BaseTypes = 10, HeadTypes = 10,
+                BaseMethods = 50, HeadMethods = 50,
+                BaseCyclomaticComplexity = 100, HeadCyclomaticComplexity = 100,
+                BaseLinesOfCode = 1000, HeadLinesOfCode = 1000,
+                BaseAvgMaintainabilityIndex = 80.0, HeadAvgMaintainabilityIndex = 75.0,
+                BaseErrors = 0, HeadErrors = 0,
+                BaseWarnings = 0, HeadWarnings = 0,
+                BaseInfo = 0, HeadInfo = 0,
+                BaseHidden = 0, HeadHidden = 0
+            },
+            Projects =
+            [
+                new ProjectDiff
+                {
+                    Name = "TestProject",
+                    Base = new ProjectDiffMetrics
+                    {
+                        InternalDependencies = 1,
+                        InternalDependents = 0,
+                        DependencyRatio = 1.0,
+                        ExternalBclDependencies = 3,
+                        ExternalPackageDependencies = 5,
+                        ExternalDependencies = 8,
+                        ExternalBclDependencyNames = ["System.Collections", "System.Linq", "Microsoft.Extensions.Hosting"],
+                        ExternalPackageDependencyNames = ["PackageA", "PackageB", "PackageC", "PackageD", "PackageE"],
+                        AvgMaintainabilityIndex = 80.0,
+                        CyclomaticComplexity = 100,
+                        LinesOfCode = 1000,
+                        Warnings = 0
+                    },
+                    Head = new ProjectDiffMetrics
+                    {
+                        InternalDependencies = 2,
+                        InternalDependents = 0,
+                        DependencyRatio = 2.0,
+                        ExternalBclDependencies = 5,
+                        ExternalPackageDependencies = 6,
+                        ExternalDependencies = 11,
+                        ExternalBclDependencyNames = ["System.Collections", "System.Linq", "Microsoft.Extensions.Hosting", "System.Text.Json", "Microsoft.Extensions.Logging"],
+                        ExternalPackageDependencyNames = ["PackageA", "PackageB", "PackageC", "PackageD", "PackageE", "Newtonsoft.Json"],
+                        AvgMaintainabilityIndex = 75.0,
+                        CyclomaticComplexity = 120,
+                        LinesOfCode = 1200,
+                        Warnings = 0
+                    },
+                    AddedBclDependencies = ["Microsoft.Extensions.Logging", "System.Text.Json"],
+                    RemovedBclDependencies = [],
+                    AddedPackageDependencies = ["Newtonsoft.Json"],
+                    RemovedPackageDependencies = []
+                }
+            ]
+        };
+
+        // Act
+        var markdown = renderer.RenderMarkdown(diff);
+
+        // Assert - Verify section ordering
+        var internalDepsIndex = markdown.IndexOf("### Internal Dependencies Changes");
+        var externalDepsIndex = markdown.IndexOf("### External Dependencies Changes");
+        var maintainabilityIndex = markdown.IndexOf("### Top Maintainability Changes");
+        
+        await Assert.That(internalDepsIndex).IsGreaterThan(0);
+        await Assert.That(externalDepsIndex).IsGreaterThan(internalDepsIndex);
+        await Assert.That(maintainabilityIndex).IsGreaterThan(externalDepsIndex);
+    }
+
+    [Test]
+    public async Task RenderMarkdown_BothBclAndPackageChanges_ShowsSeparately()
+    {
+        // Arrange
+        var renderer = new DiffReportRenderer();
+        var diff = new AnalysisDiffReport
+        {
+            Base = new DiffMetadata { CommitSha = "abc123", BranchName = "main", AnalyzedAt = DateTime.UtcNow },
+            Head = new DiffMetadata { CommitSha = "def456", BranchName = "feature", AnalyzedAt = DateTime.UtcNow },
+            Totals = new DiffTotals
+            {
+                BaseProjects = 1, HeadProjects = 1,
+                BaseTypes = 10, HeadTypes = 10,
+                BaseMethods = 50, HeadMethods = 50,
+                BaseCyclomaticComplexity = 100, HeadCyclomaticComplexity = 100,
+                BaseLinesOfCode = 1000, HeadLinesOfCode = 1000,
+                BaseAvgMaintainabilityIndex = 80.0, HeadAvgMaintainabilityIndex = 80.0,
+                BaseErrors = 0, HeadErrors = 0,
+                BaseWarnings = 0, HeadWarnings = 0,
+                BaseInfo = 0, HeadInfo = 0,
+                BaseHidden = 0, HeadHidden = 0
+            },
+            Projects =
+            [
+                new ProjectDiff
+                {
+                    Name = "TestProject",
+                    Base = new ProjectDiffMetrics
+                    {
+                        ExternalBclDependencies = 3,
+                        ExternalPackageDependencies = 5,
+                        ExternalDependencies = 8,
+                        ExternalBclDependencyNames = ["System.Collections", "System.Linq", "Microsoft.Extensions.Hosting"],
+                        ExternalPackageDependencyNames = ["PackageA", "PackageB", "PackageC", "PackageD", "PackageE"],
+                        AvgMaintainabilityIndex = 80.0
+                    },
+                    Head = new ProjectDiffMetrics
+                    {
+                        ExternalBclDependencies = 5,
+                        ExternalPackageDependencies = 8,
+                        ExternalDependencies = 13,
+                        ExternalBclDependencyNames = ["System.Collections", "System.Linq", "Microsoft.Extensions.Hosting", "System.Text.Json", "Microsoft.Extensions.Logging"],
+                        ExternalPackageDependencyNames = ["PackageA", "PackageB", "PackageC", "PackageD", "PackageE", "Newtonsoft.Json", "Serilog", "AutoMapper"],
+                        AvgMaintainabilityIndex = 80.0
+                    },
+                    AddedBclDependencies = ["Microsoft.Extensions.Logging", "System.Text.Json"],
+                    RemovedBclDependencies = [],
+                    AddedPackageDependencies = ["AutoMapper", "Newtonsoft.Json", "Serilog"],
+                    RemovedPackageDependencies = []
+                }
+            ]
+        };
+
+        // Act
+        var markdown = renderer.RenderMarkdown(diff);
+
+        // Assert - Both BCL and Packages should be shown separately with package names
+        await Assert.That(markdown).Contains("🔍 Added BCL Dependencies (2)");
+        await Assert.That(markdown).Contains("🔍 Added Third-Party Packages (3)");
+        await Assert.That(markdown).Contains("`System.Text.Json`");
+        await Assert.That(markdown).Contains("`Newtonsoft.Json`");
+    }
+
+    [Test]
+    public async Task RenderMarkdown_AddedOrRemovedProjects_ExcludesThemFromExternalDependenciesSection()
+    {
+        // Arrange
+        var renderer = new DiffReportRenderer();
+        var diff = new AnalysisDiffReport
+        {
+            Base = new DiffMetadata { CommitSha = "abc123", BranchName = "main", AnalyzedAt = DateTime.UtcNow },
+            Head = new DiffMetadata { CommitSha = "def456", BranchName = "feature", AnalyzedAt = DateTime.UtcNow },
+            Totals = new DiffTotals
+            {
+                BaseProjects = 1, HeadProjects = 2,
+                BaseTypes = 10, HeadTypes = 20,
+                BaseMethods = 50, HeadMethods = 100,
+                BaseCyclomaticComplexity = 100, HeadCyclomaticComplexity = 200,
+                BaseLinesOfCode = 1000, HeadLinesOfCode = 2000,
+                BaseAvgMaintainabilityIndex = 80.0, HeadAvgMaintainabilityIndex = 80.0,
+                BaseErrors = 0, HeadErrors = 0,
+                BaseWarnings = 0, HeadWarnings = 0,
+                BaseInfo = 0, HeadInfo = 0,
+                BaseHidden = 0, HeadHidden = 0
+            },
+            Projects =
+            [
+                new ProjectDiff
+                {
+                    Name = "AddedProject",
+                    IsAdded = true,
+                    Base = new ProjectDiffMetrics(),
+                    Head = new ProjectDiffMetrics
+                    {
+                        ExternalBclDependencies = 5,
+                        ExternalPackageDependencies = 3,
+                        ExternalDependencies = 8,
+                        ExternalBclDependencyNames = ["System.Collections", "System.Linq", "Microsoft.Extensions.Hosting", "System.Text.Json", "Microsoft.Extensions.Logging"],
+                        ExternalPackageDependencyNames = ["PackageA", "PackageB", "PackageC"],
+                        AvgMaintainabilityIndex = 80.0
+                    },
+                    AddedBclDependencies = [],
+                    RemovedBclDependencies = [],
+                    AddedPackageDependencies = [],
+                    RemovedPackageDependencies = []
+                },
+                new ProjectDiff
+                {
+                    Name = "RemovedProject",
+                    IsRemoved = true,
+                    Base = new ProjectDiffMetrics
+                    {
+                        ExternalBclDependencies = 4,
+                        ExternalPackageDependencies = 6,
+                        ExternalDependencies = 10,
+                        ExternalBclDependencyNames = ["System.Collections", "System.Linq", "System.Threading", "Microsoft.Extensions.Hosting"],
+                        ExternalPackageDependencyNames = ["PackageX", "PackageY", "PackageZ", "Serilog", "AutoMapper", "Newtonsoft.Json"],
+                        AvgMaintainabilityIndex = 80.0
+                    },
+                    Head = new ProjectDiffMetrics(),
+                    AddedBclDependencies = [],
+                    RemovedBclDependencies = [],
+                    AddedPackageDependencies = [],
+                    RemovedPackageDependencies = []
+                }
+            ]
+        };
+
+        // Act
+        var markdown = renderer.RenderMarkdown(diff);
+
+        // Assert - Should not have the section since added/removed projects are excluded
+        await Assert.That(markdown).DoesNotContain("### External Dependencies Changes");
+    }
+
     private static AnalysisDiffReport CreateDiffReport(
         int baseErrors = 0, int headErrors = 0,
         int baseWarnings = 0, int headWarnings = 0,

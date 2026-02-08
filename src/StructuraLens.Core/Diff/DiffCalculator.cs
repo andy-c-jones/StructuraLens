@@ -23,13 +23,28 @@ public sealed class DiffCalculator
             var baseMetrics = baseProject != null ? ToMetrics(baseProject, baseReport) : new ProjectDiffMetrics();
             var headMetrics = headProject != null ? ToMetrics(headProject, headReport) : new ProjectDiffMetrics();
 
+            // Compute added/removed packages
+            var baseBclSet = baseMetrics.ExternalBclDependencyNames.ToHashSet();
+            var headBclSet = headMetrics.ExternalBclDependencyNames.ToHashSet();
+            var addedBcl = headBclSet.Except(baseBclSet).OrderBy(x => x).ToList();
+            var removedBcl = baseBclSet.Except(headBclSet).OrderBy(x => x).ToList();
+
+            var basePackageSet = baseMetrics.ExternalPackageDependencyNames.ToHashSet();
+            var headPackageSet = headMetrics.ExternalPackageDependencyNames.ToHashSet();
+            var addedPackages = headPackageSet.Except(basePackageSet).OrderBy(x => x).ToList();
+            var removedPackages = basePackageSet.Except(headPackageSet).OrderBy(x => x).ToList();
+
             projectDiffs.Add(new ProjectDiff
             {
                 Name = name,
                 IsAdded = baseProject == null && headProject != null,
                 IsRemoved = baseProject != null && headProject == null,
                 Base = baseMetrics,
-                Head = headMetrics
+                Head = headMetrics,
+                AddedBclDependencies = addedBcl,
+                RemovedBclDependencies = removedBcl,
+                AddedPackageDependencies = addedPackages,
+                RemovedPackageDependencies = removedPackages
             });
         }
 
@@ -90,6 +105,18 @@ public sealed class DiffCalculator
         var projectCoupling = report.CouplingAnalysis?.ProjectCoupling
             .FirstOrDefault(pc => string.Equals(pc.EntityName, project.Name, StringComparison.OrdinalIgnoreCase));
 
+        // Extract and categorize package names
+        var bclPackages = new List<string>();
+        var thirdPartyPackages = new List<string>();
+        
+        foreach (var package in project.PackageReferences)
+        {
+            if (IsBclNamespace(package))
+                bclPackages.Add(package);
+            else
+                thirdPartyPackages.Add(package);
+        }
+
         return new ProjectDiffMetrics
         {
             TypeCount = project.Types.Count,
@@ -102,8 +129,10 @@ public sealed class DiffCalculator
             InternalDependents = projectCoupling?.InternalDependents ?? 0,
             DependencyRatio = Math.Round(projectCoupling?.DependencyRatio ?? 0, 2),
             ExternalDependencies = projectCoupling?.TotalExternalDependencies ?? 0,
-            ExternalBclDependencies = projectCoupling?.ExternalBclDependencies ?? 0,
-            ExternalPackageDependencies = projectCoupling?.ExternalPackageDependencies ?? 0,
+            ExternalBclDependencies = bclPackages.Count,
+            ExternalPackageDependencies = thirdPartyPackages.Count,
+            ExternalBclDependencyNames = bclPackages,
+            ExternalPackageDependencyNames = thirdPartyPackages,
             Errors = project.Diagnostics?.ErrorCount ?? 0,
             Warnings = project.Diagnostics?.WarningCount ?? 0
         };
@@ -205,5 +234,12 @@ public sealed class DiffCalculator
     private static string KeyFor(DiagnosticDiffItem item)
     {
         return string.Join("|", item.Project, item.Id, item.Severity, item.Message, item.File, item.Line, item.Column);
+    }
+
+    private static bool IsBclNamespace(string packageName)
+    {
+        return packageName.StartsWith("System.", StringComparison.Ordinal) ||
+               packageName.Equals("System", StringComparison.Ordinal) ||
+               packageName.StartsWith("Microsoft.", StringComparison.Ordinal);
     }
 }
