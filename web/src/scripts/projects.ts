@@ -198,7 +198,7 @@ function updateProjectsTable(reportData: CompactReport): void {
 
   tableEl.innerHTML = `
     <table>
-      <thead><tr><th>Project</th><th>Types</th><th>Methods</th><th>Cyclomatic Complexity</th><th>Lines of Code</th><th>Max Depth of Inheritance</th><th>Maintainability Index</th><th>Efferent (Ce)</th><th>Afferent (Ca)</th><th>Instability</th></tr></thead>
+      <thead><tr><th>Project</th><th>Types</th><th>Methods</th><th>Cyclomatic Complexity</th><th>Lines of Code</th><th>Max Depth of Inheritance</th><th>Maintainability Index</th><th>Internal Deps</th><th>Internal Dependents</th><th>Dependency Ratio</th></tr></thead>
       <tbody>${projects
         .map(
           (p) => `
@@ -210,9 +210,9 @@ function updateProjectsTable(reportData: CompactReport): void {
           <td>${p.loc.toLocaleString()}</td>
           <td>${p.dit}</td>
           <td>${p.mi}</td>
-          <td>${p.ce}</td>
-          <td>${p.ca}</td>
-          <td>${p.i.toFixed(2)}</td>
+          <td>${p.id}</td>
+          <td>${p.idx}</td>
+          <td>${p.dr.toFixed(2)}</td>
         </tr>`,
         )
         .join("")}

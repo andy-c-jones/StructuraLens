@@ -74,8 +74,8 @@ function getNodeColor(
       cc: pm.cc,
       loc: pm.loc,
       mi: pm.mi,
-      ce: pm.ce,
-      ca: pm.ca,
+      id: pm.id,
+      idx: pm.idx,
       err: pm.err ?? 0,
       warn: pm.warn ?? 0,
     };
@@ -83,8 +83,8 @@ function getNodeColor(
       cc: p.cc,
       loc: p.loc,
       mi: p.mi,
-      ce: p.ce,
-      ca: p.ca,
+      id: p.id,
+      idx: p.idx,
       err: p.err ?? 0,
       warn: p.warn ?? 0,
     }));
@@ -93,23 +93,23 @@ function getNodeColor(
       cc?: number;
       loc?: number;
       mi?: number;
-      ce?: number;
-      ca?: number;
+      internalDependencies?: number;
+      internalDependents?: number;
     };
     metrics = {
       cc: nsNode.cc ?? 0,
       loc: nsNode.loc ?? 0,
       mi: nsNode.mi ?? 0,
-      ce: nsNode.ce ?? 0,
-      ca: nsNode.ca ?? 0,
+      id: nsNode.internalDependencies ?? 0,
+      idx: nsNode.internalDependents ?? 0,
     };
     allMetrics = reportData.g.ns.n.map(
-      ([, , loc, cc, mi, , , ce, ca]: (number | string)[]) => ({
+      ([, , loc, cc, mi, , , id, idx]: (number | string)[]) => ({
         cc: cc as number,
         loc: loc as number,
         mi: mi as number,
-        ce: ce as number,
-        ca: ca as number,
+        id: id as number,
+        idx: idx as number,
       }),
     );
   }
@@ -126,8 +126,8 @@ function getNodeColor(
       values = allMetrics.map((m) => (m.err || 0) * 5 + (m.warn || 0));
       break;
     case "coupling":
-      value = metrics.ce || 0;
-      values = allMetrics.map((m) => m.ce || 0);
+      value = metrics.id || 0;
+      values = allMetrics.map((m) => m.id || 0);
       break;
     case "complexity":
       value = metrics.cc || 0;
@@ -169,7 +169,7 @@ function getNodeSizeValue(
       cc: (node as { cc?: number }).cc ?? 0,
       loc: (node as { loc?: number }).loc ?? node.size ?? 0,
       mi: (node as { mi?: number }).mi ?? 0,
-      ce: (node as { ce?: number }).ce ?? 0,
+      id: (node as { internalDependencies?: number }).internalDependencies ?? 0,
       err: (node as { err?: number }).err ?? 0,
       warn: (node as { warn?: number }).warn ?? 0,
     };
@@ -178,15 +178,15 @@ function getNodeSizeValue(
       cc?: number;
       loc?: number;
       mi?: number;
-      ce?: number;
-      ca?: number;
+      internalDependencies?: number;
+      internalDependents?: number;
     };
     metrics = {
       cc: nsNode.cc ?? 0,
       loc: nsNode.loc ?? 0,
       mi: nsNode.mi ?? 0,
-      ce: nsNode.ce ?? 0,
-      ca: nsNode.ca ?? 0,
+      id: nsNode.internalDependencies ?? 0,
+      idx: nsNode.internalDependents ?? 0,
     };
   }
 
@@ -197,7 +197,7 @@ function getNodeSizeValue(
       if (graphType === "namespace") return outboundCount;
       return (metrics.err || 0) * 5 + (metrics.warn || 0);
     case "coupling":
-      return metrics.ce || 0;
+      return metrics.id || 0;
     case "complexity":
       return metrics.cc || 0;
     case "loc":
@@ -252,7 +252,7 @@ function renderGraph(
         depCount: outboundCounts[id as number] || 0,
       };
     } else {
-      const [id, name, loc, cc, mi, tc, mc, ce, ca, instability] =
+      const [id, name, loc, cc, mi, tc, mc, internalDeps, internalDependents, depRatio, externalDeps] =
         nodeData;
       return {
         id,
@@ -262,9 +262,10 @@ function renderGraph(
         mi,
         tc,
         mc,
-        ce,
-        ca,
-        instability,
+        internalDependencies: internalDeps,
+        internalDependents,
+        dependencyRatio: depRatio,
+        externalDependencies: externalDeps,
         size: loc,
         depCount: outboundCounts[id as number] || 0,
       };
@@ -418,10 +419,13 @@ function renderGraph(
   node
     .append("title")
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .text(
-      (d: any) =>
-        `${d.name}\nOutbound deps: ${d.depCount}\nSize metric: ${d.sizeValue}\nLOC: ${d.size}`,
-    );
+    .text((d: any) => {
+      if (graphType === "project") {
+        return `${d.name}\nOutbound deps: ${d.depCount}\nSize metric: ${d.sizeValue}\nLOC: ${d.size}`;
+      } else {
+        return `${d.name}\nInternal Dependencies: ${d.internalDependencies ?? 0}\nInternal Dependents: ${d.internalDependents ?? 0}\nExternal Dependencies: ${d.externalDependencies ?? 0}\nDependency Ratio: ${d.dependencyRatio?.toFixed(2) ?? "0.00"}\nLOC: ${d.loc ?? 0}\nCC: ${d.cc ?? 0}\nMI: ${d.mi ?? 0}`;
+      }
+    });
 
   simulation.on("tick", () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -468,7 +472,7 @@ export function initGraphTab(reportData: CompactReport): void {
       <select id="colorMetric">
         <option value="none">None</option>
         <option value="diagnostics" data-project-only="true">Diagnostics Count</option>
-        <option value="coupling">Efferent Coupling (Ce)</option>
+        <option value="coupling">Internal Dependencies</option>
         <option value="complexity">Cyclomatic Complexity</option>
         <option value="loc">Lines of Code</option>
         <option value="maintainability">Maintainability Index</option>
@@ -477,7 +481,7 @@ export function initGraphTab(reportData: CompactReport): void {
       <select id="sizeMetric">
         <option value="dependencies">Dependencies</option>
         <option value="diagnostics" data-project-only="true">Diagnostics Count</option>
-        <option value="coupling">Efferent Coupling (Ce)</option>
+        <option value="coupling">Internal Dependencies</option>
         <option value="complexity">Cyclomatic Complexity</option>
         <option value="loc">Lines of Code</option>
         <option value="maintainability">Maintainability Index</option>

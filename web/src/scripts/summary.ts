@@ -49,7 +49,7 @@ export function renderSummary(reportData: CompactReport): void {
     : "";
 
   const projectsTable = `<table>
-        <thead><tr><th>Project</th><th>Types</th><th>Methods</th><th>Cyclomatic Complexity</th><th>Lines of Code</th><th>Maintainability Index</th><th>Instability</th><th>Issues</th></tr></thead>
+        <thead><tr><th>Project</th><th>Types</th><th>Methods</th><th>Cyclomatic Complexity</th><th>Lines of Code</th><th>Maintainability Index</th><th>Dependency Ratio</th><th>Issues</th></tr></thead>
         <tbody>${d.prj
           .map(
             (p) => `
@@ -63,7 +63,7 @@ export function renderSummary(reportData: CompactReport): void {
               <span>${p.mi}</span>
               ${renderMetricBar({ value: p.mi })}
             </td>
-            <td>${p.i.toFixed(2)}</td>
+            <td>${p.dr.toFixed(2)}</td>
             <td>${(p.err || 0) > 0 ? renderBadge({ type: 'error', text: `${p.err} errors` }) + ' ' : ''}${(p.warn || 0) > 0 ? renderBadge({ type: 'warning', text: `${p.warn} warnings` }) : (p.err || 0) === 0 ? renderBadge({ type: 'success', text: 'Clean' }) : ''}</td>
           </tr>`,
           )

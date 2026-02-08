@@ -94,11 +94,18 @@ export function renderCoupling(reportData: CompactReport): void {
     },
   );
 
+  // Calculate total internal and external dependencies
+  const totalInternalDeps = reportData.prj.reduce((sum, p) => sum + (p.id || 0), 0);
+  const totalExternalDeps = reportData.prj.reduce((sum, p) => sum + (p.ed || 0), 0);
+  const totalBclDeps = reportData.prj.reduce((sum, p) => sum + (p.edb || 0), 0);
+  const totalPackageDeps = reportData.prj.reduce((sum, p) => sum + (p.edp || 0), 0);
+
   const couplingCards: CardProps[] = [
     { value: g.p.n.length, label: 'Projects' },
-    { value: g.p.e.length, label: 'Project Dependencies' },
-    { value: g.ns.n.length, label: 'Namespaces' },
-    { value: g.ns.e.length, label: 'Namespace Dependencies' }
+    { value: totalInternalDeps, label: 'Internal Dependencies' },
+    { value: totalExternalDeps, label: 'External Dependencies' },
+    { value: totalBclDeps, label: 'BCL Dependencies' },
+    { value: totalPackageDeps, label: 'Package Dependencies' }
   ];
 
   const projectDepsTable = projectEdges.length > 0
@@ -112,7 +119,22 @@ export function renderCoupling(reportData: CompactReport): void {
           .join("")}
         </tbody>
       </table>`
-    : '<p style="color:var(--text-muted)">No project dependencies</p>';
+    : '<p style="color:var(--text-muted)">No internal project dependencies</p>';
+
+  // External dependencies by project
+  const externalDepsTable = reportData.prj.length > 0 && reportData.prj.some(p => (p.ed || 0) > 0)
+    ? `<table>
+        <thead><tr><th>Project</th><th>BCL Dependencies</th><th>Package Dependencies</th><th>Total External</th></tr></thead>
+        <tbody>${reportData.prj
+          .filter(p => (p.ed || 0) > 0)
+          .map(
+            (p) => `
+          <tr><td>${p.n}</td><td>${p.edb || 0}</td><td>${p.edp || 0}</td><td>${p.ed || 0}</td></tr>`,
+          )
+          .join("")}
+        </tbody>
+      </table>`
+    : '<p style="color:var(--text-muted)">No external dependencies</p>';
 
   const namespaceDepsSection = namespaceEdges.length > 0
     ? `<div class="filter-bar" style="margin-bottom: 15px;">
@@ -124,7 +146,8 @@ export function renderCoupling(reportData: CompactReport): void {
 
   el.innerHTML = `
     ${renderCardsGrid(couplingCards)}
-    ${renderSection('Project Dependencies', projectDepsTable)}
+    ${renderSection('Internal Project Dependencies', projectDepsTable)}
+    ${renderSection('External Dependencies by Project', externalDepsTable)}
     ${renderSection('Namespace Dependencies', namespaceDepsSection)}
   `;
 

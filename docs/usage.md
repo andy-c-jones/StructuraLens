@@ -465,70 +465,96 @@ MI = max(0, 100 * (171 - 5.2*ln(V) - 0.23*CC - 16.2*ln(LOC)) / 171)
 
 ### Coupling Metrics
 
-#### Efferent Coupling (Ce)
+StructuraLens analyzes dependencies between projects, namespaces, and types, providing metrics that separate internal (within your solution) from external (BCL and third-party packages) dependencies.
 
-Number of dependencies going OUT from an entity (projects, namespaces, or types this entity depends on).
+#### Internal Dependencies (ID)
+
+Number of distinct internal entities this entity depends on (outbound dependencies within your solution).
 
 **Interpretation:**
-- High Ce = Entity depends on many others
-- Changes in dependencies can break this entity
-- Goal: Minimize efferent coupling for stability
+- High ID = Entity has many internal dependencies
+- Changes in internal dependencies can break this entity
+- Goal: Minimize internal dependencies to reduce coupling
 
 **Example:**
 ```csharp
-// MyProject.Services has high efferent coupling
-using MyProject.Data;              // +1
-using MyProject.Models;            // +1
-using ThirdParty.Logging;          // +1
-using System.Linq;                 // (filtered out in default mode)
+// MyProject.Services has internal dependencies
+using MyProject.Data;              // +1 (internal)
+using MyProject.Models;            // +1 (internal)
+using ThirdParty.Logging;          // External, not counted in ID
+using System.Linq;                 // External, not counted in ID
+// ID = 2
 ```
 
-#### Afferent Coupling (Ca)
+#### Internal Dependents (IDX)
 
-Number of dependencies coming IN to an entity (other entities that depend on this one).
+Number of distinct internal entities that depend on this one (inbound dependencies within your solution).
 
 **Interpretation:**
-- High Ca = Many others depend on this entity
+- High IDX = Many other entities depend on this one
 - Changes to this entity can break many dependents
-- High Ca in core libraries is expected
+- High IDX in core libraries is expected and acceptable
 
 **Example:**
 ```csharp
-// MyProject.Core has high afferent coupling
+// MyProject.Core has high internal dependents
 // Referenced by:
 // - MyProject.Services
 // - MyProject.Api
 // - MyProject.Workers
-// Ca = 3
+// IDX = 3
 ```
 
-#### Instability (I)
+#### Dependency Ratio (DR)
 
-Ratio of efferent to total coupling: `I = Ce / (Ca + Ce)`
+Ratio of internal dependencies to total internal coupling: `DR = ID / (ID + IDX)`
 
-**Range:** 0.0 (stable) to 1.0 (unstable)
+**Range:** 0.0 (provider) to 1.0 (consumer)
 
 **Interpretation:**
-- I = 0.0: Completely stable (only incoming dependencies)
-- I = 0.5: Balanced
-- I = 1.0: Completely unstable (only outgoing dependencies)
+- DR = 0.0: Pure provider (only incoming dependencies, no outgoing)
+- DR = 0.5: Balanced
+- DR = 1.0: Pure consumer (only outgoing dependencies, no incoming)
 
 **Recommended patterns:**
-- Core/shared libraries: I < 0.5 (stable)
-- Application/UI layers: I > 0.5 (unstable, depends on core)
-- Stable Abstractions Principle: Stability should align with abstraction level
+- Core/shared libraries: DR < 0.5 (providers, stable foundations)
+- Application/UI layers: DR > 0.5 (consumers, depend on core)
+- Dependency Inversion: High-level modules should have lower DR than low-level modules
 
 **Example:**
 ```csharp
-// MyProject.Core
-// Ce = 2 (depends on System, Microsoft.Extensions)
-// Ca = 10 (depended on by many projects)
-// I = 2 / (2 + 10) = 0.17 (very stable) ✓ Good for core library
+// MyProject.Core (foundation library)
+// ID = 0 (depends on no other internal projects)
+// IDX = 10 (depended on by many projects)
+// DR = 0 / (0 + 10) = 0.0 (pure provider) ✓ Good for core library
 
-// MyProject.Api
-// Ce = 8 (depends on Core, Services, Models, ASP.NET, etc.)
-// Ca = 0 (nothing depends on the API layer)
-// I = 8 / (8 + 0) = 1.0 (completely unstable) ✓ Good for top layer
+// MyProject.Api (application layer)
+// ID = 5 (depends on Core, Services, Models, etc.)
+// IDX = 0 (nothing depends on the API layer)
+// DR = 5 / (5 + 0) = 1.0 (pure consumer) ✓ Good for top layer
+```
+
+#### External Dependencies
+
+StructuraLens tracks external dependencies separately to give you visibility into third-party usage:
+
+- **External BCL Dependencies (EDB)**: Count of System.* and Microsoft.* namespaces referenced
+- **External Package Dependencies (EDP)**: Count of third-party package namespaces referenced
+- **Total External Dependencies (ED)**: EDB + EDP
+
+**Note:** External dependencies don't participate in internal coupling calculations (ID, IDX, DR) but are reported separately for dependency management insights.
+
+**Example:**
+```csharp
+// MyProject.Services
+using System.Linq;                 // BCL
+using System.Collections.Generic;  // BCL (same namespace, counted once)
+using Microsoft.Extensions.Logging; // BCL
+using Newtonsoft.Json;             // Package
+using Serilog;                     // Package
+// EDB = 3 (System.Linq, System.Collections.Generic, Microsoft.Extensions.Logging)
+// EDP = 2 (Newtonsoft.Json, Serilog)
+// ED = 5
 ```
 
 ## Diagnostics
