@@ -258,43 +258,29 @@ public sealed class CouplingAnalyzer : ICouplingAnalyzer
         var projectNames = solution.Projects.Select(p => p.Name).ToHashSet();
         var metrics = new List<CouplingMetrics>();
 
+        // Filter to only ProjectReference dependencies for accurate project-to-project coupling
+        var projectDeps = allDependencies
+            .Where(d => d.Type == DependencyType.ProjectReference)
+            .ToList();
+
         // Pre-group dependencies by FromEntity and ToEntity for O(1) lookups
-        var outboundByFrom = allDependencies
+        var outboundByFrom = projectDeps
             .GroupBy(d => d.FromEntity)
             .ToDictionary(g => g.Key, g => g.ToList());
-        var inboundByTo = allDependencies
+        var inboundByTo = projectDeps
             .GroupBy(d => d.ToEntity)
             .ToDictionary(g => g.Key, g => g.ToList());
 
         foreach (var projectName in projectNames)
         {
-            // Get direct matches
-            var outbound = new List<DependencyEdge>();
-            var inbound = new List<DependencyEdge>();
-
-            if (outboundByFrom.TryGetValue(projectName, out var directOutbound))
-                outbound.AddRange(directOutbound);
-
-            if (inboundByTo.TryGetValue(projectName, out var directInbound))
-                inbound.AddRange(directInbound);
-
-            // Also include dependencies where entity starts with project name (namespace/type level)
-            var projectPrefix = $"{projectName}.";
-            foreach (var kvp in outboundByFrom)
-            {
-                if (kvp.Key.StartsWith(projectPrefix))
-                    outbound.AddRange(kvp.Value);
-            }
-            foreach (var kvp in inboundByTo)
-            {
-                if (kvp.Key.StartsWith(projectPrefix))
-                    inbound.AddRange(kvp.Value);
-            }
+            // Get project-level dependencies (should match project name exactly)
+            var outbound = outboundByFrom.GetValueOrDefault(projectName, []);
+            var inbound = inboundByTo.GetValueOrDefault(projectName, []);
 
             // Split into internal and external
-            var internalOut = outbound.Where(d => IsInternalProject(d.ToEntity, projectNames)).ToList();
-            var externalOut = outbound.Where(d => !IsInternalProject(d.ToEntity, projectNames)).ToList();
-            var internalIn = inbound.Where(d => IsInternalProject(d.FromEntity, projectNames)).ToList();
+            var internalOut = outbound.Where(d => projectNames.Contains(d.ToEntity)).ToList();
+            var externalOut = outbound.Where(d => !projectNames.Contains(d.ToEntity)).ToList();
+            var internalIn = inbound.Where(d => projectNames.Contains(d.FromEntity)).ToList();
 
             metrics.Add(new CouplingMetrics(projectName, DependencyType.ProjectReference)
             {
@@ -305,22 +291,6 @@ public sealed class CouplingAnalyzer : ICouplingAnalyzer
         }
 
         return metrics;
-    }
-    
-    private static bool IsInternalProject(string entityName, HashSet<string> projectNames)
-    {
-        // Direct project match
-        if (projectNames.Contains(entityName))
-            return true;
-        
-        // Check if entity starts with any project name (namespace/type within project)
-        foreach (var projectName in projectNames)
-        {
-            if (entityName.StartsWith($"{projectName}."))
-                return true;
-        }
-        
-        return false;
     }
 
     private List<CouplingMetrics> BuildNamespaceCouplingMetrics(List<DependencyEdge> allDependencies)
