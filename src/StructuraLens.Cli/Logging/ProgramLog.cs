@@ -129,6 +129,24 @@ internal static partial class ProgramLog
         Message = "HTML report written to: {outputPath} ({sizeBytes} bytes)")]
     public static partial void HtmlReportWritten(ILogger logger, string outputPath, long sizeBytes);
 
+    [LoggerMessage(
+        EventId = 4020,
+        Level = LogLevel.Information,
+        Message = "Diff started: base={basePath} head={headPath} format={format} output={outputPath} maxProjects={maxProjects}")]
+    public static partial void DiffStarted(
+        ILogger logger,
+        string basePath,
+        string headPath,
+        string format,
+        string outputPath,
+        int maxProjects);
+
+    [LoggerMessage(
+        EventId = 4021,
+        Level = LogLevel.Information,
+        Message = "Diff completed: format={format} output={outputPath}")]
+    public static partial void DiffCompleted(ILogger logger, string format, string outputPath);
+
     // Warning events (4100-4199)
     
     [LoggerMessage(
@@ -156,4 +174,10 @@ internal static partial class ProgramLog
         Level = LogLevel.Error,
         Message = "Fatal error during analysis")]
     public static partial void FatalError(ILogger logger, Exception exception);
+
+    [LoggerMessage(
+        EventId = 4202,
+        Level = LogLevel.Error,
+        Message = "Diff failed: {errorMessage}")]
+    public static partial void DiffFailed(ILogger logger, string errorMessage);
 }
