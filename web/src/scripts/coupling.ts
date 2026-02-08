@@ -4,6 +4,7 @@ import {
   renderPagination,
   attachPaginationListeners,
 } from "./tables";
+import { renderCardsGrid, renderSection, type CardProps } from "./componentRenderers";
 
 interface CouplingEdge {
   from: string;
@@ -93,19 +94,15 @@ export function renderCoupling(reportData: CompactReport): void {
     },
   );
 
-  el.innerHTML = `
-    <div class="cards">
-      <div class="card"><div class="card-value">${g.p.n.length}</div><div class="card-label">Projects</div></div>
-      <div class="card"><div class="card-value">${g.p.e.length}</div><div class="card-label">Project Dependencies</div></div>
-      <div class="card"><div class="card-value">${g.ns.n.length}</div><div class="card-label">Namespaces</div></div>
-      <div class="card"><div class="card-value">${g.ns.e.length}</div><div class="card-label">Namespace Dependencies</div></div>
-    </div>
-    <div class="section">
-      <h2>Project Dependencies</h2>
-      ${
-        projectEdges.length > 0
-          ? `
-      <table>
+  const couplingCards: CardProps[] = [
+    { value: g.p.n.length, label: 'Projects' },
+    { value: g.p.e.length, label: 'Project Dependencies' },
+    { value: g.ns.n.length, label: 'Namespaces' },
+    { value: g.ns.e.length, label: 'Namespace Dependencies' }
+  ];
+
+  const projectDepsTable = projectEdges.length > 0
+    ? `<table>
         <thead><tr><th>From</th><th>To</th><th>References</th></tr></thead>
         <tbody>${projectEdges
           .map(
@@ -115,23 +112,20 @@ export function renderCoupling(reportData: CompactReport): void {
           .join("")}
         </tbody>
       </table>`
-          : '<p style="color:var(--text-muted)">No project dependencies</p>'
-      }
-    </div>
-    <div class="section">
-      <h2>Namespace Dependencies</h2>
-      ${
-        namespaceEdges.length > 0
-          ? `
-        <div class="filter-bar" style="margin-bottom: 15px;">
-          <label>Search:</label>
-          <input type="text" id="nsSearchBox" class="search-box" placeholder="Search in any column..." value="${nsSearchQuery}">
-        </div>
-        <div id="namespaceDepsTable"></div>
-      `
-          : '<p style="color:var(--text-muted)">No namespace dependencies</p>'
-      }
-    </div>
+    : '<p style="color:var(--text-muted)">No project dependencies</p>';
+
+  const namespaceDepsSection = namespaceEdges.length > 0
+    ? `<div class="filter-bar" style="margin-bottom: 15px;">
+        <label>Search:</label>
+        <input type="text" id="nsSearchBox" class="search-box" placeholder="Search in any column..." value="${nsSearchQuery}">
+      </div>
+      <div id="namespaceDepsTable"></div>`
+    : '<p style="color:var(--text-muted)">No namespace dependencies</p>';
+
+  el.innerHTML = `
+    ${renderCardsGrid(couplingCards)}
+    ${renderSection('Project Dependencies', projectDepsTable)}
+    ${renderSection('Namespace Dependencies', namespaceDepsSection)}
   `;
 
   if (namespaceEdges.length > 0) {

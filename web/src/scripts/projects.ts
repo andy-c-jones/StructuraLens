@@ -6,122 +6,115 @@ import type {
   CompactMethod,
 } from "./types";
 import { enableSorting } from "./tables";
+import { renderTreeNode, type TreeMetric } from "./componentRenderers";
 
 // ---------- Tree rendering helpers ----------
 
 function renderMethodNode(method: CompactMethod): string {
-  return `
-    <li class="tree-node tree-level-method">
-      <div class="tree-item" data-level="method">
-        <span class="tree-toggle"></span>
-        <div class="tree-label">
-          <span class="tree-icon">&#9889;</span>
-          <span class="tree-label-text">${method.n}</span>
-          <div class="tree-metrics">
-            <span class="tree-metric"><span class="tree-metric-label">Cyclomatic Complexity:</span> <span class="tree-metric-value">${method.cc}</span></span>
-            <span class="tree-metric"><span class="tree-metric-label">Lines of Code:</span> <span class="tree-metric-value">${method.loc}</span></span>
-            <span class="tree-metric"><span class="tree-metric-label">Maintainability Index:</span> <span class="tree-metric-value">${method.mi}</span></span>
-            <span class="tree-metric"><span class="tree-metric-label">Lines:</span> <span class="tree-metric-value">${method.sl}-${method.el}</span></span>
-          </div>
-        </div>
-      </div>
-    </li>`;
+  const metrics: TreeMetric[] = [
+    { label: 'Cyclomatic Complexity', value: method.cc },
+    { label: 'Lines of Code', value: method.loc },
+    { label: 'Maintainability Index', value: method.mi },
+    { label: 'Lines', value: `${method.sl}-${method.el}` }
+  ];
+
+  return renderTreeNode({
+    id: `m-${method.n}`,
+    level: 'method',
+    icon: '&#9889;',
+    label: method.n,
+    metrics,
+    hasChildren: false
+  });
 }
 
 function renderTypeNode(type: CompactType, parentId: string): string {
-  const hasMethods = type.m && type.m.length > 0;
+  const hasMethods = !!(type.m && type.m.length > 0);
   const fullName = type.fn || type.n;
   const nodeId = `t-${parentId}-${fullName.replace(/[^a-zA-Z0-9]/g, "_")}`;
 
-  return `
-    <li class="tree-node tree-level-type">
-      <div class="tree-item" data-level="type">
-        <span class="tree-toggle ${hasMethods ? "expandable collapsed" : ""}" data-node-id="${nodeId}"></span>
-        <div class="tree-label">
-          <span class="tree-icon">&#128311;</span>
-          <span class="tree-label-text">${type.n}</span>
-          <div class="tree-metrics">
-            <span class="tree-metric"><span class="tree-metric-label">Methods:</span> <span class="tree-metric-value">${hasMethods ? type.m!.length : 0}</span></span>
-            <span class="tree-metric"><span class="tree-metric-label">Cyclomatic Complexity:</span> <span class="tree-metric-value">${type.cc}</span></span>
-            <span class="tree-metric"><span class="tree-metric-label">Lines of Code:</span> <span class="tree-metric-value">${type.loc.toLocaleString()}</span></span>
-            <span class="tree-metric"><span class="tree-metric-label">Maintainability Index:</span> <span class="tree-metric-value">${type.mi}</span></span>
-            <span class="tree-metric"><span class="tree-metric-label">Depth of Inheritance:</span> <span class="tree-metric-value">${type.dit}</span></span>
-          </div>
-        </div>
-      </div>
-      ${
-        hasMethods
-          ? `<ul class="tree-children" data-parent="${nodeId}">
-        ${type.m!.map((m) => renderMethodNode(m)).join("")}
-      </ul>`
-          : ""
-      }
-    </li>`;
+  const metrics: TreeMetric[] = [
+    { label: 'Methods', value: hasMethods ? type.m!.length : 0 },
+    { label: 'Cyclomatic Complexity', value: type.cc },
+    { label: 'Lines of Code', value: type.loc.toLocaleString() },
+    { label: 'Maintainability Index', value: type.mi },
+    { label: 'Depth of Inheritance', value: type.dit }
+  ];
+
+  const children = hasMethods
+    ? type.m!.map((m) => renderMethodNode(m)).join('')
+    : '';
+
+  return renderTreeNode({
+    id: nodeId,
+    level: 'type',
+    icon: '&#128311;',
+    label: type.n,
+    metrics,
+    hasChildren: hasMethods,
+    children
+  });
 }
 
 function renderNamespaceNode(
   namespace: CompactNamespace,
   projectName: string,
 ): string {
-  const hasTypes = namespace.types && namespace.types.length > 0;
+  const hasTypes = !!(namespace.types && namespace.types.length > 0);
   const nodeId = `ns-${projectName}-${namespace.n}`;
 
-  return `
-    <li class="tree-node tree-level-namespace">
-      <div class="tree-item" data-level="namespace">
-        <span class="tree-toggle ${hasTypes ? "expandable collapsed" : ""}" data-node-id="${nodeId}"></span>
-        <div class="tree-label">
-          <span class="tree-icon">&#128193;</span>
-          <span class="tree-label-text">${namespace.n}</span>
-          <div class="tree-metrics">
-            <span class="tree-metric"><span class="tree-metric-label">Types:</span> <span class="tree-metric-value">${namespace.tc}</span></span>
-            <span class="tree-metric"><span class="tree-metric-label">Methods:</span> <span class="tree-metric-value">${namespace.mc}</span></span>
-            <span class="tree-metric"><span class="tree-metric-label">Cyclomatic Complexity:</span> <span class="tree-metric-value">${namespace.cc}</span></span>
-            <span class="tree-metric"><span class="tree-metric-label">Lines of Code:</span> <span class="tree-metric-value">${namespace.loc.toLocaleString()}</span></span>
-            <span class="tree-metric"><span class="tree-metric-label">Maintainability Index:</span> <span class="tree-metric-value">${namespace.mi}</span></span>
-          </div>
-        </div>
-      </div>
-      ${
-        hasTypes
-          ? `<ul class="tree-children" data-parent="${nodeId}">
-        ${namespace.types!.map((t) => renderTypeNode(t, nodeId)).join("")}
-      </ul>`
-          : ""
-      }
-    </li>`;
+  const metrics: TreeMetric[] = [
+    { label: 'Types', value: namespace.tc },
+    { label: 'Methods', value: namespace.mc },
+    { label: 'Cyclomatic Complexity', value: namespace.cc },
+    { label: 'Lines of Code', value: namespace.loc.toLocaleString() },
+    { label: 'Maintainability Index', value: namespace.mi }
+  ];
+
+  const children = hasTypes
+    ? namespace.types!.map((t) => renderTypeNode(t, nodeId)).join('')
+    : '';
+
+  return renderTreeNode({
+    id: nodeId,
+    level: 'namespace',
+    icon: '&#128193;',
+    label: namespace.n,
+    metrics,
+    hasChildren: hasTypes,
+    children
+  });
 }
 
 function renderProjectNode(project: CompactProject): string {
-  const hasNamespaces = project.ns && project.ns.length > 0;
-  const hasTypes = project.types && project.types.length > 0;
+  const hasNamespaces = !!(project.ns && project.ns.length > 0);
+  const hasTypes = !!(project.types && project.types.length > 0);
   const hasChildren = hasNamespaces || hasTypes;
 
-  return `
-    <li class="tree-node tree-level-project">
-      <div class="tree-item" data-level="project">
-        <span class="tree-toggle ${hasChildren ? "expandable collapsed" : ""}" data-node-id="p-${project.n}"></span>
-        <div class="tree-label">
-          <span class="tree-icon">&#128230;</span>
-          <span class="tree-label-text">${project.n}</span>
-          <div class="tree-metrics">
-            <span class="tree-metric"><span class="tree-metric-label">Types:</span> <span class="tree-metric-value">${project.tc}</span></span>
-            <span class="tree-metric"><span class="tree-metric-label">Methods:</span> <span class="tree-metric-value">${project.mc}</span></span>
-            <span class="tree-metric"><span class="tree-metric-label">Cyclomatic Complexity:</span> <span class="tree-metric-value">${project.cc}</span></span>
-            <span class="tree-metric"><span class="tree-metric-label">Lines of Code:</span> <span class="tree-metric-value">${project.loc.toLocaleString()}</span></span>
-            <span class="tree-metric"><span class="tree-metric-label">Maintainability Index:</span> <span class="tree-metric-value">${project.mi}</span></span>
-          </div>
-        </div>
-      </div>
-      ${
-        hasChildren
-          ? `<ul class="tree-children" data-parent="p-${project.n}">
-        ${hasNamespaces ? project.ns!.map((ns) => renderNamespaceNode(ns, project.n)).join("") : ""}
-        ${hasTypes ? project.types!.map((t) => renderTypeNode(t, project.n)).join("") : ""}
-      </ul>`
-          : ""
-      }
-    </li>`;
+  const metrics: TreeMetric[] = [
+    { label: 'Types', value: project.tc },
+    { label: 'Methods', value: project.mc },
+    { label: 'Cyclomatic Complexity', value: project.cc },
+    { label: 'Lines of Code', value: project.loc.toLocaleString() },
+    { label: 'Maintainability Index', value: project.mi }
+  ];
+
+  const children = hasChildren
+    ? [
+        hasNamespaces ? project.ns!.map((ns) => renderNamespaceNode(ns, project.n)).join('') : '',
+        hasTypes ? project.types!.map((t) => renderTypeNode(t, project.n)).join('') : ''
+      ].join('')
+    : '';
+
+  return renderTreeNode({
+    id: `p-${project.n}`,
+    level: 'project',
+    icon: '&#128230;',
+    label: project.n,
+    metrics,
+    hasChildren,
+    children
+  });
 }
 
 function renderTree(projects: CompactProject[]): string {

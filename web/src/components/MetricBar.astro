@@ -1,0 +1,32 @@
+---
+/**
+ * MetricBar component for visualizing metric values as progress bars.
+ * Supports good/medium/poor color coding based on thresholds.
+ */
+interface Props {
+  value: number;
+  max?: number;
+  goodThreshold?: number;
+  mediumThreshold?: number;
+  class?: string;
+}
+
+const { 
+  value, 
+  max = 100, 
+  goodThreshold = 60, 
+  mediumThreshold = 40,
+  class: className 
+} = Astro.props;
+
+const percentage = Math.min(Math.max((value / max) * 100, 0), 100);
+const quality = value >= goodThreshold ? 'mi-good' : value >= mediumThreshold ? 'mi-medium' : 'mi-poor';
+---
+
+<div class={`metric-bar ${className || ''}`}>
+  <div 
+    class={`metric-bar-fill ${quality}`} 
+    style={`width: ${percentage}%`}
+  >
+  </div>
+</div>

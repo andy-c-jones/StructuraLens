@@ -1,19 +1,11 @@
 import type { DiffReport } from "./types";
 import { enableSorting } from "./tables";
-
-export function formatDelta(
-  value: number,
-  inverseGood: boolean = false,
-): string {
-  if (value === 0) return '<span class="delta delta-flat">0</span>';
-  const isDown = value < 0;
-  const className =
-    (isDown && !inverseGood) || (!isDown && inverseGood)
-      ? "delta-down"
-      : "delta-up";
-  const sign = value > 0 ? "+" : "";
-  return `<span class="delta ${className}">${sign}${value}</span>`;
-}
+import { 
+  renderCardsGrid, 
+  renderSection, 
+  renderDeltaIndicator,
+  type CardProps 
+} from "./componentRenderers";
 
 export function renderDiffTab(diffData: DiffReport | null): void {
   const el = document.getElementById("diff");
@@ -37,26 +29,45 @@ export function renderDiffTab(diffData: DiffReport | null): void {
     )
     .slice(0, 10);
 
-  el.innerHTML = `
-    <div class="section">
-      <h2>Summary Deltas</h2>
-      <div class="cards">
-        <div class="card"><div class="card-value">${totals.headProjects}</div><div class="card-label">Projects ${formatDelta(totals.projectsDelta)}</div></div>
-        <div class="card"><div class="card-value">${totals.headTypes}</div><div class="card-label">Types ${formatDelta(totals.typesDelta)}</div></div>
-        <div class="card"><div class="card-value">${totals.headMethods}</div><div class="card-label">Methods ${formatDelta(totals.methodsDelta)}</div></div>
-        <div class="card"><div class="card-value">${totals.headCyclomaticComplexity}</div><div class="card-label">Total Complexity ${formatDelta(totals.cyclomaticComplexityDelta)}</div></div>
-        <div class="card"><div class="card-value">${totals.headLinesOfCode.toLocaleString()}</div><div class="card-label">Lines of Code ${formatDelta(totals.linesOfCodeDelta)}</div></div>
-        <div class="card"><div class="card-value">${totals.headAvgMaintainabilityIndex}</div><div class="card-label">Avg Maintainability ${formatDelta(totals.avgMaintainabilityDelta, true)}</div></div>
-        <div class="card"><div class="card-value" style="color:${totals.headErrors > 0 ? "var(--error)" : "var(--success)"}">${totals.headErrors}</div><div class="card-label">Errors ${formatDelta(totals.errorsDelta, true)}</div></div>
-        <div class="card"><div class="card-value" style="color:${totals.headWarnings > 0 ? "var(--warning)" : "var(--success)"}">${totals.headWarnings}</div><div class="card-label">Warnings ${formatDelta(totals.warningsDelta, true)}</div></div>
-      </div>
-    </div>
-    <div class="section">
-      <h2>Projects with Biggest Maintainability Changes</h2>
-      ${
-        topMiChanges.length > 0
-          ? `
-      <table>
+  const summaryCards: CardProps[] = [
+    { 
+      value: totals.headProjects, 
+      label: `Projects ${renderDeltaIndicator({ value: totals.projectsDelta })}` 
+    },
+    { 
+      value: totals.headTypes, 
+      label: `Types ${renderDeltaIndicator({ value: totals.typesDelta })}` 
+    },
+    { 
+      value: totals.headMethods, 
+      label: `Methods ${renderDeltaIndicator({ value: totals.methodsDelta })}` 
+    },
+    { 
+      value: totals.headCyclomaticComplexity, 
+      label: `Total Complexity ${renderDeltaIndicator({ value: totals.cyclomaticComplexityDelta })}` 
+    },
+    { 
+      value: totals.headLinesOfCode.toLocaleString(), 
+      label: `Lines of Code ${renderDeltaIndicator({ value: totals.linesOfCodeDelta })}` 
+    },
+    { 
+      value: totals.headAvgMaintainabilityIndex, 
+      label: `Avg Maintainability ${renderDeltaIndicator({ value: totals.avgMaintainabilityDelta, inverseGood: true })}` 
+    },
+    { 
+      value: totals.headErrors, 
+      label: `Errors ${renderDeltaIndicator({ value: totals.errorsDelta, inverseGood: true })}`,
+      valueColor: totals.headErrors > 0 ? 'var(--error)' : 'var(--success)'
+    },
+    { 
+      value: totals.headWarnings, 
+      label: `Warnings ${renderDeltaIndicator({ value: totals.warningsDelta, inverseGood: true })}`,
+      valueColor: totals.headWarnings > 0 ? 'var(--warning)' : 'var(--success)'
+    }
+  ];
+
+  const miChangesTable = topMiChanges.length > 0
+    ? `<table>
         <thead><tr><th>Project</th><th>MI</th><th>Delta</th><th>Complexity &#916;</th><th>LOC &#916;</th><th>Warnings &#916;</th></tr></thead>
         <tbody>${topMiChanges
           .map(
@@ -64,27 +75,29 @@ export function renderDiffTab(diffData: DiffReport | null): void {
           <tr>
             <td>${p.name}</td>
             <td>${p.head.avgMaintainabilityIndex}</td>
-            <td>${formatDelta(p.maintainabilityDelta, true)}</td>
-            <td>${formatDelta(p.cyclomaticComplexityDelta)}</td>
-            <td>${formatDelta(p.linesOfCodeDelta)}</td>
-            <td>${formatDelta(p.warningsDelta, true)}</td>
+            <td>${renderDeltaIndicator({ value: p.maintainabilityDelta, inverseGood: true })}</td>
+            <td>${renderDeltaIndicator({ value: p.cyclomaticComplexityDelta })}</td>
+            <td>${renderDeltaIndicator({ value: p.linesOfCodeDelta })}</td>
+            <td>${renderDeltaIndicator({ value: p.warningsDelta, inverseGood: true })}</td>
           </tr>`,
           )
           .join("")}
         </tbody>
       </table>`
-          : '<p style="color:var(--text-muted)">No project deltas available.</p>'
-      }
-    </div>
-    <div class="section">
-      <h2>Diagnostics Changes</h2>
-      <div class="cards">
-        <div class="card"><div class="card-value">${diagnostics.newErrors || 0}</div><div class="card-label">New Errors</div></div>
-        <div class="card"><div class="card-value">${diagnostics.resolvedErrors || 0}</div><div class="card-label">Resolved Errors</div></div>
-        <div class="card"><div class="card-value">${diagnostics.newWarnings || 0}</div><div class="card-label">New Warnings</div></div>
-        <div class="card"><div class="card-value">${diagnostics.resolvedWarnings || 0}</div><div class="card-label">Resolved Warnings</div></div>
-      </div>
-    </div>
+    : '<p style="color:var(--text-muted)">No project deltas available.</p>';
+
+  const diagnosticsCards: CardProps[] = [
+    { value: diagnostics.newErrors || 0, label: 'New Errors' },
+    { value: diagnostics.resolvedErrors || 0, label: 'Resolved Errors' },
+    { value: diagnostics.newWarnings || 0, label: 'New Warnings' },
+    { value: diagnostics.resolvedWarnings || 0, label: 'Resolved Warnings' }
+  ];
+
+  el.innerHTML = `
+    ${renderSection('Summary Deltas', renderCardsGrid(summaryCards))}
+    ${renderSection('Projects with Biggest Maintainability Changes', miChangesTable)}
+    ${renderSection('Diagnostics Changes', renderCardsGrid(diagnosticsCards))}
   `;
+  
   enableSorting();
 }

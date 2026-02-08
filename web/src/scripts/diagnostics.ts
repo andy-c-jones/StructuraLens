@@ -4,6 +4,7 @@ import {
   renderPagination,
   attachPaginationListeners,
 } from "./tables";
+import { renderBadge } from "./componentRenderers";
 
 let diagCurrentPage = 1;
 let diagSearchQuery = "";
@@ -114,7 +115,7 @@ function updateDiagnosticsTable(): void {
         <tr>
           <td>${d.project}</td>
           <td><code>${d.id}</code></td>
-          <td><span class="badge badge-${d.severity}">${d.severity}</span></td>
+          <td>${renderBadge({ type: d.severity as 'error' | 'warning' | 'info', text: d.severity })}</td>
           <td>${d.message}</td>
           <td>${d.file}</td>
           <td>${d.line}</td>
