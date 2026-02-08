@@ -83,13 +83,13 @@ jobs:
           mkdir -p artifacts
           
           cd publish/linux-arm64
-          tar -czf ../../artifacts/structuralens-linux-arm64-${VERSION}.tar.gz StructuraLens.Cli
+          tar -czf ../../artifacts/structuralens-linux-arm64-${VERSION}.tar.gz StructuraLens.Cli LICENSE.md
           cd ../linux-x64
-          tar -czf ../../artifacts/structuralens-linux-x64-${VERSION}.tar.gz StructuraLens.Cli
+          tar -czf ../../artifacts/structuralens-linux-x64-${VERSION}.tar.gz StructuraLens.Cli LICENSE.md
           cd ../osx-arm64
-          tar -czf ../../artifacts/structuralens-macos-arm64-${VERSION}.tar.gz StructuraLens.Cli
+          tar -czf ../../artifacts/structuralens-macos-arm64-${VERSION}.tar.gz StructuraLens.Cli LICENSE.md
           cd ../win-x64
-          zip ../../artifacts/structuralens-windows-x64-${VERSION}.zip StructuraLens.Cli.exe
+          zip ../../artifacts/structuralens-windows-x64-${VERSION}.zip StructuraLens.Cli.exe LICENSE.md
           cd ../..
 
           echo "Build complete! Artifacts:"
