@@ -86,17 +86,29 @@ public record CompactProject
     [JsonPropertyName("mi")]
     public double AvgMaintainabilityIndex { get; init; }
 
-    /// <summary>Efferent coupling.</summary>
-    [JsonPropertyName("ce")]
-    public int EfferentCoupling { get; init; }
+    /// <summary>Internal dependencies count.</summary>
+    [JsonPropertyName("id")]
+    public int InternalDependencies { get; init; }
 
-    /// <summary>Afferent coupling.</summary>
-    [JsonPropertyName("ca")]
-    public int AfferentCoupling { get; init; }
+    /// <summary>Internal dependents count.</summary>
+    [JsonPropertyName("idx")]
+    public int InternalDependents { get; init; }
 
-    /// <summary>Instability (0-1).</summary>
-    [JsonPropertyName("i")]
-    public double Instability { get; init; }
+    /// <summary>Dependency ratio (0-1, where 0=provider, 1=consumer).</summary>
+    [JsonPropertyName("dr")]
+    public double DependencyRatio { get; init; }
+
+    /// <summary>Total external dependencies.</summary>
+    [JsonPropertyName("ed")]
+    public int ExternalDependencies { get; init; }
+
+    /// <summary>External BCL dependencies (System/Microsoft).</summary>
+    [JsonPropertyName("edb")]
+    public int ExternalBclDependencies { get; init; }
+
+    /// <summary>External package dependencies (third-party).</summary>
+    [JsonPropertyName("edp")]
+    public int ExternalPackageDependencies { get; init; }
 
     /// <summary>Compiler errors count.</summary>
     [JsonPropertyName("err")]

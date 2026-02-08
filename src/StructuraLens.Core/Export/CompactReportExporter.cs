@@ -91,9 +91,12 @@ public sealed class CompactReportExporter : IReportExporter
                 LinesOfCode = project.TotalLinesOfExecutableCode,
                 MaxDepthOfInheritance = project.MaxDepthOfInheritance,
                 AvgMaintainabilityIndex = Math.Round(avgMI, 1),
-                EfferentCoupling = projectCoupling?.EfferentCoupling ?? 0,
-                AfferentCoupling = projectCoupling?.AfferentCoupling ?? 0,
-                Instability = Math.Round(projectCoupling?.Instability ?? 0, 2),
+                InternalDependencies = projectCoupling?.InternalDependencies ?? 0,
+                InternalDependents = projectCoupling?.InternalDependents ?? 0,
+                DependencyRatio = Math.Round(projectCoupling?.DependencyRatio ?? 0, 2),
+                ExternalDependencies = projectCoupling?.TotalExternalDependencies ?? 0,
+                ExternalBclDependencies = projectCoupling?.ExternalBclDependencies ?? 0,
+                ExternalPackageDependencies = projectCoupling?.ExternalPackageDependencies ?? 0,
                 Errors = project.Diagnostics?.ErrorCount ?? 0,
                 Warnings = project.Diagnostics?.WarningCount ?? 0,
                 Types = (!useNamespaceHierarchy && includeTypes) ? ExportTypes(project.Types, includeMethods) : null,
@@ -274,35 +277,21 @@ public sealed class CompactReportExporter : IReportExporter
             .GroupBy(d => (d.FromEntity, d.ToEntity))
             .ToList();
 
-        // Calculate coupling metrics for each namespace
-        var namespaceCouplingMetrics = new Dictionary<string, (int Ce, int Ca, double Instability)>();
-        
-        foreach (var ns in internalNamespaces)
-        {
-            // Efferent coupling: count of unique outbound dependencies
-            var efferent = nsDeps.Count(g => g.Key.FromEntity == ns);
-            
-            // Afferent coupling: count of unique inbound dependencies
-            var afferent = nsDeps.Count(g => g.Key.ToEntity == ns);
-            
-            // Instability: Ce / (Ce + Ca)
-            var total = efferent + afferent;
-            var instability = total > 0 ? (double)efferent / total : 0.0;
-            
-            namespaceCouplingMetrics[ns] = (efferent, afferent, instability);
-        }
+        // Get coupling metrics from the analysis (already calculated with internal/external split)
+        var namespaceCouplingLookup = coupling.NamespaceCoupling
+            .ToDictionary(c => c.EntityName, c => c);
 
         var nodeIndex = new Dictionary<string, int>();
         var nodes = new List<object[]>();
 
         // Create nodes for internal namespaces with full metrics
-        // Node format: [id, name, loc, cc, mi, tc, mc, ce, ca, instability]
+        // Node format: [id, name, loc, cc, mi, tc, mc, id, idx, dr, ed]
         int id = 0;
         foreach (var ns in internalNamespaces.OrderBy(n => n))
         {
             nodeIndex[ns] = id;
             var metrics = namespaceMetricsWithAvgMI[ns];
-            var couplingData = namespaceCouplingMetrics.GetValueOrDefault(ns, (0, 0, 0.0));
+            namespaceCouplingLookup.TryGetValue(ns, out var couplingData);
             
             nodes.Add(new object[] 
             { 
@@ -313,9 +302,10 @@ public sealed class CompactReportExporter : IReportExporter
                 Math.Round(metrics.AvgMI, 1),
                 metrics.TypeCount,
                 metrics.MethodCount,
-                couplingData.Item1, // Ce
-                couplingData.Item2, // Ca
-                Math.Round(couplingData.Item3, 2) // Instability
+                couplingData?.InternalDependencies ?? 0,
+                couplingData?.InternalDependents ?? 0,
+                Math.Round(couplingData?.DependencyRatio ?? 0, 2),
+                couplingData?.TotalExternalDependencies ?? 0
             });
             id++;
         }
