@@ -746,6 +746,8 @@ public sealed class DiffReportRendererTests
                         ExternalBclDependencies = 3,
                         ExternalPackageDependencies = 5,
                         ExternalDependencies = 8,
+                        ExternalBclDependencyNames = ["System.Collections", "System.Linq", "Microsoft.Extensions.Hosting"],
+                        ExternalPackageDependencyNames = ["PackageA", "PackageB", "PackageC", "PackageD", "PackageE"],
                         AvgMaintainabilityIndex = 80.0
                     },
                     Head = new ProjectDiffMetrics
@@ -753,8 +755,14 @@ public sealed class DiffReportRendererTests
                         ExternalBclDependencies = 5,
                         ExternalPackageDependencies = 5,
                         ExternalDependencies = 10,
+                        ExternalBclDependencyNames = ["System.Collections", "System.Linq", "Microsoft.Extensions.Hosting", "System.Text.Json", "Microsoft.Extensions.Logging"],
+                        ExternalPackageDependencyNames = ["PackageA", "PackageB", "PackageC", "PackageD", "PackageE"],
                         AvgMaintainabilityIndex = 80.0
-                    }
+                    },
+                    AddedBclDependencies = ["Microsoft.Extensions.Logging", "System.Text.Json"],
+                    RemovedBclDependencies = [],
+                    AddedPackageDependencies = [],
+                    RemovedPackageDependencies = []
                 }
             ]
         };
@@ -764,7 +772,9 @@ public sealed class DiffReportRendererTests
 
         // Assert
         await Assert.That(markdown).Contains("### External Dependencies Changes");
-        await Assert.That(markdown).Contains("🔍 **+2**"); // BCL increase
+        await Assert.That(markdown).Contains("🔍 Added BCL Dependencies (2)");
+        await Assert.That(markdown).Contains("`System.Text.Json`");
+        await Assert.That(markdown).Contains("`Microsoft.Extensions.Logging`");
     }
 
     [Test]
@@ -799,6 +809,8 @@ public sealed class DiffReportRendererTests
                         ExternalBclDependencies = 3,
                         ExternalPackageDependencies = 8,
                         ExternalDependencies = 11,
+                        ExternalBclDependencyNames = ["System.Collections", "System.Linq", "Microsoft.Extensions.Hosting"],
+                        ExternalPackageDependencyNames = ["Newtonsoft.Json", "Serilog", "AutoMapper", "FluentValidation", "Dapper", "Polly", "MediatR", "NLog"],
                         AvgMaintainabilityIndex = 80.0
                     },
                     Head = new ProjectDiffMetrics
@@ -806,8 +818,14 @@ public sealed class DiffReportRendererTests
                         ExternalBclDependencies = 3,
                         ExternalPackageDependencies = 5,
                         ExternalDependencies = 8,
+                        ExternalBclDependencyNames = ["System.Collections", "System.Linq", "Microsoft.Extensions.Hosting"],
+                        ExternalPackageDependencyNames = ["Serilog", "AutoMapper", "FluentValidation", "MediatR", "NLog"],
                         AvgMaintainabilityIndex = 80.0
-                    }
+                    },
+                    AddedBclDependencies = [],
+                    RemovedBclDependencies = [],
+                    AddedPackageDependencies = [],
+                    RemovedPackageDependencies = ["Dapper", "Newtonsoft.Json", "Polly"]
                 }
             ]
         };
@@ -817,7 +835,10 @@ public sealed class DiffReportRendererTests
 
         // Assert
         await Assert.That(markdown).Contains("### External Dependencies Changes");
-        await Assert.That(markdown).Contains("✅ -3"); // Package decrease
+        await Assert.That(markdown).Contains("✅ Removed Third-Party Packages (3)");
+        await Assert.That(markdown).Contains("`Newtonsoft.Json`");
+        await Assert.That(markdown).Contains("`Dapper`");
+        await Assert.That(markdown).Contains("`Polly`");
     }
 
     [Test]
@@ -852,6 +873,8 @@ public sealed class DiffReportRendererTests
                         ExternalBclDependencies = 3,
                         ExternalPackageDependencies = 5,
                         ExternalDependencies = 8,
+                        ExternalBclDependencyNames = ["System.Collections", "System.Linq", "Microsoft.Extensions.Hosting"],
+                        ExternalPackageDependencyNames = ["PackageA", "PackageB", "PackageC", "PackageD", "PackageE"],
                         AvgMaintainabilityIndex = 80.0
                     },
                     Head = new ProjectDiffMetrics
@@ -859,8 +882,14 @@ public sealed class DiffReportRendererTests
                         ExternalBclDependencies = 3,
                         ExternalPackageDependencies = 5,
                         ExternalDependencies = 8,
+                        ExternalBclDependencyNames = ["System.Collections", "System.Linq", "Microsoft.Extensions.Hosting"],
+                        ExternalPackageDependencyNames = ["PackageA", "PackageB", "PackageC", "PackageD", "PackageE"],
                         AvgMaintainabilityIndex = 80.0
-                    }
+                    },
+                    AddedBclDependencies = [],
+                    RemovedBclDependencies = [],
+                    AddedPackageDependencies = [],
+                    RemovedPackageDependencies = []
                 }
             ]
         };
@@ -907,6 +936,8 @@ public sealed class DiffReportRendererTests
                         ExternalBclDependencies = 3,
                         ExternalPackageDependencies = 5,
                         ExternalDependencies = 8,
+                        ExternalBclDependencyNames = ["System.Collections", "System.Linq", "Microsoft.Extensions.Hosting"],
+                        ExternalPackageDependencyNames = ["PackageA", "PackageB", "PackageC", "PackageD", "PackageE"],
                         AvgMaintainabilityIndex = 80.0,
                         CyclomaticComplexity = 100,
                         LinesOfCode = 1000,
@@ -920,11 +951,17 @@ public sealed class DiffReportRendererTests
                         ExternalBclDependencies = 5,
                         ExternalPackageDependencies = 6,
                         ExternalDependencies = 11,
+                        ExternalBclDependencyNames = ["System.Collections", "System.Linq", "Microsoft.Extensions.Hosting", "System.Text.Json", "Microsoft.Extensions.Logging"],
+                        ExternalPackageDependencyNames = ["PackageA", "PackageB", "PackageC", "PackageD", "PackageE", "Newtonsoft.Json"],
                         AvgMaintainabilityIndex = 75.0,
                         CyclomaticComplexity = 120,
                         LinesOfCode = 1200,
                         Warnings = 0
-                    }
+                    },
+                    AddedBclDependencies = ["Microsoft.Extensions.Logging", "System.Text.Json"],
+                    RemovedBclDependencies = [],
+                    AddedPackageDependencies = ["Newtonsoft.Json"],
+                    RemovedPackageDependencies = []
                 }
             ]
         };
@@ -974,6 +1011,8 @@ public sealed class DiffReportRendererTests
                         ExternalBclDependencies = 3,
                         ExternalPackageDependencies = 5,
                         ExternalDependencies = 8,
+                        ExternalBclDependencyNames = ["System.Collections", "System.Linq", "Microsoft.Extensions.Hosting"],
+                        ExternalPackageDependencyNames = ["PackageA", "PackageB", "PackageC", "PackageD", "PackageE"],
                         AvgMaintainabilityIndex = 80.0
                     },
                     Head = new ProjectDiffMetrics
@@ -981,8 +1020,14 @@ public sealed class DiffReportRendererTests
                         ExternalBclDependencies = 5,
                         ExternalPackageDependencies = 8,
                         ExternalDependencies = 13,
+                        ExternalBclDependencyNames = ["System.Collections", "System.Linq", "Microsoft.Extensions.Hosting", "System.Text.Json", "Microsoft.Extensions.Logging"],
+                        ExternalPackageDependencyNames = ["PackageA", "PackageB", "PackageC", "PackageD", "PackageE", "Newtonsoft.Json", "Serilog", "AutoMapper"],
                         AvgMaintainabilityIndex = 80.0
-                    }
+                    },
+                    AddedBclDependencies = ["Microsoft.Extensions.Logging", "System.Text.Json"],
+                    RemovedBclDependencies = [],
+                    AddedPackageDependencies = ["AutoMapper", "Newtonsoft.Json", "Serilog"],
+                    RemovedPackageDependencies = []
                 }
             ]
         };
@@ -990,11 +1035,11 @@ public sealed class DiffReportRendererTests
         // Act
         var markdown = renderer.RenderMarkdown(diff);
 
-        // Assert - Both BCL and Packages columns should be present with correct deltas
-        await Assert.That(markdown).Contains("BCL Δ");
-        await Assert.That(markdown).Contains("Packages Δ");
-        await Assert.That(markdown).Contains("3→5"); // BCL Base→Head
-        await Assert.That(markdown).Contains("5→8"); // Packages Base→Head
+        // Assert - Both BCL and Packages should be shown separately with package names
+        await Assert.That(markdown).Contains("🔍 Added BCL Dependencies (2)");
+        await Assert.That(markdown).Contains("🔍 Added Third-Party Packages (3)");
+        await Assert.That(markdown).Contains("`System.Text.Json`");
+        await Assert.That(markdown).Contains("`Newtonsoft.Json`");
     }
 
     [Test]
@@ -1031,8 +1076,14 @@ public sealed class DiffReportRendererTests
                         ExternalBclDependencies = 5,
                         ExternalPackageDependencies = 3,
                         ExternalDependencies = 8,
+                        ExternalBclDependencyNames = ["System.Collections", "System.Linq", "Microsoft.Extensions.Hosting", "System.Text.Json", "Microsoft.Extensions.Logging"],
+                        ExternalPackageDependencyNames = ["PackageA", "PackageB", "PackageC"],
                         AvgMaintainabilityIndex = 80.0
-                    }
+                    },
+                    AddedBclDependencies = [],
+                    RemovedBclDependencies = [],
+                    AddedPackageDependencies = [],
+                    RemovedPackageDependencies = []
                 },
                 new ProjectDiff
                 {
@@ -1043,9 +1094,15 @@ public sealed class DiffReportRendererTests
                         ExternalBclDependencies = 4,
                         ExternalPackageDependencies = 6,
                         ExternalDependencies = 10,
+                        ExternalBclDependencyNames = ["System.Collections", "System.Linq", "System.Threading", "Microsoft.Extensions.Hosting"],
+                        ExternalPackageDependencyNames = ["PackageX", "PackageY", "PackageZ", "Serilog", "AutoMapper", "Newtonsoft.Json"],
                         AvgMaintainabilityIndex = 80.0
                     },
-                    Head = new ProjectDiffMetrics()
+                    Head = new ProjectDiffMetrics(),
+                    AddedBclDependencies = [],
+                    RemovedBclDependencies = [],
+                    AddedPackageDependencies = [],
+                    RemovedPackageDependencies = []
                 }
             ]
         };

@@ -88,6 +88,11 @@ public record ProjectDiff
     public int ExternalDependenciesDelta => Head.ExternalDependencies - Base.ExternalDependencies;
     public int ExternalBclDependenciesDelta => Head.ExternalBclDependencies - Base.ExternalBclDependencies;
     public int ExternalPackageDependenciesDelta => Head.ExternalPackageDependencies - Base.ExternalPackageDependencies;
+    
+    public IReadOnlyList<string> AddedBclDependencies { get; init; } = [];
+    public IReadOnlyList<string> RemovedBclDependencies { get; init; } = [];
+    public IReadOnlyList<string> AddedPackageDependencies { get; init; } = [];
+    public IReadOnlyList<string> RemovedPackageDependencies { get; init; } = [];
 }
 
 /// <summary>Project metrics used in diff output.</summary>
@@ -105,6 +110,8 @@ public record ProjectDiffMetrics
     public int ExternalDependencies { get; init; }
     public int ExternalBclDependencies { get; init; }
     public int ExternalPackageDependencies { get; init; }
+    public IReadOnlyList<string> ExternalBclDependencyNames { get; init; } = [];
+    public IReadOnlyList<string> ExternalPackageDependencyNames { get; init; } = [];
     public int Errors { get; init; }
     public int Warnings { get; init; }
 }

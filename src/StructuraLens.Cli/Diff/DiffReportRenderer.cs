@@ -232,39 +232,56 @@ public sealed class DiffReportRenderer
         {
             sb.AppendLine("### External Dependencies Changes");
             sb.AppendLine();
-            sb.AppendLine("| Project | BCL Δ | Packages Δ | Total External Δ | BCL (Base→Head) | Packages (Base→Head) |");
-            sb.AppendLine("| --- | ---: | ---: | ---: | ---: | ---: |");
 
             foreach (var project in projectsWithExternalChanges)
             {
-                var bclSemantic = project.ExternalBclDependenciesDelta > 0 
-                    ? DeltaSemantic.NeedsReview
-                    : project.ExternalBclDependenciesDelta < 0 
-                    ? DeltaSemantic.GoodDecrease 
-                    : DeltaSemantic.Neutral;
+                sb.AppendLine($"#### {Escape(project.Name)}");
+                sb.AppendLine();
 
-                var packagesSemantic = project.ExternalPackageDependenciesDelta > 0 
-                    ? DeltaSemantic.NeedsReview
-                    : project.ExternalPackageDependenciesDelta < 0 
-                    ? DeltaSemantic.GoodDecrease 
-                    : DeltaSemantic.Neutral;
+                // Show added BCL dependencies
+                if (project.AddedBclDependencies.Count > 0)
+                {
+                    sb.AppendLine($"**🔍 Added BCL Dependencies ({project.AddedBclDependencies.Count}):**");
+                    foreach (var dep in project.AddedBclDependencies)
+                    {
+                        sb.AppendLine($"- `{dep}`");
+                    }
+                    sb.AppendLine();
+                }
 
-                var totalSemantic = project.ExternalDependenciesDelta > 0 
-                    ? DeltaSemantic.NeedsReview
-                    : project.ExternalDependenciesDelta < 0 
-                    ? DeltaSemantic.GoodDecrease 
-                    : DeltaSemantic.Neutral;
+                // Show removed BCL dependencies
+                if (project.RemovedBclDependencies.Count > 0)
+                {
+                    sb.AppendLine($"**✅ Removed BCL Dependencies ({project.RemovedBclDependencies.Count}):**");
+                    foreach (var dep in project.RemovedBclDependencies)
+                    {
+                        sb.AppendLine($"- `{dep}`");
+                    }
+                    sb.AppendLine();
+                }
 
-                sb.AppendLine(
-                    $"| {Escape(project.Name)} | " +
-                    $"{FormatDelta(project.ExternalBclDependenciesDelta, bclSemantic)} | " +
-                    $"{FormatDelta(project.ExternalPackageDependenciesDelta, packagesSemantic)} | " +
-                    $"{FormatDelta(project.ExternalDependenciesDelta, totalSemantic)} | " +
-                    $"{project.Base.ExternalBclDependencies}→{project.Head.ExternalBclDependencies} | " +
-                    $"{project.Base.ExternalPackageDependencies}→{project.Head.ExternalPackageDependencies} |");
+                // Show added packages
+                if (project.AddedPackageDependencies.Count > 0)
+                {
+                    sb.AppendLine($"**🔍 Added Third-Party Packages ({project.AddedPackageDependencies.Count}):**");
+                    foreach (var dep in project.AddedPackageDependencies)
+                    {
+                        sb.AppendLine($"- `{dep}`");
+                    }
+                    sb.AppendLine();
+                }
+
+                // Show removed packages
+                if (project.RemovedPackageDependencies.Count > 0)
+                {
+                    sb.AppendLine($"**✅ Removed Third-Party Packages ({project.RemovedPackageDependencies.Count}):**");
+                    foreach (var dep in project.RemovedPackageDependencies)
+                    {
+                        sb.AppendLine($"- `{dep}`");
+                    }
+                    sb.AppendLine();
+                }
             }
-            
-            sb.AppendLine();
         }
     }
 
