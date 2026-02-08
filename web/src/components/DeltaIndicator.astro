@@ -1,0 +1,33 @@
+---
+/**
+ * DeltaIndicator component for showing numeric changes.
+ * Displays up/down/flat indicators with appropriate colors.
+ * 
+ * @param value - The delta value to display
+ * @param inverseGood - If true, negative is good (down arrow is green)
+ */
+interface Props {
+  value: number;
+  inverseGood?: boolean;
+  class?: string;
+}
+
+const { value, inverseGood = false, class: className } = Astro.props;
+
+const isDown = value < 0;
+const isFlat = value === 0;
+
+let deltaClass = 'delta-flat';
+if (!isFlat) {
+  deltaClass = (isDown && !inverseGood) || (!isDown && inverseGood) 
+    ? 'delta-down' 
+    : 'delta-up';
+}
+
+const sign = value > 0 ? '+' : '';
+const displayValue = isFlat ? '0' : `${sign}${value}`;
+---
+
+<span class={`delta ${deltaClass} ${className || ''}`}>
+  {displayValue}
+</span>

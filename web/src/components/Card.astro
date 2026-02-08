@@ -1,0 +1,21 @@
+---
+/**
+ * Card component for displaying metric values with labels.
+ * Used throughout the report for summary statistics.
+ */
+interface Props {
+  value: string | number;
+  label: string;
+  valueColor?: string;
+  class?: string;
+}
+
+const { value, label, valueColor, class: className } = Astro.props;
+---
+
+<div class={`card ${className || ''}`}>
+  <div class="card-value" style={valueColor ? `color: ${valueColor}` : ''}>
+    {value}
+  </div>
+  <div class="card-label">{label}</div>
+</div>

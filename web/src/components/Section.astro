@@ -1,0 +1,16 @@
+---
+/**
+ * Section component for organizing content with optional heading.
+ */
+interface Props {
+  heading?: string;
+  class?: string;
+}
+
+const { heading, class: className } = Astro.props;
+---
+
+<div class={`section ${className || ''}`}>
+  {heading && <h2>{heading}</h2>}
+  <slot />
+</div>

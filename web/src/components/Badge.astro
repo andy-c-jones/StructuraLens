@@ -1,0 +1,17 @@
+---
+/**
+ * Badge component for displaying status indicators.
+ * Supports multiple types: error, warning, info, success, added, removed.
+ */
+interface Props {
+  type: 'error' | 'warning' | 'info' | 'success' | 'added' | 'removed';
+  text: string;
+  class?: string;
+}
+
+const { type, text, class: className } = Astro.props;
+---
+
+<span class={`badge badge-${type} ${className || ''}`}>
+  {text}
+</span>

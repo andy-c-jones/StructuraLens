@@ -1,0 +1,15 @@
+---
+/**
+ * CardsGrid component for displaying a grid of metric cards.
+ * Renders cards in a responsive grid layout.
+ */
+interface Props {
+  class?: string;
+}
+
+const { class: className } = Astro.props;
+---
+
+<div class={`cards ${className || ''}`}>
+  <slot />
+</div>
