@@ -335,4 +335,131 @@ public class CouplingAnalyzerTests
             await analyzer.AnalyzeSolutionAsync(solution, null, cts.Token);
         });
     }
+
+    [Test]
+    public async Task BuildCouplingAnalysisFromDependencies_WithExternalDependencies_CalculatesBclAndPackageMetrics()
+    {
+        // Arrange
+        var analyzer = CreateAnalyzer();
+        var workspace = new AdhocWorkspace();
+        var solution = workspace.CurrentSolution;
+        
+        var project1 = ProjectInfo.Create(
+            ProjectId.CreateNewId(),
+            VersionStamp.Default,
+            "Project1",
+            "Project1",
+            LanguageNames.CSharp);
+        var project2 = ProjectInfo.Create(
+            ProjectId.CreateNewId(),
+            VersionStamp.Default,
+            "Project2",
+            "Project2",
+            LanguageNames.CSharp);
+        
+        solution = solution.AddProject(project1).AddProject(project2);
+
+        var dependencies = new List<DependencyEdge>
+        {
+            // Internal project reference
+            new DependencyEdge("Project1", "Project2", DependencyType.ProjectReference, 1),
+            
+            // External BCL dependencies (System.*)
+            new DependencyEdge("Project1", "System.Collections.Generic", DependencyType.AssemblyReference, 5),
+            new DependencyEdge("Project1", "System.Linq", DependencyType.AssemblyReference, 3),
+            new DependencyEdge("Project1", "Microsoft.Extensions.Logging", DependencyType.AssemblyReference, 2),
+            
+            // External package dependencies (third-party)
+            new DependencyEdge("Project1", "Newtonsoft.Json", DependencyType.AssemblyReference, 4),
+            new DependencyEdge("Project1", "Serilog", DependencyType.AssemblyReference, 1),
+            
+            // Project2 external deps
+            new DependencyEdge("Project2", "System.Text", DependencyType.AssemblyReference, 2),
+            new DependencyEdge("Project2", "FluentAssertions", DependencyType.AssemblyReference, 3)
+        };
+
+        // Act
+        var analysis = analyzer.BuildCouplingAnalysisFromDependencies(solution, dependencies);
+
+        // Assert
+        await Assert.That(analysis).IsNotNull();
+        await Assert.That(analysis.ProjectCoupling.Count).IsEqualTo(2);
+        
+        var project1Coupling = analysis.ProjectCoupling.FirstOrDefault(p => p.EntityName == "Project1");
+        await Assert.That(project1Coupling).IsNotNull();
+        
+        // Project1 should have 1 internal dependency (Project2)
+        await Assert.That(project1Coupling!.InternalDependencies).IsEqualTo(1);
+        
+        // Project1 should have external dependencies
+        await Assert.That(project1Coupling.ExternalOutbound.Count).IsGreaterThan(0);
+        
+        // Project1 should have 3 BCL dependencies (System.Collections.Generic, System.Linq, Microsoft.Extensions.Logging)
+        await Assert.That(project1Coupling.ExternalBclDependencies).IsEqualTo(3);
+        
+        // Project1 should have 2 package dependencies (Newtonsoft.Json, Serilog)
+        await Assert.That(project1Coupling.ExternalPackageDependencies).IsEqualTo(2);
+        
+        // Total external should be BCL + packages
+        await Assert.That(project1Coupling.TotalExternalDependencies).IsEqualTo(5);
+        
+        var project2Coupling = analysis.ProjectCoupling.FirstOrDefault(p => p.EntityName == "Project2");
+        await Assert.That(project2Coupling).IsNotNull();
+        
+        // Project2 should have 0 internal dependencies
+        await Assert.That(project2Coupling!.InternalDependencies).IsEqualTo(0);
+        
+        // Project2 should have 1 internal dependent (Project1)
+        await Assert.That(project2Coupling.InternalDependents).IsEqualTo(1);
+        
+        // Project2 should have 1 BCL dependency (System.Text)
+        await Assert.That(project2Coupling.ExternalBclDependencies).IsEqualTo(1);
+        
+        // Project2 should have 1 package dependency (FluentAssertions)
+        await Assert.That(project2Coupling.ExternalPackageDependencies).IsEqualTo(1);
+        
+        // Total external should be BCL + packages
+        await Assert.That(project2Coupling.TotalExternalDependencies).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task BuildCouplingAnalysisFromDependencies_WithOnlyInternalDependencies_HasZeroExternalDependencies()
+    {
+        // Arrange
+        var analyzer = CreateAnalyzer();
+        var workspace = new AdhocWorkspace();
+        var solution = workspace.CurrentSolution;
+        
+        var project1 = ProjectInfo.Create(
+            ProjectId.CreateNewId(),
+            VersionStamp.Default,
+            "Project1",
+            "Project1",
+            LanguageNames.CSharp);
+        var project2 = ProjectInfo.Create(
+            ProjectId.CreateNewId(),
+            VersionStamp.Default,
+            "Project2",
+            "Project2",
+            LanguageNames.CSharp);
+        
+        solution = solution.AddProject(project1).AddProject(project2);
+
+        var dependencies = new List<DependencyEdge>
+        {
+            // Only internal project references
+            new DependencyEdge("Project1", "Project2", DependencyType.ProjectReference, 1)
+        };
+
+        // Act
+        var analysis = analyzer.BuildCouplingAnalysisFromDependencies(solution, dependencies);
+
+        // Assert
+        var project1Coupling = analysis.ProjectCoupling.FirstOrDefault(p => p.EntityName == "Project1");
+        await Assert.That(project1Coupling).IsNotNull();
+        await Assert.That(project1Coupling!.InternalDependencies).IsEqualTo(1);
+        await Assert.That(project1Coupling.ExternalBclDependencies).IsEqualTo(0);
+        await Assert.That(project1Coupling.ExternalPackageDependencies).IsEqualTo(0);
+        await Assert.That(project1Coupling.TotalExternalDependencies).IsEqualTo(0);
+    }
 }
