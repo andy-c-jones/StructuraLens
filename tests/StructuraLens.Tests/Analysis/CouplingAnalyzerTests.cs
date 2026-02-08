@@ -337,7 +337,7 @@ public class CouplingAnalyzerTests
     }
 
     [Test]
-    public async Task BuildCouplingAnalysisFromDependencies_WithExternalDependencies_CalculatesBclAndPackageMetrics()
+    public async Task BuildCouplingAnalysisFromDependencies_WithProjectDependencies_TracksInternalCouplingOnly()
     {
         // Arrange
         var analyzer = CreateAnalyzer();
@@ -364,18 +364,9 @@ public class CouplingAnalyzerTests
             // Internal project reference
             new DependencyEdge("Project1", "Project2", DependencyType.ProjectReference, 1),
             
-            // External BCL dependencies (System.*)
-            new DependencyEdge("Project1", "System.Collections.Generic", DependencyType.AssemblyReference, 5),
+            // AssemblyReference edges are no longer used for project-level external deps
+            // (external deps are tracked via PackageReferences on ProjectMetrics instead)
             new DependencyEdge("Project1", "System.Linq", DependencyType.AssemblyReference, 3),
-            new DependencyEdge("Project1", "Microsoft.Extensions.Logging", DependencyType.AssemblyReference, 2),
-            
-            // External package dependencies (third-party)
-            new DependencyEdge("Project1", "Newtonsoft.Json", DependencyType.AssemblyReference, 4),
-            new DependencyEdge("Project1", "Serilog", DependencyType.AssemblyReference, 1),
-            
-            // Project2 external deps
-            new DependencyEdge("Project2", "System.Text", DependencyType.AssemblyReference, 2),
-            new DependencyEdge("Project2", "FluentAssertions", DependencyType.AssemblyReference, 3)
         };
 
         // Act
@@ -391,17 +382,8 @@ public class CouplingAnalyzerTests
         // Project1 should have 1 internal dependency (Project2)
         await Assert.That(project1Coupling!.InternalDependencies).IsEqualTo(1);
         
-        // Project1 should have external dependencies
-        await Assert.That(project1Coupling.ExternalOutbound.Count).IsGreaterThan(0);
-        
-        // Project1 should have 3 BCL dependencies (System.Collections.Generic, System.Linq, Microsoft.Extensions.Logging)
-        await Assert.That(project1Coupling.ExternalBclDependencies).IsEqualTo(3);
-        
-        // Project1 should have 2 package dependencies (Newtonsoft.Json, Serilog)
-        await Assert.That(project1Coupling.ExternalPackageDependencies).IsEqualTo(2);
-        
-        // Total external should be BCL + packages
-        await Assert.That(project1Coupling.TotalExternalDependencies).IsEqualTo(5);
+        // External deps at coupling level should be 0 (now tracked via PackageReferences)
+        await Assert.That(project1Coupling.TotalExternalDependencies).IsEqualTo(0);
         
         var project2Coupling = analysis.ProjectCoupling.FirstOrDefault(p => p.EntityName == "Project2");
         await Assert.That(project2Coupling).IsNotNull();
@@ -411,19 +393,10 @@ public class CouplingAnalyzerTests
         
         // Project2 should have 1 internal dependent (Project1)
         await Assert.That(project2Coupling.InternalDependents).IsEqualTo(1);
-        
-        // Project2 should have 1 BCL dependency (System.Text)
-        await Assert.That(project2Coupling.ExternalBclDependencies).IsEqualTo(1);
-        
-        // Project2 should have 1 package dependency (FluentAssertions)
-        await Assert.That(project2Coupling.ExternalPackageDependencies).IsEqualTo(1);
-        
-        // Total external should be BCL + packages
-        await Assert.That(project2Coupling.TotalExternalDependencies).IsEqualTo(2);
     }
 
     [Test]
-    public async Task DocumentCouplingAnalyzer_WithExternalTypes_CreatesAssemblyReferenceEdges()
+    public async Task AnalyzeDocumentCoupling_WithExternalTypes_FindsTypeAndNamespaceReferences()
     {
         // Arrange - code that uses external types from System assemblies
         var code = """
@@ -452,37 +425,22 @@ public class CouplingAnalyzerTests
             .AddReferences(MetadataReference.CreateFromFile(typeof(List<>).Assembly.Location))
             .AddSyntaxTrees(tree);
 
-        // Verify compilation has no errors that would prevent analysis
-        var diagnostics = compilation.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
-
         var semanticModel = compilation.GetSemanticModel(tree);
         var root = await tree.GetRootAsync();
 
-        // Act - use the internal DocumentCouplingAnalyzer directly with a project name
+        // Act
         DependencyEdge.EnableDetails = true;
-        var analyzer = new DocumentCouplingAnalyzer(semanticModel, "test.cs", root, null, "TestProject");
-        analyzer.Visit(root);
-        var dependencies = analyzer.Dependencies;
+        var dependencies = CouplingAnalyzer.AnalyzeDocumentCoupling(semanticModel, "test.cs", root);
 
-        // Debug: output all dependencies by type
-        var assemblyRefs = dependencies.Where(d => d.Type == DependencyType.AssemblyReference).ToList();
         var typeRefs = dependencies.Where(d => d.Type == DependencyType.TypeReference).ToList();
         var nsRefs = dependencies.Where(d => d.Type == DependencyType.NamespaceReference).ToList();
 
-        // Assert - should have AssemblyReference edges for external types
-        await Assert.That(assemblyRefs.Count).IsGreaterThan(0)
-            .Because($"Expected AssemblyReference edges but got 0. " +
-                     $"TypeRefs: {typeRefs.Count}, NsRefs: {nsRefs.Count}, Total: {dependencies.Count}. " +
-                     $"Compilation errors: {string.Join("; ", diagnostics.Select(d => d.GetMessage()))}. " +
-                     $"TypeRef details: [{string.Join(", ", typeRefs.Select(t => $"{t.FromEntity}->{t.ToEntity}"))}]");
+        // Assert - should find type references from MyService to external types
+        await Assert.That(typeRefs.Count).IsGreaterThan(0);
 
-        // Should have edges from "TestProject" to System namespaces
-        var systemAssemblyRefs = assemblyRefs.Where(d => d.ToEntity.StartsWith("System")).ToList();
-        await Assert.That(systemAssemblyRefs.Count).IsGreaterThan(0);
-        
-        // All AssemblyReference edges should have FromEntity = "TestProject"
-        var allFromTestProject = assemblyRefs.All(d => d.FromEntity == "TestProject");
-        await Assert.That(allFromTestProject).IsTrue();
+        // Should find namespace references to System and System.Collections.Generic
+        var systemNsRefs = nsRefs.Where(d => d.ToEntity.StartsWith("System")).ToList();
+        await Assert.That(systemNsRefs.Count).IsGreaterThan(0);
     }
 
     [Test]

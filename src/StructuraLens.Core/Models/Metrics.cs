@@ -57,6 +57,9 @@ public record ProjectMetrics(
     /// <summary>Compiler diagnostics for this project.</summary>
     public DiagnosticSummary? Diagnostics { get; init; }
 
+    /// <summary>Top-level NuGet package references declared in the project file.</summary>
+    public IReadOnlyList<string> PackageReferences { get; init; } = [];
+
     /// <summary>
     /// Groups types by namespace for hierarchical reporting.
     /// </summary>

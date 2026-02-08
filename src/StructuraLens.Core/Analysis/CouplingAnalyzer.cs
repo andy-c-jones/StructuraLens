@@ -235,7 +235,7 @@ public sealed class CouplingAnalyzer : ICouplingAnalyzer
             if (syntaxTree == null || semanticModel == null) return;
 
             var root = await syntaxTree.GetRootAsync(ct);
-            var analyzer = new DocumentCouplingAnalyzer(semanticModel, document.FilePath ?? "", root, null, project.Name);
+            var analyzer = new DocumentCouplingAnalyzer(semanticModel, document.FilePath ?? "", root, null);
             analyzer.Visit(root);
             dependenciesBag.Add(analyzer.Dependencies.ToList());
         });
@@ -263,12 +263,7 @@ public sealed class CouplingAnalyzer : ICouplingAnalyzer
             .Where(d => d.Type == DependencyType.ProjectReference)
             .ToList();
 
-        // Filter AssemblyReference dependencies for external BCL/package dependencies
-        var assemblyDeps = allDependencies
-            .Where(d => d.Type == DependencyType.AssemblyReference)
-            .ToList();
-
-        // Pre-group internal (ProjectReference) dependencies by FromEntity and ToEntity for O(1) lookups
+        // Pre-group dependencies by FromEntity and ToEntity for O(1) lookups
         var outboundByFrom = projectDeps
             .GroupBy(d => d.FromEntity)
             .ToDictionary(g => g.Key, g => g.ToList());
@@ -276,29 +271,21 @@ public sealed class CouplingAnalyzer : ICouplingAnalyzer
             .GroupBy(d => d.ToEntity)
             .ToDictionary(g => g.Key, g => g.ToList());
 
-        // Pre-group external (AssemblyReference) dependencies by FromEntity
-        var externalByFrom = assemblyDeps
-            .GroupBy(d => d.FromEntity)
-            .ToDictionary(g => g.Key, g => g.ToList());
-
         foreach (var projectName in projectNames)
         {
-            // Get internal project-level dependencies (project-to-project references)
             var outbound = outboundByFrom.GetValueOrDefault(projectName, []);
             var inbound = inboundByTo.GetValueOrDefault(projectName, []);
 
-            // Split internal deps into internal and external (though ProjectReferences should all be internal)
             var internalOut = outbound.Where(d => projectNames.Contains(d.ToEntity)).ToList();
             var internalIn = inbound.Where(d => projectNames.Contains(d.FromEntity)).ToList();
 
-            // Get external assembly dependencies (BCL and NuGet packages)
-            var externalOut = externalByFrom.GetValueOrDefault(projectName, []);
-
+            // External dependencies are now tracked via PackageReferences on ProjectMetrics,
+            // not via AssemblyReference edges. ExternalOutbound stays empty at the coupling level.
             metrics.Add(new CouplingMetrics(projectName, DependencyType.ProjectReference)
             {
                 InternalOutbound = internalOut,
                 InternalInbound = internalIn,
-                ExternalOutbound = externalOut
+                ExternalOutbound = []
             });
         }
 
@@ -443,10 +430,9 @@ public sealed class CouplingAnalyzer : ICouplingAnalyzer
         SemanticModel semanticModel,
         string filePath,
         SyntaxNode root,
-        IDependencyCollector collector,
-        string? projectName = null)
+        IDependencyCollector collector)
     {
-        var analyzer = new DocumentCouplingAnalyzer(semanticModel, filePath, root, collector, projectName);
+        var analyzer = new DocumentCouplingAnalyzer(semanticModel, filePath, root, collector);
         analyzer.Visit(root);
     }
 }
@@ -461,7 +447,6 @@ internal sealed class DocumentCouplingAnalyzer : CSharpSyntaxWalker
     private readonly List<DependencyEdge>? _dependencies;
     private readonly IDependencyCollector? _collector;
     private readonly string? _primaryNamespace;
-    private readonly string? _projectName;
     
     // Cache for ToDisplayString() results to avoid repeated expensive calls
     private readonly Dictionary<ISymbol, string> _symbolDisplayCache = new(SymbolEqualityComparer.Default);
@@ -488,13 +473,11 @@ internal sealed class DocumentCouplingAnalyzer : CSharpSyntaxWalker
         SemanticModel semanticModel,
         string filePath,
         SyntaxNode root,
-        IDependencyCollector? collector,
-        string? projectName = null)
+        IDependencyCollector? collector)
     {
         _semanticModel = semanticModel;
         _filePath = filePath;
         _collector = collector;
-        _projectName = projectName;
         
         // Only create list if not using collector
         if (collector == null)
@@ -634,28 +617,6 @@ internal sealed class DocumentCouplingAnalyzer : CSharpSyntaxWalker
                         : null,
                     ReferencedSymbol = DependencyEdge.EnableDetails ? typeSymbol.Name : null
                 });
-            }
-
-            // Track external assembly dependencies (if project name is available)
-            if (!string.IsNullOrEmpty(_projectName) && typeSymbol.ContainingAssembly != null && !string.IsNullOrEmpty(toNamespace))
-            {
-                var assemblyName = typeSymbol.ContainingAssembly.Name;
-                var compilationAssemblyName = _semanticModel.Compilation.AssemblyName;
-
-                // Only track if it's an external assembly (not the current project's assembly)
-                // Check assembly name mismatch or if the type is from metadata (external)
-                bool isExternal = (assemblyName != compilationAssemblyName && !string.IsNullOrEmpty(assemblyName))
-                    || typeSymbol.ContainingAssembly.Identity.IsRetargetable
-                    || typeSymbol.Locations.Any(l => l.IsInMetadata);
-
-                if (isExternal)
-                {
-                    AddDependencyEdge(new DependencyEdge(
-                        FromEntity: _projectName,
-                        ToEntity: toNamespace,
-                        Type: DependencyType.AssemblyReference,
-                        ReferenceCount: 1));
-                }
             }
         }
     }

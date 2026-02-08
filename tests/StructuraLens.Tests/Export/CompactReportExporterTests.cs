@@ -1039,4 +1039,57 @@ public class CompactReportExporterTests
         await Assert.That(compactReport.GitRemoteUrl).IsNull();
         await Assert.That(compactReport.GitIsDirty).IsFalse();
     }
+
+    [Test]
+    public async Task Export_WithPackageReferences_DerivesExternalDependencyCounts()
+    {
+        // Arrange
+        var exporter = CreateExporter();
+        var project = new ProjectMetrics(
+            Name: "TestProject",
+            FilePath: "TestProject.csproj",
+            Types: new List<TypeMetrics>())
+        {
+            PackageReferences = new List<string>
+            {
+                "Microsoft.Extensions.Logging",
+                "Microsoft.Extensions.Logging.Console",
+                "System.CommandLine",
+                "LibGit2Sharp",
+                "FakeItEasy"
+            }
+        };
+
+        var report = new AnalysisReport(
+            SolutionPath: "test.sln",
+            AnalyzedAt: DateTime.UtcNow,
+            Projects: new List<ProjectMetrics> { project },
+            Warnings: new List<string>());
+
+        // Act
+        var compactReport = exporter.Export(report);
+        var compactProject = compactReport.Projects[0];
+
+        // Assert - 3 Microsoft/System packages (edb), 2 third-party (edp), 5 total (ed)
+        await Assert.That(compactProject.ExternalDependencies).IsEqualTo(5);
+        await Assert.That(compactProject.ExternalBclDependencies).IsEqualTo(3);
+        await Assert.That(compactProject.ExternalPackageDependencies).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task Export_WithEmptyPackageReferences_HasZeroExternalDependencies()
+    {
+        // Arrange
+        var exporter = CreateExporter();
+        var report = CreateMinimalReport(); // Default: PackageReferences = []
+
+        // Act
+        var compactReport = exporter.Export(report);
+        var compactProject = compactReport.Projects[0];
+
+        // Assert
+        await Assert.That(compactProject.ExternalDependencies).IsEqualTo(0);
+        await Assert.That(compactProject.ExternalBclDependencies).IsEqualTo(0);
+        await Assert.That(compactProject.ExternalPackageDependencies).IsEqualTo(0);
+    }
 }
