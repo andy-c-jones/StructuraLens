@@ -443,9 +443,10 @@ public sealed class CouplingAnalyzer : ICouplingAnalyzer
         SemanticModel semanticModel,
         string filePath,
         SyntaxNode root,
-        IDependencyCollector collector)
+        IDependencyCollector collector,
+        string? projectName = null)
     {
-        var analyzer = new DocumentCouplingAnalyzer(semanticModel, filePath, root, collector);
+        var analyzer = new DocumentCouplingAnalyzer(semanticModel, filePath, root, collector, projectName);
         analyzer.Visit(root);
     }
 }

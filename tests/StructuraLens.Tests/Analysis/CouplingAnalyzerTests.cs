@@ -423,6 +423,69 @@ public class CouplingAnalyzerTests
     }
 
     [Test]
+    public async Task DocumentCouplingAnalyzer_WithExternalTypes_CreatesAssemblyReferenceEdges()
+    {
+        // Arrange - code that uses external types from System assemblies
+        var code = """
+            using System;
+            using System.Collections.Generic;
+
+            namespace TestProject.Services
+            {
+                public class MyService
+                {
+                    private readonly List<string> _items = new();
+
+                    public void Process()
+                    {
+                        Console.WriteLine("Hello");
+                        var dict = new Dictionary<string, int>();
+                    }
+                }
+            }
+            """;
+
+        var tree = CSharpSyntaxTree.ParseText(code);
+        var compilation = CSharpCompilation.Create("TestProject")
+            .AddReferences(MetadataReference.CreateFromFile(typeof(object).Assembly.Location))
+            .AddReferences(MetadataReference.CreateFromFile(typeof(Console).Assembly.Location))
+            .AddReferences(MetadataReference.CreateFromFile(typeof(List<>).Assembly.Location))
+            .AddSyntaxTrees(tree);
+
+        // Verify compilation has no errors that would prevent analysis
+        var diagnostics = compilation.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+
+        var semanticModel = compilation.GetSemanticModel(tree);
+        var root = await tree.GetRootAsync();
+
+        // Act - use the internal DocumentCouplingAnalyzer directly with a project name
+        DependencyEdge.EnableDetails = true;
+        var analyzer = new DocumentCouplingAnalyzer(semanticModel, "test.cs", root, null, "TestProject");
+        analyzer.Visit(root);
+        var dependencies = analyzer.Dependencies;
+
+        // Debug: output all dependencies by type
+        var assemblyRefs = dependencies.Where(d => d.Type == DependencyType.AssemblyReference).ToList();
+        var typeRefs = dependencies.Where(d => d.Type == DependencyType.TypeReference).ToList();
+        var nsRefs = dependencies.Where(d => d.Type == DependencyType.NamespaceReference).ToList();
+
+        // Assert - should have AssemblyReference edges for external types
+        await Assert.That(assemblyRefs.Count).IsGreaterThan(0)
+            .Because($"Expected AssemblyReference edges but got 0. " +
+                     $"TypeRefs: {typeRefs.Count}, NsRefs: {nsRefs.Count}, Total: {dependencies.Count}. " +
+                     $"Compilation errors: {string.Join("; ", diagnostics.Select(d => d.GetMessage()))}. " +
+                     $"TypeRef details: [{string.Join(", ", typeRefs.Select(t => $"{t.FromEntity}->{t.ToEntity}"))}]");
+
+        // Should have edges from "TestProject" to System namespaces
+        var systemAssemblyRefs = assemblyRefs.Where(d => d.ToEntity.StartsWith("System")).ToList();
+        await Assert.That(systemAssemblyRefs.Count).IsGreaterThan(0);
+        
+        // All AssemblyReference edges should have FromEntity = "TestProject"
+        var allFromTestProject = assemblyRefs.All(d => d.FromEntity == "TestProject");
+        await Assert.That(allFromTestProject).IsTrue();
+    }
+
+    [Test]
     public async Task BuildCouplingAnalysisFromDependencies_WithOnlyInternalDependencies_HasZeroExternalDependencies()
     {
         // Arrange

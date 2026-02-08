@@ -280,7 +280,7 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
             var filePath = document.FilePath ?? "";
             
             // Analyze coupling dependencies - stream directly to shared collector
-            CouplingAnalyzer.AnalyzeDocumentCouplingStreaming(semanticModel, filePath, root, dependencyCollector);
+            CouplingAnalyzer.AnalyzeDocumentCouplingStreaming(semanticModel, filePath, root, dependencyCollector, project.Name);
             
             // Analyze traditional type declarations
             var typeDeclarations = root.DescendantNodes()
