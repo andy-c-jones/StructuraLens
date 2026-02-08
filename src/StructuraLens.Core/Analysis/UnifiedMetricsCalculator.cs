@@ -121,7 +121,7 @@ public static class UnifiedMetricsCalculator
 
         public override void VisitSwitchSection(SwitchSectionSyntax node)
         {
-            _cyclomaticComplexity++;
+            _cyclomaticComplexity += node.Labels.Count;
             base.VisitSwitchSection(node);
         }
 

@@ -395,11 +395,16 @@ static async Task<int> ExecuteDiffAsync(
 {
     try
     {
+        var logger = serviceProvider.GetRequiredService<ILogger<Program>>();
+
         if (string.IsNullOrWhiteSpace(basePath) || string.IsNullOrWhiteSpace(headPath))
         {
             Console.Error.WriteLine("Both --base and --head reports are required for diff.");
             return 1;
         }
+
+        var outputLabel = string.IsNullOrWhiteSpace(output) ? "(stdout)" : output;
+        ProgramLog.DiffStarted(logger, basePath, headPath, format, outputLabel, maxProjects);
 
         var baseJson = await File.ReadAllTextAsync(basePath, cancellationToken);
         var headJson = await File.ReadAllTextAsync(headPath, cancellationToken);
@@ -424,6 +429,7 @@ static async Task<int> ExecuteDiffAsync(
         if (format == "summary")
         {
             PrintDiffSummary(diff);
+            ProgramLog.DiffCompleted(logger, format, outputLabel);
             return 0;
         }
 
@@ -445,6 +451,7 @@ static async Task<int> ExecuteDiffAsync(
             {
                 Console.WriteLine(markdown);
             }
+            ProgramLog.DiffCompleted(logger, format, outputLabel);
             return 0;
         }
 
@@ -460,6 +467,7 @@ static async Task<int> ExecuteDiffAsync(
             {
                 Console.WriteLine(html);
             }
+            ProgramLog.DiffCompleted(logger, format, outputLabel);
             return 0;
         }
 
@@ -479,12 +487,14 @@ static async Task<int> ExecuteDiffAsync(
             Console.WriteLine(diffJson);
         }
 
+        ProgramLog.DiffCompleted(logger, format, outputLabel);
+
         return 0;
     }
     catch (Exception ex)
     {
         var logger = serviceProvider.GetRequiredService<ILogger<Program>>();
-        ProgramLog.AnalysisError(logger, ex.Message);
+        ProgramLog.DiffFailed(logger, ex.Message);
         return 1;
     }
 }
