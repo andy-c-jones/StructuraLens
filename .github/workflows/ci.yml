@@ -76,8 +76,8 @@ jobs:
           # Get changed files
           CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD)
           
-          # Check if code files changed (src/, tests/, or relevant CI files)
-          if echo "$CHANGED_FILES" | grep -qE '(^src/|^tests/|\.cs$|\.csproj$|\.sln$|\.slnx$|\.github/workflows/ci\.yml$|\.github/actions/analyze/)'; then
+          # Check if code files changed (src/, tests/, web/, or relevant CI files)
+          if echo "$CHANGED_FILES" | grep -qE '(^src/|^tests/|^web/|\.cs$|\.csproj$|\.sln$|\.slnx$|\.github/workflows/ci\.yml$|\.github/actions/analyze/)'; then
             echo "code_changed=true" >> $GITHUB_OUTPUT
             echo "Code changes detected"
           else

@@ -239,6 +239,481 @@ public sealed class DiffReportRendererTests
         await Assert.That(markdown).Contains("### Top Level Metrics");
     }
 
+    [Test]
+    public async Task RenderMarkdown_WithNewDiagnostics_ShowsTopNewDiagnosticsSection()
+    {
+        // Arrange
+        var renderer = new DiffReportRenderer();
+        var diff = new AnalysisDiffReport
+        {
+            Base = new DiffMetadata { CommitSha = "abc123", BranchName = "main", AnalyzedAt = DateTime.UtcNow },
+            Head = new DiffMetadata { CommitSha = "def456", BranchName = "feature", AnalyzedAt = DateTime.UtcNow },
+            Totals = new DiffTotals
+            {
+                BaseProjects = 1, HeadProjects = 1,
+                BaseTypes = 10, HeadTypes = 10,
+                BaseMethods = 50, HeadMethods = 50,
+                BaseCyclomaticComplexity = 100, HeadCyclomaticComplexity = 100,
+                BaseLinesOfCode = 1000, HeadLinesOfCode = 1000,
+                BaseAvgMaintainabilityIndex = 80.0, HeadAvgMaintainabilityIndex = 80.0,
+                BaseErrors = 0, HeadErrors = 2,
+                BaseWarnings = 0, HeadWarnings = 3,
+                BaseInfo = 0, HeadInfo = 0,
+                BaseHidden = 0, HeadHidden = 0
+            },
+            Projects = [],
+            Diagnostics = new DiagnosticDiffSummary
+            {
+                BaseErrors = 0, HeadErrors = 2,
+                BaseWarnings = 0, HeadWarnings = 3,
+                TopNewErrors =
+                [
+                    new DiagnosticDiffItem
+                    {
+                        Project = "TestProject",
+                        Id = "CS0103",
+                        Severity = "Error",
+                        Message = "The name 'foo' does not exist in the current context",
+                        File = "Program.cs",
+                        Line = 42,
+                        Column = 10
+                    },
+                    new DiagnosticDiffItem
+                    {
+                        Project = "TestProject",
+                        Id = "CS0246",
+                        Severity = "Error",
+                        Message = "The type or namespace name 'Bar' could not be found",
+                        File = "Helper.cs",
+                        Line = 15,
+                        Column = 5
+                    }
+                ],
+                TopNewWarnings =
+                [
+                    new DiagnosticDiffItem
+                    {
+                        Project = "TestProject",
+                        Id = "CS8602",
+                        Severity = "Warning",
+                        Message = "Dereference of a possibly null reference",
+                        File = "Service.cs",
+                        Line = 100,
+                        Column = 20
+                    }
+                ]
+            }
+        };
+
+        // Act
+        var markdown = renderer.RenderMarkdown(diff);
+
+        // Assert
+        await Assert.That(markdown).Contains("### Top New Diagnostics");
+        await Assert.That(markdown).Contains("🚨 **CS0103** in `TestProject`");
+        await Assert.That(markdown).Contains("The name 'foo' does not exist");
+        await Assert.That(markdown).Contains("Location: `Program.cs:42:10`");
+        await Assert.That(markdown).Contains("🚨 **CS0246** in `TestProject`");
+        await Assert.That(markdown).Contains("⚠️ **CS8602** in `TestProject`");
+        await Assert.That(markdown).Contains("Dereference of a possibly null reference");
+    }
+
+    [Test]
+    public async Task RenderMarkdown_WithNoNewDiagnostics_OmitsTopNewDiagnosticsSection()
+    {
+        // Arrange
+        var renderer = new DiffReportRenderer();
+        var diff = CreateDiffReport();
+
+        // Act
+        var markdown = renderer.RenderMarkdown(diff);
+
+        // Assert - Should not have the section if no new diagnostics
+        await Assert.That(markdown).DoesNotContain("### Top New Diagnostics");
+    }
+
+    [Test]
+    public async Task RenderMarkdown_WithMoreThan10NewDiagnostics_ShowsTop10ByPriority()
+    {
+        // Arrange
+        var renderer = new DiffReportRenderer();
+        var topNewErrors = Enumerable.Range(1, 5).Select(i => new DiagnosticDiffItem
+        {
+            Project = $"Project{i}",
+            Id = $"CS{i:D4}",
+            Severity = "Error",
+            Message = $"Error message {i}",
+            File = $"File{i}.cs",
+            Line = i,
+            Column = 1
+        }).ToList();
+        
+        // Create 10 warnings (6-15)
+        var topNewWarnings = Enumerable.Range(6, 10).Select(i => new DiagnosticDiffItem
+        {
+            Project = $"Project{i}",
+            Id = $"CS{i:D4}",
+            Severity = "Warning",
+            Message = $"Warning message {i}",
+            File = $"File{i}.cs",
+            Line = i,
+            Column = 1
+        }).ToList();
+
+        var diff = new AnalysisDiffReport
+        {
+            Base = new DiffMetadata { CommitSha = "abc123", BranchName = "main", AnalyzedAt = DateTime.UtcNow },
+            Head = new DiffMetadata { CommitSha = "def456", BranchName = "feature", AnalyzedAt = DateTime.UtcNow },
+            Totals = new DiffTotals
+            {
+                BaseProjects = 1, HeadProjects = 1,
+                BaseTypes = 10, HeadTypes = 10,
+                BaseMethods = 50, HeadMethods = 50,
+                BaseCyclomaticComplexity = 100, HeadCyclomaticComplexity = 100,
+                BaseLinesOfCode = 1000, HeadLinesOfCode = 1000,
+                BaseAvgMaintainabilityIndex = 80.0, HeadAvgMaintainabilityIndex = 80.0,
+                BaseErrors = 0, HeadErrors = 5,
+                BaseWarnings = 0, HeadWarnings = 10,
+                BaseInfo = 0, HeadInfo = 0,
+                BaseHidden = 0, HeadHidden = 0
+            },
+            Projects = [],
+            Diagnostics = new DiagnosticDiffSummary
+            {
+                BaseErrors = 0, HeadErrors = 5,
+                BaseWarnings = 0, HeadWarnings = 10,
+                TopNewErrors = topNewErrors,
+                TopNewWarnings = topNewWarnings
+            }
+        };
+
+        // Act
+        var markdown = renderer.RenderMarkdown(diff);
+
+        // Assert - Should show all 5 errors (priority 4) and only 5 warnings (priority 3) to reach the 10 item limit
+        await Assert.That(markdown).Contains("### Top New Diagnostics");
+        await Assert.That(markdown).Contains("🚨 **CS0001**"); // Error 1
+        await Assert.That(markdown).Contains("🚨 **CS0005**"); // Error 5
+        await Assert.That(markdown).Contains("⚠️ **CS0010**"); // Warning 10
+        await Assert.That(markdown).Contains("⚠️ **CS0014**"); // Warning 14
+        
+        // Should not show warning 15 (the 11th item after 5 errors + 5 warnings)
+        await Assert.That(markdown).DoesNotContain("**CS0015**");
+    }
+
+    [Test]
+    public async Task RenderMarkdown_WithInternalDependencyChanges_ShowsInternalDependenciesSection()
+    {
+        // Arrange
+        var renderer = new DiffReportRenderer();
+        var diff = new AnalysisDiffReport
+        {
+            Base = new DiffMetadata { CommitSha = "abc123", BranchName = "main", AnalyzedAt = DateTime.UtcNow },
+            Head = new DiffMetadata { CommitSha = "def456", BranchName = "feature", AnalyzedAt = DateTime.UtcNow },
+            Totals = new DiffTotals
+            {
+                BaseProjects = 2, HeadProjects = 2,
+                BaseTypes = 20, HeadTypes = 20,
+                BaseMethods = 100, HeadMethods = 100,
+                BaseCyclomaticComplexity = 200, HeadCyclomaticComplexity = 200,
+                BaseLinesOfCode = 2000, HeadLinesOfCode = 2000,
+                BaseAvgMaintainabilityIndex = 80.0, HeadAvgMaintainabilityIndex = 80.0,
+                BaseErrors = 0, HeadErrors = 0,
+                BaseWarnings = 0, HeadWarnings = 0,
+                BaseInfo = 0, HeadInfo = 0,
+                BaseHidden = 0, HeadHidden = 0
+            },
+            Projects =
+            [
+                new ProjectDiff
+                {
+                    Name = "ConsumerProject",
+                    Base = new ProjectDiffMetrics
+                    {
+                        InternalDependencies = 1,
+                        InternalDependents = 0,
+                        DependencyRatio = 1.0,
+                        AvgMaintainabilityIndex = 80.0,
+                        CyclomaticComplexity = 100,
+                        LinesOfCode = 1000,
+                        Warnings = 0
+                    },
+                    Head = new ProjectDiffMetrics
+                    {
+                        InternalDependencies = 2,
+                        InternalDependents = 0,
+                        DependencyRatio = 2.0,
+                        AvgMaintainabilityIndex = 80.0,
+                        CyclomaticComplexity = 100,
+                        LinesOfCode = 1000,
+                        Warnings = 0
+                    }
+                },
+                new ProjectDiff
+                {
+                    Name = "ProviderProject",
+                    Base = new ProjectDiffMetrics
+                    {
+                        InternalDependencies = 0,
+                        InternalDependents = 1,
+                        DependencyRatio = 0.0,
+                        AvgMaintainabilityIndex = 80.0,
+                        CyclomaticComplexity = 100,
+                        LinesOfCode = 1000,
+                        Warnings = 0
+                    },
+                    Head = new ProjectDiffMetrics
+                    {
+                        InternalDependencies = 0,
+                        InternalDependents = 2,
+                        DependencyRatio = 0.0,
+                        AvgMaintainabilityIndex = 80.0,
+                        CyclomaticComplexity = 100,
+                        LinesOfCode = 1000,
+                        Warnings = 0
+                    }
+                }
+            ]
+        };
+
+        // Act
+        var markdown = renderer.RenderMarkdown(diff);
+
+        // Assert
+        await Assert.That(markdown).Contains("### Internal Dependencies Changes");
+        await Assert.That(markdown).Contains("ConsumerProject");
+        await Assert.That(markdown).Contains("ProviderProject");
+        await Assert.That(markdown).Contains("Dependencies Δ");
+        await Assert.That(markdown).Contains("Dependents Δ");
+        await Assert.That(markdown).Contains("Ratio (Base)");
+        await Assert.That(markdown).Contains("Ratio (Head)");
+        await Assert.That(markdown).Contains("Ratio Δ");
+    }
+
+    [Test]
+    public async Task RenderMarkdown_WithNoDependencyChanges_OmitsInternalDependenciesSection()
+    {
+        // Arrange
+        var renderer = new DiffReportRenderer();
+        var diff = new AnalysisDiffReport
+        {
+            Base = new DiffMetadata { CommitSha = "abc123", BranchName = "main", AnalyzedAt = DateTime.UtcNow },
+            Head = new DiffMetadata { CommitSha = "def456", BranchName = "feature", AnalyzedAt = DateTime.UtcNow },
+            Totals = new DiffTotals
+            {
+                BaseProjects = 1, HeadProjects = 1,
+                BaseTypes = 10, HeadTypes = 10,
+                BaseMethods = 50, HeadMethods = 50,
+                BaseCyclomaticComplexity = 100, HeadCyclomaticComplexity = 100,
+                BaseLinesOfCode = 1000, HeadLinesOfCode = 1000,
+                BaseAvgMaintainabilityIndex = 80.0, HeadAvgMaintainabilityIndex = 80.0,
+                BaseErrors = 0, HeadErrors = 0,
+                BaseWarnings = 0, HeadWarnings = 0,
+                BaseInfo = 0, HeadInfo = 0,
+                BaseHidden = 0, HeadHidden = 0
+            },
+            Projects =
+            [
+                new ProjectDiff
+                {
+                    Name = "StableProject",
+                    Base = new ProjectDiffMetrics
+                    {
+                        InternalDependencies = 1,
+                        InternalDependents = 1,
+                        DependencyRatio = 1.0,
+                        AvgMaintainabilityIndex = 80.0,
+                        CyclomaticComplexity = 100,
+                        LinesOfCode = 1000,
+                        Warnings = 0
+                    },
+                    Head = new ProjectDiffMetrics
+                    {
+                        InternalDependencies = 1,
+                        InternalDependents = 1,
+                        DependencyRatio = 1.0,
+                        AvgMaintainabilityIndex = 80.0,
+                        CyclomaticComplexity = 100,
+                        LinesOfCode = 1000,
+                        Warnings = 0
+                    }
+                }
+            ]
+        };
+
+        // Act
+        var markdown = renderer.RenderMarkdown(diff);
+
+        // Assert - Should not have the section if no dependency changes
+        await Assert.That(markdown).DoesNotContain("### Internal Dependencies Changes");
+    }
+
+    [Test]
+    public async Task RenderMarkdown_WithAddedOrRemovedProjects_ExcludesThemFromDependenciesSection()
+    {
+        // Arrange
+        var renderer = new DiffReportRenderer();
+        var diff = new AnalysisDiffReport
+        {
+            Base = new DiffMetadata { CommitSha = "abc123", BranchName = "main", AnalyzedAt = DateTime.UtcNow },
+            Head = new DiffMetadata { CommitSha = "def456", BranchName = "feature", AnalyzedAt = DateTime.UtcNow },
+            Totals = new DiffTotals
+            {
+                BaseProjects = 1, HeadProjects = 2,
+                BaseTypes = 10, HeadTypes = 20,
+                BaseMethods = 50, HeadMethods = 100,
+                BaseCyclomaticComplexity = 100, HeadCyclomaticComplexity = 200,
+                BaseLinesOfCode = 1000, HeadLinesOfCode = 2000,
+                BaseAvgMaintainabilityIndex = 80.0, HeadAvgMaintainabilityIndex = 80.0,
+                BaseErrors = 0, HeadErrors = 0,
+                BaseWarnings = 0, HeadWarnings = 0,
+                BaseInfo = 0, HeadInfo = 0,
+                BaseHidden = 0, HeadHidden = 0
+            },
+            Projects =
+            [
+                new ProjectDiff
+                {
+                    Name = "AddedProject",
+                    IsAdded = true,
+                    Base = new ProjectDiffMetrics(),
+                    Head = new ProjectDiffMetrics
+                    {
+                        InternalDependencies = 1,
+                        InternalDependents = 0,
+                        DependencyRatio = 1.0,
+                        AvgMaintainabilityIndex = 80.0,
+                        CyclomaticComplexity = 100,
+                        LinesOfCode = 1000,
+                        Warnings = 0
+                    }
+                },
+                new ProjectDiff
+                {
+                    Name = "RemovedProject",
+                    IsRemoved = true,
+                    Base = new ProjectDiffMetrics
+                    {
+                        InternalDependencies = 1,
+                        InternalDependents = 0,
+                        DependencyRatio = 1.0,
+                        AvgMaintainabilityIndex = 80.0,
+                        CyclomaticComplexity = 100,
+                        LinesOfCode = 1000,
+                        Warnings = 0
+                    },
+                    Head = new ProjectDiffMetrics()
+                }
+            ]
+        };
+
+        // Act
+        var markdown = renderer.RenderMarkdown(diff);
+
+        // Assert - Should not have the section since added/removed projects are excluded
+        await Assert.That(markdown).DoesNotContain("### Internal Dependencies Changes");
+    }
+
+    [Test]
+    public async Task RenderMarkdown_SectionOrdering_IncludesNewSectionsInCorrectOrder()
+    {
+        // Arrange
+        var renderer = new DiffReportRenderer();
+        var diff = new AnalysisDiffReport
+        {
+            Base = new DiffMetadata { CommitSha = "abc123", BranchName = "main", AnalyzedAt = DateTime.UtcNow },
+            Head = new DiffMetadata { CommitSha = "def456", BranchName = "feature", AnalyzedAt = DateTime.UtcNow },
+            Totals = new DiffTotals
+            {
+                BaseProjects = 1, HeadProjects = 1,
+                BaseTypes = 10, HeadTypes = 10,
+                BaseMethods = 50, HeadMethods = 50,
+                BaseCyclomaticComplexity = 100, HeadCyclomaticComplexity = 120,
+                BaseLinesOfCode = 1000, HeadLinesOfCode = 1200,
+                BaseAvgMaintainabilityIndex = 80.0, HeadAvgMaintainabilityIndex = 75.0,
+                BaseErrors = 0, HeadErrors = 1,
+                BaseWarnings = 0, HeadWarnings = 2,
+                BaseInfo = 0, HeadInfo = 0,
+                BaseHidden = 0, HeadHidden = 0
+            },
+            Projects =
+            [
+                new ProjectDiff
+                {
+                    Name = "TestProject",
+                    Base = new ProjectDiffMetrics
+                    {
+                        InternalDependencies = 1,
+                        InternalDependents = 0,
+                        DependencyRatio = 1.0,
+                        AvgMaintainabilityIndex = 80.0,
+                        CyclomaticComplexity = 100,
+                        LinesOfCode = 1000,
+                        Warnings = 0
+                    },
+                    Head = new ProjectDiffMetrics
+                    {
+                        InternalDependencies = 2,
+                        InternalDependents = 0,
+                        DependencyRatio = 2.0,
+                        AvgMaintainabilityIndex = 75.0,
+                        CyclomaticComplexity = 120,
+                        LinesOfCode = 1200,
+                        Warnings = 2
+                    }
+                }
+            ],
+            Diagnostics = new DiagnosticDiffSummary
+            {
+                BaseErrors = 0, HeadErrors = 1,
+                BaseWarnings = 0, HeadWarnings = 2,
+                TopNewErrors =
+                [
+                    new DiagnosticDiffItem
+                    {
+                        Project = "TestProject",
+                        Id = "CS0103",
+                        Severity = "Error",
+                        Message = "Error message",
+                        File = "File.cs",
+                        Line = 1,
+                        Column = 1
+                    }
+                ],
+                TopNewWarnings =
+                [
+                    new DiagnosticDiffItem
+                    {
+                        Project = "TestProject",
+                        Id = "CS8602",
+                        Severity = "Warning",
+                        Message = "Warning message",
+                        File = "File.cs",
+                        Line = 2,
+                        Column = 1
+                    }
+                ]
+            }
+        };
+
+        // Act
+        var markdown = renderer.RenderMarkdown(diff);
+
+        // Assert - Verify all sections are present in the correct order
+        var diagnosticsIndex = markdown.IndexOf("### Diagnostics");
+        var topNewDiagnosticsIndex = markdown.IndexOf("### Top New Diagnostics");
+        var internalDependenciesIndex = markdown.IndexOf("### Internal Dependencies Changes");
+        var topChangesIndex = markdown.IndexOf("### Top Maintainability Changes");
+        var metricsIndex = markdown.IndexOf("### Top Level Metrics");
+
+        // Order should be: Diagnostics -> Top New Diagnostics -> Internal Dependencies -> Top Maintainability Changes -> Top Level Metrics
+        await Assert.That(diagnosticsIndex).IsGreaterThan(0);
+        await Assert.That(topNewDiagnosticsIndex).IsGreaterThan(diagnosticsIndex);
+        await Assert.That(internalDependenciesIndex).IsGreaterThan(topNewDiagnosticsIndex);
+        await Assert.That(topChangesIndex).IsGreaterThan(internalDependenciesIndex);
+        await Assert.That(metricsIndex).IsGreaterThan(topChangesIndex);
+    }
+
     private static AnalysisDiffReport CreateDiffReport(
         int baseErrors = 0, int headErrors = 0,
         int baseWarnings = 0, int headWarnings = 0,
@@ -272,7 +747,8 @@ public sealed class DiffReportRendererTests
                 BaseInfo = 0, HeadInfo = 0,
                 BaseHidden = 0, HeadHidden = 0
             },
-            Projects = []
+            Projects = [],
+            Diagnostics = new DiagnosticDiffSummary()
         };
     }
 }

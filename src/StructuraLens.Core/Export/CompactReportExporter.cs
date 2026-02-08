@@ -82,6 +82,15 @@ public sealed class CompactReportExporter : IReportExporter
             // O(1) lookup instead of O(n) FirstOrDefault
             projectCouplingLookup.TryGetValue(project.Name, out var projectCoupling);
 
+            // Derive external dependency counts from top-level PackageReferences in .csproj
+            var packageRefs = project.PackageReferences;
+            var totalPackages = packageRefs.Count;
+            var msftPackages = packageRefs.Count(p =>
+                p.StartsWith("System.", StringComparison.Ordinal) ||
+                p.Equals("System", StringComparison.Ordinal) ||
+                p.StartsWith("Microsoft.", StringComparison.Ordinal));
+            var thirdPartyPackages = totalPackages - msftPackages;
+
             var compactProject = new CompactProject
             {
                 Name = project.Name,
@@ -94,9 +103,9 @@ public sealed class CompactReportExporter : IReportExporter
                 InternalDependencies = projectCoupling?.InternalDependencies ?? 0,
                 InternalDependents = projectCoupling?.InternalDependents ?? 0,
                 DependencyRatio = Math.Round(projectCoupling?.DependencyRatio ?? 0, 2),
-                ExternalDependencies = projectCoupling?.TotalExternalDependencies ?? 0,
-                ExternalBclDependencies = projectCoupling?.ExternalBclDependencies ?? 0,
-                ExternalPackageDependencies = projectCoupling?.ExternalPackageDependencies ?? 0,
+                ExternalDependencies = totalPackages,
+                ExternalBclDependencies = msftPackages,
+                ExternalPackageDependencies = thirdPartyPackages,
                 Errors = project.Diagnostics?.ErrorCount ?? 0,
                 Warnings = project.Diagnostics?.WarningCount ?? 0,
                 Types = (!useNamespaceHierarchy && includeTypes) ? ExportTypes(project.Types, includeMethods) : null,

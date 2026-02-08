@@ -335,4 +335,152 @@ public class CouplingAnalyzerTests
             await analyzer.AnalyzeSolutionAsync(solution, null, cts.Token);
         });
     }
+
+    [Test]
+    public async Task BuildCouplingAnalysisFromDependencies_WithProjectDependencies_TracksInternalCouplingOnly()
+    {
+        // Arrange
+        var analyzer = CreateAnalyzer();
+        var workspace = new AdhocWorkspace();
+        var solution = workspace.CurrentSolution;
+        
+        var project1 = ProjectInfo.Create(
+            ProjectId.CreateNewId(),
+            VersionStamp.Default,
+            "Project1",
+            "Project1",
+            LanguageNames.CSharp);
+        var project2 = ProjectInfo.Create(
+            ProjectId.CreateNewId(),
+            VersionStamp.Default,
+            "Project2",
+            "Project2",
+            LanguageNames.CSharp);
+        
+        solution = solution.AddProject(project1).AddProject(project2);
+
+        var dependencies = new List<DependencyEdge>
+        {
+            // Internal project reference
+            new DependencyEdge("Project1", "Project2", DependencyType.ProjectReference, 1),
+            
+            // AssemblyReference edges are no longer used for project-level external deps
+            // (external deps are tracked via PackageReferences on ProjectMetrics instead)
+            new DependencyEdge("Project1", "System.Linq", DependencyType.AssemblyReference, 3),
+        };
+
+        // Act
+        var analysis = analyzer.BuildCouplingAnalysisFromDependencies(solution, dependencies);
+
+        // Assert
+        await Assert.That(analysis).IsNotNull();
+        await Assert.That(analysis.ProjectCoupling.Count).IsEqualTo(2);
+        
+        var project1Coupling = analysis.ProjectCoupling.FirstOrDefault(p => p.EntityName == "Project1");
+        await Assert.That(project1Coupling).IsNotNull();
+        
+        // Project1 should have 1 internal dependency (Project2)
+        await Assert.That(project1Coupling!.InternalDependencies).IsEqualTo(1);
+        
+        // External deps at coupling level should be 0 (now tracked via PackageReferences)
+        await Assert.That(project1Coupling.TotalExternalDependencies).IsEqualTo(0);
+        
+        var project2Coupling = analysis.ProjectCoupling.FirstOrDefault(p => p.EntityName == "Project2");
+        await Assert.That(project2Coupling).IsNotNull();
+        
+        // Project2 should have 0 internal dependencies
+        await Assert.That(project2Coupling!.InternalDependencies).IsEqualTo(0);
+        
+        // Project2 should have 1 internal dependent (Project1)
+        await Assert.That(project2Coupling.InternalDependents).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task AnalyzeDocumentCoupling_WithExternalTypes_FindsTypeAndNamespaceReferences()
+    {
+        // Arrange - code that uses external types from System assemblies
+        var code = """
+            using System;
+            using System.Collections.Generic;
+
+            namespace TestProject.Services
+            {
+                public class MyService
+                {
+                    private readonly List<string> _items = new();
+
+                    public void Process()
+                    {
+                        Console.WriteLine("Hello");
+                        var dict = new Dictionary<string, int>();
+                    }
+                }
+            }
+            """;
+
+        var tree = CSharpSyntaxTree.ParseText(code);
+        var compilation = CSharpCompilation.Create("TestProject")
+            .AddReferences(MetadataReference.CreateFromFile(typeof(object).Assembly.Location))
+            .AddReferences(MetadataReference.CreateFromFile(typeof(Console).Assembly.Location))
+            .AddReferences(MetadataReference.CreateFromFile(typeof(List<>).Assembly.Location))
+            .AddSyntaxTrees(tree);
+
+        var semanticModel = compilation.GetSemanticModel(tree);
+        var root = await tree.GetRootAsync();
+
+        // Act
+        DependencyEdge.EnableDetails = true;
+        var dependencies = CouplingAnalyzer.AnalyzeDocumentCoupling(semanticModel, "test.cs", root);
+
+        var typeRefs = dependencies.Where(d => d.Type == DependencyType.TypeReference).ToList();
+        var nsRefs = dependencies.Where(d => d.Type == DependencyType.NamespaceReference).ToList();
+
+        // Assert - should find type references from MyService to external types
+        await Assert.That(typeRefs.Count).IsGreaterThan(0);
+
+        // Should find namespace references to System and System.Collections.Generic
+        var systemNsRefs = nsRefs.Where(d => d.ToEntity.StartsWith("System")).ToList();
+        await Assert.That(systemNsRefs.Count).IsGreaterThan(0);
+    }
+
+    [Test]
+    public async Task BuildCouplingAnalysisFromDependencies_WithOnlyInternalDependencies_HasZeroExternalDependencies()
+    {
+        // Arrange
+        var analyzer = CreateAnalyzer();
+        var workspace = new AdhocWorkspace();
+        var solution = workspace.CurrentSolution;
+        
+        var project1 = ProjectInfo.Create(
+            ProjectId.CreateNewId(),
+            VersionStamp.Default,
+            "Project1",
+            "Project1",
+            LanguageNames.CSharp);
+        var project2 = ProjectInfo.Create(
+            ProjectId.CreateNewId(),
+            VersionStamp.Default,
+            "Project2",
+            "Project2",
+            LanguageNames.CSharp);
+        
+        solution = solution.AddProject(project1).AddProject(project2);
+
+        var dependencies = new List<DependencyEdge>
+        {
+            // Only internal project references
+            new DependencyEdge("Project1", "Project2", DependencyType.ProjectReference, 1)
+        };
+
+        // Act
+        var analysis = analyzer.BuildCouplingAnalysisFromDependencies(solution, dependencies);
+
+        // Assert
+        var project1Coupling = analysis.ProjectCoupling.FirstOrDefault(p => p.EntityName == "Project1");
+        await Assert.That(project1Coupling).IsNotNull();
+        await Assert.That(project1Coupling!.InternalDependencies).IsEqualTo(1);
+        await Assert.That(project1Coupling.ExternalBclDependencies).IsEqualTo(0);
+        await Assert.That(project1Coupling.ExternalPackageDependencies).IsEqualTo(0);
+        await Assert.That(project1Coupling.TotalExternalDependencies).IsEqualTo(0);
+    }
 }

@@ -1,6 +1,7 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.Extensions.Logging;
+using System.Xml.Linq;
 
 using StructuraLens.Core.Abstractions;
 using StructuraLens.Core.Analysis.Logging;
@@ -308,13 +309,15 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
         });
 
         var typeMetricsList = typeMetricsBag.ToList();
+        var packageReferences = ReadPackageReferences(project.FilePath);
 
         var projectMetrics = new ProjectMetrics(
             Name: project.Name,
             FilePath: project.FilePath ?? "",
             Types: typeMetricsList)
         {
-            Diagnostics = diagnosticSummary
+            Diagnostics = diagnosticSummary,
+            PackageReferences = packageReferences
         };
 
         return projectMetrics;
@@ -325,6 +328,34 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
         // For single project analysis, create a temporary collector that we don't use
         using var tempCollector = new InMemoryDependencyCollector();
         return await AnalyzeProjectWithCouplingAsync(project, compilationCache, tempCollector, cancellationToken);
+    }
+
+    /// <summary>
+    /// Reads top-level PackageReference items from a .csproj file.
+    /// </summary>
+    private List<string> ReadPackageReferences(string? projectFilePath)
+    {
+        if (string.IsNullOrEmpty(projectFilePath) || !File.Exists(projectFilePath))
+        {
+            return [];
+        }
+
+        try
+        {
+            var doc = XDocument.Load(projectFilePath);
+            return doc.Descendants()
+                .Where(e => e.Name.LocalName == "PackageReference")
+                .Select(e => e.Attribute("Include")?.Value)
+                .Where(name => !string.IsNullOrEmpty(name))
+                .Distinct()
+                .OrderBy(name => name)
+                .ToList()!;
+        }
+        catch (Exception ex)
+        {
+            _warnings.Add($"Could not read package references from {projectFilePath}: {ex.Message}");
+            return [];
+        }
     }
 
     private static DiagnosticSummary CollectDiagnostics(Compilation compilation)

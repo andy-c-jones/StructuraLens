@@ -311,4 +311,26 @@ public class SolutionAnalyzerIntegrationTests
         var printSummary = programType.Methods.FirstOrDefault(m => m.FullName.Contains("PrintSummary"));
         await Assert.That(printSummary).IsNotNull();
     }
+
+    [Test]
+    public async Task AnalyzeSolutionAsync_OwnSolution_PopulatesPackageReferences()
+    {
+        var solutionPath = GetSolutionPath();
+        var analyzer = CreateAnalyzer();
+        var report = await analyzer.AnalyzeSolutionAsync(solutionPath);
+
+        var coreProject = report.Projects.FirstOrDefault(p => p.Name == "StructuraLens.Core");
+        await Assert.That(coreProject).IsNotNull();
+
+        // Core project has many PackageReferences (Microsoft.Build, Microsoft.CodeAnalysis, etc.)
+        await Assert.That(coreProject!.PackageReferences.Count).IsGreaterThanOrEqualTo(8);
+        await Assert.That(coreProject.PackageReferences).Contains("Microsoft.CodeAnalysis.CSharp.Workspaces");
+        await Assert.That(coreProject.PackageReferences).Contains("LibGit2Sharp");
+
+        // Tests project has FakeItEasy and TUnit
+        var testsProject = report.Projects.FirstOrDefault(p => p.Name == "StructuraLens.Tests");
+        await Assert.That(testsProject).IsNotNull();
+        await Assert.That(testsProject!.PackageReferences).Contains("FakeItEasy");
+        await Assert.That(testsProject.PackageReferences).Contains("TUnit");
+    }
 }
