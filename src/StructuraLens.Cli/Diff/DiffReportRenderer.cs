@@ -43,7 +43,13 @@ public sealed class DiffReportRenderer
         sb.AppendLine(BuildRow("Hidden", diff.Totals.BaseHidden, diff.Totals.HeadHidden, diff.Totals.HiddenDelta));
         sb.AppendLine();
 
-        // Section 2: Top Maintainability Changes (per-project breakdown)
+        // Section 2: Top New Diagnostics (up to 10 most important)
+        RenderTopNewDiagnostics(diff, sb);
+
+        // Section 3: Internal Dependencies Changes
+        RenderInternalDependenciesChanges(diff, sb, maxProjects);
+
+        // Section 4: Top Maintainability Changes (per-project breakdown)
         if (diff.Projects.Count > 0)
         {
             sb.AppendLine("### Top Maintainability Changes");
@@ -116,6 +122,97 @@ public sealed class DiffReportRenderer
         sb.AppendLine();
 
         return sb.ToString();
+    }
+
+    private static void RenderTopNewDiagnostics(AnalysisDiffReport diff, StringBuilder sb)
+    {
+        // Gather all new diagnostics (errors, warnings, info, hidden) with priority weighting
+        var allNewDiagnostics = new List<(DiagnosticDiffItem Item, int Priority)>();
+        
+        // Priority: Error=4, Warning=3, Info=2, Hidden=1
+        foreach (var error in diff.Diagnostics.TopNewErrors)
+            allNewDiagnostics.Add((error, 4));
+        foreach (var warning in diff.Diagnostics.TopNewWarnings)
+            allNewDiagnostics.Add((warning, 3));
+        
+        // Take top 10 by priority, then by project name for stability
+        var topDiagnostics = allNewDiagnostics
+            .OrderByDescending(x => x.Priority)
+            .ThenBy(x => x.Item.Project)
+            .Take(10)
+            .ToList();
+
+        if (topDiagnostics.Count > 0)
+        {
+            sb.AppendLine("### Top New Diagnostics");
+            sb.AppendLine();
+            
+            foreach (var (item, priority) in topDiagnostics)
+            {
+                var icon = priority switch
+                {
+                    4 => "🚨",  // Error
+                    3 => "⚠️",   // Warning
+                    2 => "ℹ️",   // Info
+                    _ => "💡"   // Hidden
+                };
+
+                sb.AppendLine($"{icon} **{item.Id}** in `{item.Project}`");
+                sb.AppendLine($"  - {Escape(item.Message)}");
+                sb.AppendLine($"  - Location: `{item.File}:{item.Line}:{item.Column}`");
+                sb.AppendLine();
+            }
+        }
+    }
+
+    private static void RenderInternalDependenciesChanges(AnalysisDiffReport diff, StringBuilder sb, int maxProjects)
+    {
+        // Find projects with internal dependency changes
+        var projectsWithDependencyChanges = diff.Projects
+            .Where(p => !p.IsAdded && !p.IsRemoved)
+            .Where(p => p.InternalDependenciesDelta != 0 || p.InternalDependentsDelta != 0)
+            .OrderByDescending(p => Math.Abs(p.InternalDependenciesDelta) + Math.Abs(p.InternalDependentsDelta))
+            .Take(maxProjects)
+            .ToList();
+
+        if (projectsWithDependencyChanges.Count > 0)
+        {
+            sb.AppendLine("### Internal Dependencies Changes");
+            sb.AppendLine();
+            sb.AppendLine("| Project | Dependencies Δ | Dependents Δ | Ratio (Base) | Ratio (Head) | Ratio Δ |");
+            sb.AppendLine("| --- | ---: | ---: | ---: | ---: | ---: |");
+
+            foreach (var project in projectsWithDependencyChanges)
+            {
+                var depsSemantic = project.InternalDependenciesDelta > 0 
+                    ? DeltaSemantic.BadIncrease 
+                    : project.InternalDependenciesDelta < 0 
+                    ? DeltaSemantic.GoodDecrease 
+                    : DeltaSemantic.Neutral;
+
+                var dependentsSemantic = project.InternalDependentsDelta > 0 
+                    ? DeltaSemantic.GoodIncrease  // More things depend on us = good if we're a library
+                    : project.InternalDependentsDelta < 0 
+                    ? DeltaSemantic.Neutral  // Fewer things depend on us
+                    : DeltaSemantic.Neutral;
+
+                var ratioSemantic = project.DependencyRatioDelta > 0.1 
+                    ? DeltaSemantic.BadIncrease  // Becoming more consumer-like
+                    : project.DependencyRatioDelta < -0.1 
+                    ? DeltaSemantic.GoodIncrease  // Becoming more provider-like
+                    : DeltaSemantic.Neutral;
+
+                sb.AppendLine(
+                    $"| {Escape(project.Name)} | " +
+                    $"{FormatDelta(project.InternalDependenciesDelta, depsSemantic)} | " +
+                    $"{FormatDelta(project.InternalDependentsDelta, dependentsSemantic)} | " +
+                    $"{project.Base.DependencyRatio:0.00} | " +
+                    $"{project.Head.DependencyRatio:0.00} | " +
+                    $"{FormatDelta(project.DependencyRatioDelta, ratioSemantic)} |");
+            }
+            
+            sb.AppendLine();
+        }
     }
 
     private static string BuildRow(string label, int baseValue, int headValue, int delta, DeltaSemantic semantic = DeltaSemantic.Neutral)
