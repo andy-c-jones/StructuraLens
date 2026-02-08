@@ -254,13 +254,8 @@ static async Task<int> ExecuteAnalysisAsync(
         {
             var exporter = serviceProvider.GetRequiredService<IReportExporter>();
             var compactReport = exporter.Export(report);
-            var jsonOptions = new JsonSerializerOptions
-            {
-                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-            };
 
-            var json = JsonSerializer.Serialize(compactReport, jsonOptions);
+            var json = JsonSerializer.Serialize(compactReport, JsonOptions.CompactOutput);
 
             if (!string.IsNullOrEmpty(effectiveOutput))
             {
@@ -289,14 +284,7 @@ static async Task<int> ExecuteAnalysisAsync(
         }
         else
         {
-            var jsonOptions = new JsonSerializerOptions
-            {
-                WriteIndented = true,
-                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-            };
-
-            var json = JsonSerializer.Serialize(report, jsonOptions);
+            var json = JsonSerializer.Serialize(report, JsonOptions.DefaultOutput);
 
             if (!string.IsNullOrEmpty(effectiveOutput))
             {
@@ -343,13 +331,8 @@ static async Task<int> ExecuteDiffAsync(
         var baseJson = await File.ReadAllTextAsync(basePath, cancellationToken);
         var headJson = await File.ReadAllTextAsync(headPath, cancellationToken);
 
-        var jsonOptions = new JsonSerializerOptions
-        {
-            PropertyNameCaseInsensitive = true
-        };
-
-        var baseReport = JsonSerializer.Deserialize<AnalysisReport>(baseJson, jsonOptions);
-        var headReport = JsonSerializer.Deserialize<AnalysisReport>(headJson, jsonOptions);
+        var baseReport = JsonSerializer.Deserialize<AnalysisReport>(baseJson, JsonOptions.Input);
+        var headReport = JsonSerializer.Deserialize<AnalysisReport>(headJson, JsonOptions.Input);
 
         if (baseReport == null || headReport == null)
         {
@@ -405,12 +388,7 @@ static async Task<int> ExecuteDiffAsync(
             return 0;
         }
 
-        var diffJson = JsonSerializer.Serialize(diff, new JsonSerializerOptions
-        {
-            WriteIndented = true,
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-        });
+        var diffJson = JsonSerializer.Serialize(diff, JsonOptions.DefaultOutput);
 
         if (!string.IsNullOrEmpty(output))
         {
@@ -662,4 +640,25 @@ static IServiceProvider ConfigureServices(LogLevel logLevel)
     services.AddSingleton<IReportGenerator, HtmlReportGenerator>();
 
     return services.BuildServiceProvider();
+}
+
+static class JsonOptions
+{
+    public static readonly JsonSerializerOptions DefaultOutput = new()
+    {
+        WriteIndented = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
+    
+    public static readonly JsonSerializerOptions CompactOutput = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
+    
+    public static readonly JsonSerializerOptions Input = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
 }
