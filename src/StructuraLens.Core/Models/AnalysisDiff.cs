@@ -82,9 +82,10 @@ public record ProjectDiff
     public double MaintainabilityDelta => Math.Round(Head.AvgMaintainabilityIndex - Base.AvgMaintainabilityIndex, 1);
     public int ErrorsDelta => Head.Errors - Base.Errors;
     public int WarningsDelta => Head.Warnings - Base.Warnings;
-    public int EfferentCouplingDelta => Head.EfferentCoupling - Base.EfferentCoupling;
-    public int AfferentCouplingDelta => Head.AfferentCoupling - Base.AfferentCoupling;
-    public double InstabilityDelta => Math.Round(Head.Instability - Base.Instability, 2);
+    public int InternalDependenciesDelta => Head.InternalDependencies - Base.InternalDependencies;
+    public int InternalDependentsDelta => Head.InternalDependents - Base.InternalDependents;
+    public double DependencyRatioDelta => Math.Round(Head.DependencyRatio - Base.DependencyRatio, 2);
+    public int ExternalDependenciesDelta => Head.ExternalDependencies - Base.ExternalDependencies;
 }
 
 /// <summary>Project metrics used in diff output.</summary>
@@ -96,9 +97,12 @@ public record ProjectDiffMetrics
     public int LinesOfCode { get; init; }
     public int MaxDepthOfInheritance { get; init; }
     public double AvgMaintainabilityIndex { get; init; }
-    public int EfferentCoupling { get; init; }
-    public int AfferentCoupling { get; init; }
-    public double Instability { get; init; }
+    public int InternalDependencies { get; init; }
+    public int InternalDependents { get; init; }
+    public double DependencyRatio { get; init; }
+    public int ExternalDependencies { get; init; }
+    public int ExternalBclDependencies { get; init; }
+    public int ExternalPackageDependencies { get; init; }
     public int Errors { get; init; }
     public int Warnings { get; init; }
 }

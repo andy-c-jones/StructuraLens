@@ -69,9 +69,12 @@ Each project is represented as an object with aggregated metrics:
 | `loc` | `int` | Total lines of executable code |
 | `dit` | `int` | Maximum depth of inheritance |
 | `mi` | `double` | Average maintainability index (0-100) |
-| `ce` | `int` | Efferent coupling (outbound dependencies) |
-| `ca` | `int` | Afferent coupling (inbound dependencies) |
-| `i` | `double` | Instability ratio (0=stable, 1=unstable) |
+| `id` | `int` | Internal dependencies (depends on other projects in solution) |
+| `idx` | `int` | Internal dependents (other projects that depend on this) |
+| `dr` | `double` | Dependency ratio: id/(id+idx), range 0-1 where 0=provider, 1=consumer |
+| `ed` | `int` | Total external dependencies (BCL + packages) |
+| `edb` | `int` | External BCL dependencies (System.*, Microsoft.*) |
+| `edp` | `int` | External package dependencies (third-party) |
 | `err` | `int` | Compiler error count (omitted if 0) |
 | `warn` | `int` | Compiler warning count (omitted if 0) |
 
@@ -159,13 +162,29 @@ The graph section contains pre-processed data for rendering dependency visualiza
 
 #### Nodes (`n`)
 
-Array of node tuples: `[id, name, size]`
+**Project nodes** (in `g.p.n`): Array of tuples `[id, name, loc]`
 
 | Index | Type | Description |
 |-------|------|-------------|
 | 0 | `int` | Unique node ID (0-indexed) |
-| 1 | `string` | Node name (project name or namespace) |
-| 2 | `int` | Node size (lines of code, for bubble sizing) |
+| 1 | `string` | Project name |
+| 2 | `int` | Lines of code (for bubble sizing) |
+
+**Namespace nodes** (in `g.ns.n`): Array of tuples `[id, name, loc, cc, mi, tc, mc, id, idx, dr, ed]`
+
+| Index | Type | Description |
+|-------|------|-------------|
+| 0 | `int` | Unique node ID (0-indexed) |
+| 1 | `string` | Namespace name |
+| 2 | `int` | Lines of code |
+| 3 | `int` | Cyclomatic complexity |
+| 4 | `double` | Maintainability index |
+| 5 | `int` | Type count |
+| 6 | `int` | Method count |
+| 7 | `int` | Internal dependencies |
+| 8 | `int` | Internal dependents |
+| 9 | `double` | Dependency ratio (0-1) |
+| 10 | `int` | External dependencies |
 
 #### Edges (`e`)
 
@@ -189,8 +208,8 @@ Array of edge tuples: `[sourceId, targetId, weight]`
   "p": "/home/dev/MyApp/MyApp.sln",
   "t": 1768063200000,
   "prj": [
-    {"n":"MyApp.Core","tc":25,"mc":150,"cc":450,"loc":1200,"dit":3,"mi":72.5,"ce":5,"ca":12,"i":0.29},
-    {"n":"MyApp.Api","tc":10,"mc":60,"cc":180,"loc":500,"dit":1,"mi":68.0,"ce":8,"ca":0,"i":1.0}
+    {"n":"MyApp.Core","tc":25,"mc":150,"cc":450,"loc":1200,"dit":3,"mi":72.5,"id":5,"idx":12,"dr":0.29,"ed":20,"edb":15,"edp":5},
+    {"n":"MyApp.Api","tc":10,"mc":60,"cc":180,"loc":500,"dit":1,"mi":68.0,"id":8,"idx":0,"dr":1.0,"ed":30,"edb":25,"edp":5}
   ],
   "g": {
     "p": {

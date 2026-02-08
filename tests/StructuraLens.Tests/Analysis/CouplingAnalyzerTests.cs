@@ -208,7 +208,7 @@ public class CouplingAnalyzerTests
         
         var project1Coupling = analysis.ProjectCoupling.FirstOrDefault(p => p.EntityName == "Project1");
         await Assert.That(project1Coupling).IsNotNull();
-        await Assert.That(project1Coupling!.OutboundDependencies.Count).IsGreaterThan(0);
+        await Assert.That(project1Coupling!.InternalOutbound.Count).IsGreaterThan(0);
     }
 
     [Test]

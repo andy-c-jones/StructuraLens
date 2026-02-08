@@ -5,7 +5,7 @@ A high-performance .NET 10 CLI tool for analyzing C# codebases. StructuraLens pr
 ## Features
 
 - **Code Complexity Metrics**: Cyclomatic Complexity, Halstead Volume, Lines of Executable Code, Depth of Inheritance, and Maintainability Index calculated at method, type, and project levels
-- **Coupling Analysis**: Tracks dependencies between projects, namespaces, and types with efferent coupling (Ce), afferent coupling (Ca), and instability (I) metrics
+- **Coupling Analysis**: Tracks dependencies between projects, namespaces, and types with internal/external split and dependency ratio metrics
 - **Multiple Output Formats**: JSON (machine-readable), HTML (interactive reports), Compact (99% smaller), and Summary (console-friendly)
 - **Memory-Efficient**: Adaptive aggregation strategies automatically handle large codebases with hundreds of projects
 - **Compiler Diagnostics**: Collects and reports all Roslyn compiler diagnostics with severity levels

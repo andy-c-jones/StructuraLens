@@ -98,9 +98,12 @@ public sealed class DiffCalculator
             LinesOfCode = project.TotalLinesOfExecutableCode,
             MaxDepthOfInheritance = project.MaxDepthOfInheritance,
             AvgMaintainabilityIndex = Math.Round(avgMi, 1),
-            EfferentCoupling = projectCoupling?.EfferentCoupling ?? 0,
-            AfferentCoupling = projectCoupling?.AfferentCoupling ?? 0,
-            Instability = Math.Round(projectCoupling?.Instability ?? 0, 2),
+            InternalDependencies = projectCoupling?.InternalDependencies ?? 0,
+            InternalDependents = projectCoupling?.InternalDependents ?? 0,
+            DependencyRatio = Math.Round(projectCoupling?.DependencyRatio ?? 0, 2),
+            ExternalDependencies = projectCoupling?.TotalExternalDependencies ?? 0,
+            ExternalBclDependencies = projectCoupling?.ExternalBclDependencies ?? 0,
+            ExternalPackageDependencies = projectCoupling?.ExternalPackageDependencies ?? 0,
             Errors = project.Diagnostics?.ErrorCount ?? 0,
             Warnings = project.Diagnostics?.WarningCount ?? 0
         };

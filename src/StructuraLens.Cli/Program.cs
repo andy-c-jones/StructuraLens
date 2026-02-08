@@ -452,14 +452,19 @@ static void PrintSummary(AnalysisReport report, ILogger logger)
         var coupling = report.CouplingAnalysis.Summary;
         Console.WriteLine($"Mode: {coupling.CouplingMode}");
         Console.WriteLine($"Total Dependencies: {coupling.TotalDependencies}");
-        Console.WriteLine($"Average Efferent Coupling: {coupling.AverageEfferentCoupling:F1}");
-        Console.WriteLine($"Average Afferent Coupling: {coupling.AverageAfferentCoupling:F1}");
-        Console.WriteLine($"Average Instability: {coupling.AverageInstability:F2}");
+        Console.WriteLine($"Average Internal Dependencies: {coupling.AverageInternalDependencies:F1}");
+        Console.WriteLine($"Average Internal Dependents: {coupling.AverageInternalDependents:F1}");
+        Console.WriteLine($"Average Dependency Ratio: {coupling.AverageDependencyRatio:F2}");
+        Console.WriteLine($"Average External Dependencies: {coupling.AverageExternalDependencies:F1}");
+        Console.WriteLine($"  - BCL (System/Microsoft): {coupling.AverageExternalBclDependencies:F1}");
+        Console.WriteLine($"  - Third-party Packages: {coupling.AverageExternalPackageDependencies:F1}");
         
         if (!string.IsNullOrEmpty(coupling.MostCoupledEntity))
             Console.WriteLine($"Most Coupled Entity: {coupling.MostCoupledEntity}");
-        if (!string.IsNullOrEmpty(coupling.MostUnstableEntity))
-            Console.WriteLine($"Most Unstable Entity: {coupling.MostUnstableEntity}");
+        if (!string.IsNullOrEmpty(coupling.MostDependentEntity))
+            Console.WriteLine($"Most Referenced Component: {coupling.MostDependentEntity}");
+        if (!string.IsNullOrEmpty(coupling.HighestConsumerEntity))
+            Console.WriteLine($"Highest-Level Consumer: {coupling.HighestConsumerEntity}");
     }
 
     // Display aggregation stats
@@ -528,9 +533,12 @@ static void PrintSummary(AnalysisReport report, ILogger logger)
             
             if (projectCoupling != null)
             {
-                Console.WriteLine($"  Efferent Coupling (Ce): {projectCoupling.EfferentCoupling}");
-                Console.WriteLine($"  Afferent Coupling (Ca): {projectCoupling.AfferentCoupling}");
-                Console.WriteLine($"  Instability (I): {projectCoupling.Instability:F2}");
+                Console.WriteLine($"  Internal Dependencies: {projectCoupling.InternalDependencies}");
+                Console.WriteLine($"  Internal Dependents: {projectCoupling.InternalDependents}");
+                Console.WriteLine($"  Dependency Ratio: {projectCoupling.DependencyRatio:F2}");
+                Console.WriteLine($"  External Dependencies: {projectCoupling.TotalExternalDependencies}");
+                Console.WriteLine($"    - BCL: {projectCoupling.ExternalBclDependencies}");
+                Console.WriteLine($"    - Packages: {projectCoupling.ExternalPackageDependencies}");
             }
         }
 

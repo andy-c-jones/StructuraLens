@@ -29,9 +29,12 @@ export interface CompactProject {
   loc: number;
   dit: number;
   mi: number;
-  ce: number;
-  ca: number;
-  i: number;
+  id: number;
+  idx: number;
+  dr: number;
+  ed: number;
+  edb: number;
+  edp: number;
   err?: number;
   warn?: number;
   types?: CompactType[];
@@ -177,7 +180,7 @@ export interface DiagnosticDiffSummary {
 
 /**
  * Parsed namespace node from the graph layer.
- * Namespace nodes: [id, name, loc, cc, mi, tc, mc, ce, ca, instability]
+ * Namespace nodes: [id, name, loc, cc, mi, tc, mc, id, idx, dr, ed]
  */
 export interface NamespaceNode {
   id: number;
@@ -187,9 +190,10 @@ export interface NamespaceNode {
   mi: number;
   tc: number;
   mc: number;
-  ce: number;
-  ca: number;
-  instability: number;
+  internalDependencies: number;
+  internalDependents: number;
+  dependencyRatio: number;
+  externalDependencies: number;
   size: number;
   depCount: number;
   radius?: number;

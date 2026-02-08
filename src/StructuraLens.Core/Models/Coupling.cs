@@ -49,66 +49,115 @@ public enum DependencyType
 
 /// <summary>
 /// Coupling metrics for a specific entity (project, namespace, type, etc.).
+/// Separates internal (within solution) and external (third-party) dependencies.
 /// </summary>
 public record CouplingMetrics(
     string EntityName,
     DependencyType EntityType)
 {
-    /// <summary>Dependencies this entity has on others (outbound coupling).</summary>
-    public IReadOnlyList<DependencyEdge> OutboundDependencies { get; init; } = [];
+    /// <summary>Internal dependencies (within solution) - outbound.</summary>
+    public IReadOnlyList<DependencyEdge> InternalOutbound { get; init; } = [];
     
-    /// <summary>Dependencies other entities have on this one (inbound coupling).</summary>
-    public IReadOnlyList<DependencyEdge> InboundDependencies { get; init; } = [];
+    /// <summary>Internal dependencies (within solution) - inbound.</summary>
+    public IReadOnlyList<DependencyEdge> InternalInbound { get; init; } = [];
+    
+    /// <summary>External dependencies (third-party) - outbound only.</summary>
+    public IReadOnlyList<DependencyEdge> ExternalOutbound { get; init; } = [];
 
     // Pre-computed metrics (lazily initialized on first access, then cached)
-    private int? _efferentCoupling;
-    private int? _afferentCoupling;
-    private int? _totalCouplingStrength;
+    private int? _internalDependencies;
+    private int? _internalDependents;
+    private int? _externalBclDependencies;
+    private int? _externalPackageDependencies;
+    private int? _totalReferenceStrength;
 
-    /// <summary>Efferent coupling (Ce) - number of entities this depends on.</summary>
-    public int EfferentCoupling => _efferentCoupling ??= ComputeEfferentCoupling();
+    /// <summary>Number of internal entities this depends on.</summary>
+    public int InternalDependencies => _internalDependencies ??= ComputeUniqueTargets(InternalOutbound);
     
-    /// <summary>Afferent coupling (Ca) - number of entities that depend on this.</summary>
-    public int AfferentCoupling => _afferentCoupling ??= ComputeAfferentCoupling();
+    /// <summary>Number of internal entities that depend on this.</summary>
+    public int InternalDependents => _internalDependents ??= ComputeUniqueSources(InternalInbound);
     
-    /// <summary>Instability (I) = Ce / (Ca + Ce). Range 0-1, where 0 = stable, 1 = unstable.</summary>
-    public double Instability
+    /// <summary>
+    /// Dependency ratio: InternalDependencies / (InternalDependencies + InternalDependents).
+    /// Range 0-1, where 0 = pure provider (stable), 1 = pure consumer (unstable).
+    /// </summary>
+    public double DependencyRatio
     {
         get
         {
-            var ce = EfferentCoupling;
-            var ca = AfferentCoupling;
-            return ce + ca > 0 ? (double)ce / (ce + ca) : 0;
+            var deps = InternalDependencies;
+            var dependents = InternalDependents;
+            return deps + dependents > 0 ? (double)deps / (deps + dependents) : 0;
         }
     }
     
-    /// <summary>Total coupling strength based on reference counts.</summary>
-    public int TotalCouplingStrength => _totalCouplingStrength ??= ComputeTotalCouplingStrength();
+    /// <summary>Number of external BCL dependencies (System.*, Microsoft.*).</summary>
+    public int ExternalBclDependencies => _externalBclDependencies ??= ComputeExternalBcl();
+    
+    /// <summary>Number of external third-party package dependencies.</summary>
+    public int ExternalPackageDependencies => _externalPackageDependencies ??= ComputeExternalPackages();
+    
+    /// <summary>Total external dependencies (BCL + packages).</summary>
+    public int TotalExternalDependencies => ExternalBclDependencies + ExternalPackageDependencies;
+    
+    /// <summary>Total reference strength based on all reference counts.</summary>
+    public int TotalReferenceStrength => _totalReferenceStrength ??= ComputeTotalReferenceStrength();
 
-    private int ComputeEfferentCoupling()
+    private int ComputeUniqueTargets(IReadOnlyList<DependencyEdge> edges)
     {
         var seen = new HashSet<string>();
-        foreach (var d in OutboundDependencies)
+        foreach (var d in edges)
             seen.Add(d.ToEntity);
         return seen.Count;
     }
 
-    private int ComputeAfferentCoupling()
+    private int ComputeUniqueSources(IReadOnlyList<DependencyEdge> edges)
     {
         var seen = new HashSet<string>();
-        foreach (var d in InboundDependencies)
+        foreach (var d in edges)
             seen.Add(d.FromEntity);
         return seen.Count;
     }
 
-    private int ComputeTotalCouplingStrength()
+    private int ComputeExternalBcl()
+    {
+        var seen = new HashSet<string>();
+        foreach (var d in ExternalOutbound)
+        {
+            if (IsBclNamespace(d.ToEntity))
+                seen.Add(d.ToEntity);
+        }
+        return seen.Count;
+    }
+
+    private int ComputeExternalPackages()
+    {
+        var seen = new HashSet<string>();
+        foreach (var d in ExternalOutbound)
+        {
+            if (!IsBclNamespace(d.ToEntity))
+                seen.Add(d.ToEntity);
+        }
+        return seen.Count;
+    }
+
+    private int ComputeTotalReferenceStrength()
     {
         var total = 0;
-        foreach (var d in OutboundDependencies)
+        foreach (var d in InternalOutbound)
             total += d.ReferenceCount;
-        foreach (var d in InboundDependencies)
+        foreach (var d in InternalInbound)
+            total += d.ReferenceCount;
+        foreach (var d in ExternalOutbound)
             total += d.ReferenceCount;
         return total;
+    }
+
+    private static bool IsBclNamespace(string ns)
+    {
+        return ns.StartsWith("System.") || 
+               ns.Equals("System") ||
+               ns.StartsWith("Microsoft.");
     }
 }
 
@@ -143,20 +192,32 @@ public record CouplingSummary
     /// <summary>Total number of dependency edges.</summary>
     public int TotalDependencies { get; init; }
     
-    /// <summary>Average efferent coupling across all entities.</summary>
-    public double AverageEfferentCoupling { get; init; }
+    /// <summary>Average internal dependencies across all entities.</summary>
+    public double AverageInternalDependencies { get; init; }
     
-    /// <summary>Average afferent coupling across all entities.</summary>
-    public double AverageAfferentCoupling { get; init; }
+    /// <summary>Average internal dependents across all entities.</summary>
+    public double AverageInternalDependents { get; init; }
     
-    /// <summary>Average instability across all entities.</summary>
-    public double AverageInstability { get; init; }
+    /// <summary>Average dependency ratio across all entities.</summary>
+    public double AverageDependencyRatio { get; init; }
     
-    /// <summary>Most coupled entity (highest total coupling strength).</summary>
+    /// <summary>Average external dependencies across all entities.</summary>
+    public double AverageExternalDependencies { get; init; }
+    
+    /// <summary>Average external BCL dependencies across all entities.</summary>
+    public double AverageExternalBclDependencies { get; init; }
+    
+    /// <summary>Average external package dependencies across all entities.</summary>
+    public double AverageExternalPackageDependencies { get; init; }
+    
+    /// <summary>Most coupled entity (highest total reference strength).</summary>
     public string? MostCoupledEntity { get; init; }
     
-    /// <summary>Most unstable entity (highest instability score).</summary>
-    public string? MostUnstableEntity { get; init; }
+    /// <summary>Most referenced/reused entity (highest internal dependents).</summary>
+    public string? MostDependentEntity { get; init; }
+    
+    /// <summary>Highest-level consumer (highest dependency ratio).</summary>
+    public string? HighestConsumerEntity { get; init; }
     
     /// <summary>The coupling mode used for this analysis.</summary>
     public string CouplingMode { get; init; } = "All";
