@@ -1,6 +1,5 @@
 using StructuraLens.Core.Export;
 using StructuraLens.Core.Models;
-using TUnit.Core;
 
 namespace StructuraLens.Tests.Export;
 

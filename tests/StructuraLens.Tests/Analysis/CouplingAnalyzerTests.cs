@@ -6,7 +6,6 @@ using Microsoft.Extensions.Logging;
 using StructuraLens.Core.Abstractions;
 using StructuraLens.Core.Analysis;
 using StructuraLens.Core.Models;
-using TUnit.Core;
 
 namespace StructuraLens.Tests.Analysis;
 

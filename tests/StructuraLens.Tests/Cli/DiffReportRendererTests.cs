@@ -1,8 +1,5 @@
 using StructuraLens.Cli.Diff;
 using StructuraLens.Core.Models;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-using TUnit.Core;
 
 namespace StructuraLens.Tests.Cli;
 

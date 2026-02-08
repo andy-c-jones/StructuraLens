@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using StructuraLens.Core.Infrastructure;
-using TUnit.Core;
 
 namespace StructuraLens.Tests.Infrastructure;
 

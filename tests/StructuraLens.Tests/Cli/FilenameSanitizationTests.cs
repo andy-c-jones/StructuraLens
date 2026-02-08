@@ -1,5 +1,3 @@
-using TUnit.Core;
-
 namespace StructuraLens.Tests.Cli;
 
 public class FilenameSanitizationTests
