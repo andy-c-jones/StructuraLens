@@ -2,6 +2,14 @@ name: StructuraLens
 on:
   pull_request:
     branches: [ main ]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - '**.cs'
+      - '**.csproj'
+      - '**.sln'
+      - '**.slnx'
+      - '.github/workflows/structuralens.yml'
 
 permissions:
   contents: read

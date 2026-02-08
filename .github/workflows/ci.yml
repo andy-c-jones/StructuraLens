@@ -12,7 +12,7 @@ permissions:
   pull-requests: write
 
 jobs:
-  build:
+  build-and-test:
     runs-on: ubuntu-latest
 
     steps:
@@ -39,7 +39,59 @@ jobs:
       - name: Test
         run: dotnet test --no-build -c Release --verbosity normal
 
+      - name: Upload build artifacts
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-output
+          path: |
+            src/StructuraLens.Cli/bin/Release/
+            src/StructuraLens.Core/bin/Release/
+          retention-days: 1
+
+  cli-verification:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for code changes
+        id: check-changes
+        run: |
+          git fetch origin ${{ github.base_ref }}
+          
+          # Get changed files
+          CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD)
+          
+          # Check if code files changed (src/, tests/, or relevant CI files)
+          if echo "$CHANGED_FILES" | grep -qE '(^src/|^tests/|\.cs$|\.csproj$|\.sln$|\.slnx$|\.github/workflows/ci\.yml$|\.github/actions/analyze/)'; then
+            echo "code_changed=true" >> $GITHUB_OUTPUT
+            echo "Code changes detected"
+          else
+            echo "code_changed=false" >> $GITHUB_OUTPUT
+            echo "No code changes detected (docs/config only)"
+          fi
+
+      - name: Setup .NET
+        if: steps.check-changes.outputs.code_changed == 'true'
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Download build artifacts
+        if: steps.check-changes.outputs.code_changed == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: build-output
+          path: .
+
       - name: Publish self-contained (linux-x64)
+        if: steps.check-changes.outputs.code_changed == 'true'
         run: |
           dotnet publish src/StructuraLens.Cli/StructuraLens.Cli.csproj \
             -c Release \
@@ -47,8 +99,8 @@ jobs:
             --self-contained true \
             -o ./artifacts/publish/linux-x64
 
-      - name: Run StructuraLens analysis
-        if: ${{ github.event_name == 'pull_request' }}
+      - name: Run StructuraLens CLI test
+        if: steps.check-changes.outputs.code_changed == 'true'
         uses: ./.github/actions/analyze
         with:
           solution: 'StructuraLens.slnx'
@@ -57,7 +109,7 @@ jobs:
           executable-path: './artifacts/publish/linux-x64/StructuraLens.Cli'
 
       - name: Upload analysis report
-        if: ${{ github.event_name == 'pull_request' }}
+        if: steps.check-changes.outputs.code_changed == 'true'
         uses: actions/upload-artifact@v4
         id: upload-report
         with:
@@ -65,7 +117,7 @@ jobs:
           path: structuralens-report.html
 
       - name: Comment on PR
-        if: ${{ github.event_name == 'pull_request' }}
+        if: steps.check-changes.outputs.code_changed == 'true'
         uses: actions/github-script@v7
         with:
           script: |
@@ -74,5 +126,5 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: `📊 Analysis complete. Report available [here](${artifactUrl}).`
+              body: `📊 StructuraLens CLI test completed. HTML report generated as verification. Download [here](${artifactUrl}).`
             });
