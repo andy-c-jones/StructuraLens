@@ -27,18 +27,15 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore
 
-      - name: Semantic Release
-        uses: cycjimmy/semantic-release-action@v4
-        id: semantic
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build Release
+        run: dotnet build --no-restore -c Release
+
+      - name: Test
+        run: dotnet test --no-build -c Release --verbosity normal
 
       - name: Build multi-platform binaries
-        if: steps.semantic.outputs.new_release_published == 'true'
-        env:
-          VERSION: ${{ steps.semantic.outputs.new_release_version }}
         run: |
-          echo "Building binaries for version: ${VERSION}"
+          echo "Building binaries for all platforms..."
           
           # Build for each platform
           dotnet publish src/StructuraLens.Cli/StructuraLens.Cli.csproj \
@@ -68,7 +65,6 @@ jobs:
             -p:IncludeAllContentForSelfExtract=true \
             -o ./publish/osx-arm64
 
-
           dotnet publish src/StructuraLens.Cli/StructuraLens.Cli.csproj \
             -c Release \
             -r win-x64 \
@@ -78,21 +74,46 @@ jobs:
             -p:IncludeAllContentForSelfExtract=true \
             -o ./publish/win-x64
 
-          # Create release archives
+          echo "All platform builds completed successfully!"
+
+      - name: Create release archives
+        run: |
           echo "Creating release archives..."
           mkdir -p artifacts
           
           cd publish/linux-arm64
-          tar -czf ../../artifacts/structuralens-linux-arm64-${VERSION}.tar.gz StructuraLens.Cli LICENSE.md
+          tar -czf ../../artifacts/structuralens-linux-arm64.tar.gz StructuraLens.Cli LICENSE.md
           cd ../linux-x64
-          tar -czf ../../artifacts/structuralens-linux-x64-${VERSION}.tar.gz StructuraLens.Cli LICENSE.md
+          tar -czf ../../artifacts/structuralens-linux-x64.tar.gz StructuraLens.Cli LICENSE.md
           cd ../osx-arm64
-          tar -czf ../../artifacts/structuralens-macos-arm64-${VERSION}.tar.gz StructuraLens.Cli LICENSE.md
+          tar -czf ../../artifacts/structuralens-macos-arm64.tar.gz StructuraLens.Cli LICENSE.md
           cd ../win-x64
-          zip ../../artifacts/structuralens-windows-x64-${VERSION}.zip StructuraLens.Cli.exe LICENSE.md
+          zip ../../artifacts/structuralens-windows-x64.zip StructuraLens.Cli.exe LICENSE.md
           cd ../..
 
-          echo "Build complete! Artifacts:"
+          echo "Archives created! Artifacts:"
+          ls -lh artifacts/
+
+      - name: Semantic Release
+        uses: cycjimmy/semantic-release-action@v4
+        id: semantic
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Rename artifacts with version
+        if: steps.semantic.outputs.new_release_published == 'true'
+        env:
+          VERSION: ${{ steps.semantic.outputs.new_release_version }}
+        run: |
+          echo "Renaming artifacts to include version: ${VERSION}"
+          cd artifacts
+          mv structuralens-linux-arm64.tar.gz structuralens-linux-arm64-${VERSION}.tar.gz
+          mv structuralens-linux-x64.tar.gz structuralens-linux-x64-${VERSION}.tar.gz
+          mv structuralens-macos-arm64.tar.gz structuralens-macos-arm64-${VERSION}.tar.gz
+          mv structuralens-windows-x64.zip structuralens-windows-x64-${VERSION}.zip
+          cd ..
+          
+          echo "Final artifacts:"
           ls -lh artifacts/
 
       - name: Upload release assets
