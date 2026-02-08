@@ -1,0 +1,56 @@
+version: 2
+updates:
+  # GitHub Actions dependencies
+  # Checks for updates to actions used in workflows and composite actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "friday"
+      time: "09:00"
+      timezone: "UTC"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+
+  # NuGet dependencies - Production (Core + CLI)
+  # Monitors all NuGet packages except test dependencies
+  - package-ecosystem: "nuget"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "friday"
+      time: "09:00"
+      timezone: "UTC"
+    groups:
+      production-dependencies:
+        patterns:
+          - "*"
+        exclude-patterns:
+          - "FakeItEasy"
+          - "TUnit"
+          - "Microsoft.Testing.*"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+
+  # NuGet dependencies - Development (Tests)
+  # Monitors test-related packages separately
+  - package-ecosystem: "nuget"
+    directory: "/tests"
+    schedule:
+      interval: "weekly"
+      day: "friday"
+      time: "09:00"
+      timezone: "UTC"
+    groups:
+      development-dependencies:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
