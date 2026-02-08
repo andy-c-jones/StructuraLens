@@ -12,41 +12,8 @@ using StructuraLens.Core.Export;
 using StructuraLens.Core.Infrastructure;
 using StructuraLens.Core.Models;
 
-// Configure DI container
-var services = new ServiceCollection();
-
-// Logging configuration
-services.AddLogging(builder =>
-{
-    builder
-        .AddConsole(options =>
-        {
-            options.FormatterName = "simple";
-        })
-        .SetMinimumLevel(LogLevel.Information);
-});
-
-// CLI logging (for Program class)
-services.AddSingleton<ILogger<Program>>(sp => 
-    sp.GetRequiredService<ILoggerFactory>().CreateLogger<Program>());
-
-// Core services
-services.AddSingleton<IMetricsCalculator, MetricsCalculator>();
-services.AddSingleton<ICouplingAnalyzer, CouplingAnalyzer>();
-services.AddSingleton<ISolutionAnalyzer, SolutionAnalyzer>();
-
-// Infrastructure services
-services.AddSingleton<INuGetRestorer, NuGetRestorer>();
-services.AddSingleton<IMSBuildRegistrationService, MSBuildRegistrationService>();
-services.AddSingleton<IMSBuildWorkspaceFactory, MSBuildWorkspaceFactory>();
-services.AddSingleton<IFileSystemService, FileSystemService>();
-services.AddSingleton<IGitRepositoryService, GitRepositoryService>();
-
-// Export services
-services.AddSingleton<IReportExporter, CompactReportExporter>();
-services.AddSingleton<IReportGenerator, HtmlReportGenerator>();
-
-var serviceProvider = services.BuildServiceProvider();
+// Configure DI container with default logging
+var serviceProvider = ConfigureServices(LogLevel.Information);
 
 // Create options
 var outputOption = new Option<string?>("--out", "-o")
@@ -144,42 +111,9 @@ analyzeCommand.SetAction(async (parseResult, cancellationToken) =>
     };
 
     // Adjust logging level based on verbose flag
-    IServiceProvider executionServiceProvider;
-    if (verbose)
-    {
-        var verboseServices = new ServiceCollection();
-        verboseServices.AddLogging(builder =>
-        {
-            builder
-                .AddConsole(options =>
-                {
-                    options.FormatterName = "simple";
-                })
-                .SetMinimumLevel(LogLevel.Debug);
-        });
-        
-        // CLI logging (for Program class)
-        verboseServices.AddSingleton<ILogger<Program>>(sp => 
-            sp.GetRequiredService<ILoggerFactory>().CreateLogger<Program>());
-        
-        // Register all other services
-        verboseServices.AddSingleton<IMetricsCalculator, MetricsCalculator>();
-        verboseServices.AddSingleton<ICouplingAnalyzer, CouplingAnalyzer>();
-        verboseServices.AddSingleton<ISolutionAnalyzer, SolutionAnalyzer>();
-        verboseServices.AddSingleton<INuGetRestorer, NuGetRestorer>();
-        verboseServices.AddSingleton<IMSBuildRegistrationService, MSBuildRegistrationService>();
-        verboseServices.AddSingleton<IMSBuildWorkspaceFactory, MSBuildWorkspaceFactory>();
-        verboseServices.AddSingleton<IFileSystemService, FileSystemService>();
-        verboseServices.AddSingleton<IGitRepositoryService, GitRepositoryService>();
-        verboseServices.AddSingleton<IReportExporter, CompactReportExporter>();
-        verboseServices.AddSingleton<IReportGenerator, HtmlReportGenerator>();
-        
-        executionServiceProvider = verboseServices.BuildServiceProvider();
-    }
-    else
-    {
-        executionServiceProvider = serviceProvider;
-    }
+    var executionServiceProvider = verbose 
+        ? ConfigureServices(LogLevel.Debug)
+        : serviceProvider;
 
     return await ExecuteAnalysisAsync(path, output, format, analysisOptions, executionServiceProvider, cancellationToken);
 });
@@ -320,13 +254,8 @@ static async Task<int> ExecuteAnalysisAsync(
         {
             var exporter = serviceProvider.GetRequiredService<IReportExporter>();
             var compactReport = exporter.Export(report);
-            var jsonOptions = new JsonSerializerOptions
-            {
-                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-            };
 
-            var json = JsonSerializer.Serialize(compactReport, jsonOptions);
+            var json = JsonSerializer.Serialize(compactReport, JsonOptions.CompactOutput);
 
             if (!string.IsNullOrEmpty(effectiveOutput))
             {
@@ -355,14 +284,7 @@ static async Task<int> ExecuteAnalysisAsync(
         }
         else
         {
-            var jsonOptions = new JsonSerializerOptions
-            {
-                WriteIndented = true,
-                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-            };
-
-            var json = JsonSerializer.Serialize(report, jsonOptions);
+            var json = JsonSerializer.Serialize(report, JsonOptions.DefaultOutput);
 
             if (!string.IsNullOrEmpty(effectiveOutput))
             {
@@ -409,13 +331,8 @@ static async Task<int> ExecuteDiffAsync(
         var baseJson = await File.ReadAllTextAsync(basePath, cancellationToken);
         var headJson = await File.ReadAllTextAsync(headPath, cancellationToken);
 
-        var jsonOptions = new JsonSerializerOptions
-        {
-            PropertyNameCaseInsensitive = true
-        };
-
-        var baseReport = JsonSerializer.Deserialize<AnalysisReport>(baseJson, jsonOptions);
-        var headReport = JsonSerializer.Deserialize<AnalysisReport>(headJson, jsonOptions);
+        var baseReport = JsonSerializer.Deserialize<AnalysisReport>(baseJson, JsonOptions.Input);
+        var headReport = JsonSerializer.Deserialize<AnalysisReport>(headJson, JsonOptions.Input);
 
         if (baseReport == null || headReport == null)
         {
@@ -471,12 +388,7 @@ static async Task<int> ExecuteDiffAsync(
             return 0;
         }
 
-        var diffJson = JsonSerializer.Serialize(diff, new JsonSerializerOptions
-        {
-            WriteIndented = true,
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-        });
+        var diffJson = JsonSerializer.Serialize(diff, JsonOptions.DefaultOutput);
 
         if (!string.IsNullOrEmpty(output))
         {
@@ -576,11 +488,11 @@ static void PrintSummary(AnalysisReport report, ILogger logger)
         Console.WriteLine($"  Total LOC: {project.TotalLinesOfExecutableCode}");
         Console.WriteLine($"  Max DIT: {project.MaxDepthOfInheritance}");
 
-        var allMethods = project.Types.SelectMany(t => t.Methods).ToList();
+        var allMethods = project.Types.GetAllMethods();
 
         if (allMethods.Count > 0)
         {
-            var avgMI = allMethods.Average(m => m.MaintainabilityIndex);
+            var avgMI = allMethods.CalculateAverageMaintainabilityIndex();
             Console.WriteLine($"  Avg Maintainability Index: {avgMI:F1}");
         }
 
@@ -690,4 +602,63 @@ static string SanitizeBranchName(string branchName)
     }
     
     return result;
+}
+
+static IServiceProvider ConfigureServices(LogLevel logLevel)
+{
+    var services = new ServiceCollection();
+
+    // Logging configuration
+    services.AddLogging(builder =>
+    {
+        builder
+            .AddConsole(options =>
+            {
+                options.FormatterName = "simple";
+            })
+            .SetMinimumLevel(logLevel);
+    });
+
+    // CLI logging (for Program class)
+    services.AddSingleton<ILogger<Program>>(sp => 
+        sp.GetRequiredService<ILoggerFactory>().CreateLogger<Program>());
+
+    // Core services
+    services.AddSingleton<IMetricsCalculator, MetricsCalculator>();
+    services.AddSingleton<ICouplingAnalyzer, CouplingAnalyzer>();
+    services.AddSingleton<ISolutionAnalyzer, SolutionAnalyzer>();
+
+    // Infrastructure services
+    services.AddSingleton<INuGetRestorer, NuGetRestorer>();
+    services.AddSingleton<IMSBuildRegistrationService, MSBuildRegistrationService>();
+    services.AddSingleton<IMSBuildWorkspaceFactory, MSBuildWorkspaceFactory>();
+    services.AddSingleton<IFileSystemService, FileSystemService>();
+    services.AddSingleton<IGitRepositoryService, GitRepositoryService>();
+
+    // Export services
+    services.AddSingleton<IReportExporter, CompactReportExporter>();
+    services.AddSingleton<IReportGenerator, HtmlReportGenerator>();
+
+    return services.BuildServiceProvider();
+}
+
+static class JsonOptions
+{
+    public static readonly JsonSerializerOptions DefaultOutput = new()
+    {
+        WriteIndented = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
+    
+    public static readonly JsonSerializerOptions CompactOutput = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
+    
+    public static readonly JsonSerializerOptions Input = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
 }

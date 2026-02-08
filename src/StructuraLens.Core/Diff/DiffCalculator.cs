@@ -84,8 +84,8 @@ public sealed class DiffCalculator
 
     private static ProjectDiffMetrics ToMetrics(ProjectMetrics project, AnalysisReport report)
     {
-        var allMethods = project.Types.SelectMany(t => t.Methods).ToList();
-        var avgMi = allMethods.Count > 0 ? allMethods.Average(m => m.MaintainabilityIndex) : 0;
+        var allMethods = project.Types.GetAllMethods();
+        var avgMi = allMethods.CalculateAverageMaintainabilityIndex();
 
         var projectCoupling = report.CouplingAnalysis?.ProjectCoupling
             .FirstOrDefault(pc => string.Equals(pc.EntityName, project.Name, StringComparison.OrdinalIgnoreCase));
@@ -108,8 +108,8 @@ public sealed class DiffCalculator
 
     private static (int Projects, int Types, int Methods, int CyclomaticComplexity, int LinesOfCode, double AvgMaintainability, int Errors, int Warnings, int Info, int Hidden) BuildTotals(AnalysisReport report)
     {
-        var allMethods = report.Projects.SelectMany(p => p.Types).SelectMany(t => t.Methods).ToList();
-        var avgMi = allMethods.Count > 0 ? allMethods.Average(m => m.MaintainabilityIndex) : 0;
+        var allMethods = report.Projects.SelectMany(p => p.Types).GetAllMethods();
+        var avgMi = allMethods.CalculateAverageMaintainabilityIndex();
 
         var diagnostics = BuildDiagnosticsSummary(report);
 

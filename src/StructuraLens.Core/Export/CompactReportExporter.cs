@@ -76,8 +76,8 @@ public sealed class CompactReportExporter : IReportExporter
 
         foreach (var project in report.Projects)
         {
-            var allMethods = project.Types.SelectMany(t => t.Methods).ToList();
-            var avgMI = allMethods.Count > 0 ? allMethods.Average(m => m.MaintainabilityIndex) : 0;
+            var allMethods = project.Types.GetAllMethods();
+            var avgMI = allMethods.CalculateAverageMaintainabilityIndex();
 
             // O(1) lookup instead of O(n) FirstOrDefault
             projectCouplingLookup.TryGetValue(project.Name, out var projectCoupling);
@@ -110,7 +110,7 @@ public sealed class CompactReportExporter : IReportExporter
     {
         return types.Select(t =>
         {
-            var avgMI = t.Methods.Count > 0 ? t.Methods.Average(m => m.MaintainabilityIndex) : 0;
+            var avgMI = t.Methods.CalculateAverageMaintainabilityIndex();
 
             return new CompactType
             {
@@ -134,17 +134,16 @@ public sealed class CompactReportExporter : IReportExporter
         return namespaceGroups.Select(group =>
         {
             var types = group.ToList();
-            var allMethods = types.SelectMany(t => t.Methods).ToList();
-            var avgMI = allMethods.Count > 0 ? allMethods.Average(m => m.MaintainabilityIndex) : 0;
+            var avgMI = types.CalculateAverageMaintainabilityIndex();
 
             return new CompactNamespace
             {
                 Name = group.Key,
                 TypeCount = types.Count,
-                MethodCount = allMethods.Count,
-                CyclomaticComplexity = types.Sum(t => t.TotalCyclomaticComplexity),
-                LinesOfCode = types.Sum(t => t.TotalLinesOfExecutableCode),
-                MaxDepthOfInheritance = types.Count > 0 ? types.Max(t => t.DepthOfInheritance) : 0,
+                MethodCount = types.CountTotalMethods(),
+                CyclomaticComplexity = types.CalculateTotalCyclomaticComplexity(),
+                LinesOfCode = types.CalculateTotalLinesOfCode(),
+                MaxDepthOfInheritance = types.CalculateMaxDepthOfInheritance(),
                 AvgMaintainabilityIndex = Math.Round(avgMI, 1),
                 Types = ExportTypes(types, includeMethods)
             };
@@ -233,7 +232,7 @@ public sealed class CompactReportExporter : IReportExporter
         {
             foreach (var type in project.Types)
             {
-                var ns = GetNamespace(type.FullName);
+                var ns = type.FullName.GetNamespace();
                 if (!string.IsNullOrEmpty(ns))
                 {
                     if (!namespaceMetrics.ContainsKey(ns))
@@ -387,11 +386,5 @@ public sealed class CompactReportExporter : IReportExporter
             Info = allDiagnostics.Count(x => x.Diagnostic.Severity == DiagnosticLevel.Info),
             Items = items
         };
-    }
-
-    private string GetNamespace(string fullTypeName)
-    {
-        var lastDot = fullTypeName.LastIndexOf('.');
-        return lastDot > 0 ? fullTypeName[..lastDot] : "";
     }
 }

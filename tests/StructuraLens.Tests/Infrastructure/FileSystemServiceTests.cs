@@ -1,5 +1,4 @@
 using StructuraLens.Core.Infrastructure;
-using TUnit.Core;
 
 namespace StructuraLens.Tests.Infrastructure;
 

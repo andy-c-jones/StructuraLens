@@ -1,7 +1,6 @@
 using FakeItEasy;
 using StructuraLens.Core.Abstractions;
 using StructuraLens.Core.Infrastructure;
-using TUnit.Core;
 
 namespace StructuraLens.Tests.Infrastructure;
 
