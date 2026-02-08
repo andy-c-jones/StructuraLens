@@ -137,8 +137,9 @@ public sealed class CouplingAnalyzer : ICouplingAnalyzer
         {
             new(project.Name, DependencyType.ProjectReference)
             {
-                OutboundDependencies = [],
-                InboundDependencies = []
+                InternalOutbound = [],
+                InternalInbound = [],
+                ExternalOutbound = []
             }
         };
 
@@ -290,19 +291,44 @@ public sealed class CouplingAnalyzer : ICouplingAnalyzer
                     inbound.AddRange(kvp.Value);
             }
 
+            // Split into internal and external
+            var internalOut = outbound.Where(d => IsInternalProject(d.ToEntity, projectNames)).ToList();
+            var externalOut = outbound.Where(d => !IsInternalProject(d.ToEntity, projectNames)).ToList();
+            var internalIn = inbound.Where(d => IsInternalProject(d.FromEntity, projectNames)).ToList();
+
             metrics.Add(new CouplingMetrics(projectName, DependencyType.ProjectReference)
             {
-                OutboundDependencies = outbound,
-                InboundDependencies = inbound
+                InternalOutbound = internalOut,
+                InternalInbound = internalIn,
+                ExternalOutbound = externalOut
             });
         }
 
         return metrics;
     }
+    
+    private static bool IsInternalProject(string entityName, HashSet<string> projectNames)
+    {
+        // Direct project match
+        if (projectNames.Contains(entityName))
+            return true;
+        
+        // Check if entity starts with any project name (namespace/type within project)
+        foreach (var projectName in projectNames)
+        {
+            if (entityName.StartsWith($"{projectName}."))
+                return true;
+        }
+        
+        return false;
+    }
 
     private List<CouplingMetrics> BuildNamespaceCouplingMetrics(List<DependencyEdge> allDependencies)
     {
         var namespaceDeps = allDependencies.Where(d => d.Type == DependencyType.NamespaceReference).ToList();
+        
+        // Determine which namespaces are "internal" (appear as FromEntity, meaning they're in our codebase)
+        var internalNamespaces = namespaceDeps.Select(d => d.FromEntity).Distinct().ToHashSet();
         
         // Pre-group by FromEntity and ToEntity for O(1) lookups
         var outboundByEntity = namespaceDeps
@@ -314,16 +340,31 @@ public sealed class CouplingAnalyzer : ICouplingAnalyzer
 
         var namespaces = outboundByEntity.Keys.Union(inboundByEntity.Keys).ToList();
 
-        return namespaces.Select(ns => new CouplingMetrics(ns, DependencyType.NamespaceReference)
+        return namespaces.Select(ns => 
         {
-            OutboundDependencies = outboundByEntity.GetValueOrDefault(ns, []),
-            InboundDependencies = inboundByEntity.GetValueOrDefault(ns, [])
+            var outbound = outboundByEntity.GetValueOrDefault(ns, []);
+            var inbound = inboundByEntity.GetValueOrDefault(ns, []);
+            
+            // Split into internal and external
+            var internalOut = outbound.Where(d => internalNamespaces.Contains(d.ToEntity)).ToList();
+            var externalOut = outbound.Where(d => !internalNamespaces.Contains(d.ToEntity)).ToList();
+            var internalIn = inbound.Where(d => internalNamespaces.Contains(d.FromEntity)).ToList();
+            
+            return new CouplingMetrics(ns, DependencyType.NamespaceReference)
+            {
+                InternalOutbound = internalOut,
+                InternalInbound = internalIn,
+                ExternalOutbound = externalOut
+            };
         }).ToList();
     }
 
     private List<CouplingMetrics> BuildTypeCouplingMetrics(List<DependencyEdge> allDependencies)
     {
         var typeDeps = allDependencies.Where(d => d.Type == DependencyType.TypeReference).ToList();
+        
+        // Determine which types are "internal" (appear as FromEntity, meaning they're in our codebase)
+        var internalTypes = typeDeps.Select(d => d.FromEntity).Distinct().ToHashSet();
         
         // Pre-group by FromEntity and ToEntity for O(1) lookups
         var outboundByEntity = typeDeps
@@ -335,10 +376,22 @@ public sealed class CouplingAnalyzer : ICouplingAnalyzer
 
         var types = outboundByEntity.Keys.Union(inboundByEntity.Keys).ToList();
 
-        return types.Select(type => new CouplingMetrics(type, DependencyType.TypeReference)
+        return types.Select(type => 
         {
-            OutboundDependencies = outboundByEntity.GetValueOrDefault(type, []),
-            InboundDependencies = inboundByEntity.GetValueOrDefault(type, [])
+            var outbound = outboundByEntity.GetValueOrDefault(type, []);
+            var inbound = inboundByEntity.GetValueOrDefault(type, []);
+            
+            // Split into internal and external
+            var internalOut = outbound.Where(d => internalTypes.Contains(d.ToEntity)).ToList();
+            var externalOut = outbound.Where(d => !internalTypes.Contains(d.ToEntity)).ToList();
+            var internalIn = inbound.Where(d => internalTypes.Contains(d.FromEntity)).ToList();
+            
+            return new CouplingMetrics(type, DependencyType.TypeReference)
+            {
+                InternalOutbound = internalOut,
+                InternalInbound = internalIn,
+                ExternalOutbound = externalOut
+            };
         }).ToList();
     }
 
@@ -376,11 +429,15 @@ public sealed class CouplingAnalyzer : ICouplingAnalyzer
         return new CouplingSummary
         {
             TotalDependencies = allDependencies.Count,
-            AverageEfferentCoupling = allMetrics.Count > 0 ? allMetrics.Average(m => m.EfferentCoupling) : 0,
-            AverageAfferentCoupling = allMetrics.Count > 0 ? allMetrics.Average(m => m.AfferentCoupling) : 0,
-            AverageInstability = allMetrics.Count > 0 ? allMetrics.Average(m => m.Instability) : 0,
-            MostCoupledEntity = allMetrics.OrderByDescending(m => m.TotalCouplingStrength).FirstOrDefault()?.EntityName,
-            MostUnstableEntity = allMetrics.OrderByDescending(m => m.Instability).FirstOrDefault()?.EntityName,
+            AverageInternalDependencies = allMetrics.Count > 0 ? allMetrics.Average(m => m.InternalDependencies) : 0,
+            AverageInternalDependents = allMetrics.Count > 0 ? allMetrics.Average(m => m.InternalDependents) : 0,
+            AverageDependencyRatio = allMetrics.Count > 0 ? allMetrics.Average(m => m.DependencyRatio) : 0,
+            AverageExternalDependencies = allMetrics.Count > 0 ? allMetrics.Average(m => m.TotalExternalDependencies) : 0,
+            AverageExternalBclDependencies = allMetrics.Count > 0 ? allMetrics.Average(m => m.ExternalBclDependencies) : 0,
+            AverageExternalPackageDependencies = allMetrics.Count > 0 ? allMetrics.Average(m => m.ExternalPackageDependencies) : 0,
+            MostCoupledEntity = allMetrics.OrderByDescending(m => m.TotalReferenceStrength).FirstOrDefault()?.EntityName,
+            MostDependentEntity = allMetrics.OrderByDescending(m => m.InternalDependents).FirstOrDefault()?.EntityName,
+            HighestConsumerEntity = allMetrics.OrderByDescending(m => m.DependencyRatio).FirstOrDefault()?.EntityName,
             CouplingMode = "All"
         };
     }
