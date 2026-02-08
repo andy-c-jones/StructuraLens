@@ -40,12 +40,11 @@ public record NamespaceMetrics(
     string Name,
     IReadOnlyList<TypeMetrics> Types)
 {
-    public int TotalCyclomaticComplexity => Types.Sum(t => t.TotalCyclomaticComplexity);
-    public int TotalLinesOfExecutableCode => Types.Sum(t => t.TotalLinesOfExecutableCode);
-    public int TotalMethods => Types.Sum(t => t.Methods.Count);
-    public int MaxDepthOfInheritance => Types.Count > 0 ? Types.Max(t => t.DepthOfInheritance) : 0;
-    public double AvgMaintainabilityIndex => 
-        Types.SelectMany(t => t.Methods).DefaultIfEmpty().Average(m => m?.MaintainabilityIndex ?? 0);
+    public int TotalCyclomaticComplexity => Types.CalculateTotalCyclomaticComplexity();
+    public int TotalLinesOfExecutableCode => Types.CalculateTotalLinesOfCode();
+    public int TotalMethods => Types.CountTotalMethods();
+    public int MaxDepthOfInheritance => Types.CalculateMaxDepthOfInheritance();
+    public double AvgMaintainabilityIndex => Types.CalculateAverageMaintainabilityIndex();
 }
 
 /// <summary>
@@ -56,10 +55,10 @@ public record ProjectMetrics(
     string FilePath,
     IReadOnlyList<TypeMetrics> Types)
 {
-    public int TotalCyclomaticComplexity => Types.Sum(t => t.TotalCyclomaticComplexity);
-    public int TotalLinesOfExecutableCode => Types.Sum(t => t.TotalLinesOfExecutableCode);
-    public int MaxDepthOfInheritance => Types.Count > 0 ? Types.Max(t => t.DepthOfInheritance) : 0;
-    public int TotalMethods => Types.Sum(t => t.Methods.Count);
+    public int TotalCyclomaticComplexity => Types.CalculateTotalCyclomaticComplexity();
+    public int TotalLinesOfExecutableCode => Types.CalculateTotalLinesOfCode();
+    public int MaxDepthOfInheritance => Types.CalculateMaxDepthOfInheritance();
+    public int TotalMethods => Types.CountTotalMethods();
 
     /// <summary>Compiler diagnostics for this project.</summary>
     public DiagnosticSummary? Diagnostics { get; init; }

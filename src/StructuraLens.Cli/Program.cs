@@ -510,11 +510,11 @@ static void PrintSummary(AnalysisReport report, ILogger logger)
         Console.WriteLine($"  Total LOC: {project.TotalLinesOfExecutableCode}");
         Console.WriteLine($"  Max DIT: {project.MaxDepthOfInheritance}");
 
-        var allMethods = project.Types.SelectMany(t => t.Methods).ToList();
+        var allMethods = project.Types.GetAllMethods();
 
         if (allMethods.Count > 0)
         {
-            var avgMI = allMethods.Average(m => m.MaintainabilityIndex);
+            var avgMI = allMethods.CalculateAverageMaintainabilityIndex();
             Console.WriteLine($"  Avg Maintainability Index: {avgMI:F1}");
         }
 
