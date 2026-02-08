@@ -24,13 +24,7 @@ public record TypeMetrics(
 {
     public int TotalCyclomaticComplexity => Methods.Sum(m => m.CyclomaticComplexity);
     public int TotalLinesOfExecutableCode => Methods.Sum(m => m.LinesOfExecutableCode);
-    public string Namespace => ExtractNamespace(FullName);
-
-    private static string ExtractNamespace(string fullName)
-    {
-        var lastDot = fullName.LastIndexOf('.');
-        return lastDot > 0 ? fullName[..lastDot] : "(global)";
-    }
+    public string Namespace => FullName.GetNamespace("(global)");
 }
 
 /// <summary>

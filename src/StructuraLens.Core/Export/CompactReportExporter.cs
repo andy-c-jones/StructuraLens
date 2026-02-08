@@ -232,7 +232,7 @@ public sealed class CompactReportExporter : IReportExporter
         {
             foreach (var type in project.Types)
             {
-                var ns = GetNamespace(type.FullName);
+                var ns = type.FullName.GetNamespace();
                 if (!string.IsNullOrEmpty(ns))
                 {
                     if (!namespaceMetrics.ContainsKey(ns))
@@ -386,11 +386,5 @@ public sealed class CompactReportExporter : IReportExporter
             Info = allDiagnostics.Count(x => x.Diagnostic.Severity == DiagnosticLevel.Info),
             Items = items
         };
-    }
-
-    private string GetNamespace(string fullTypeName)
-    {
-        var lastDot = fullTypeName.LastIndexOf('.');
-        return lastDot > 0 ? fullTypeName[..lastDot] : "";
     }
 }
