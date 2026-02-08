@@ -1,0 +1,342 @@
+{
+  "v": 1,
+  "p": "SampleSolution.sln",
+  "t": 1738944000000,
+  "gitSha": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0",
+  "gitBranch": "main",
+  "gitRemote": "https://github.com/example/sample-solution.git",
+  "gitDirty": true,
+  "prj": [
+    {
+      "n": "SampleApp.Core",
+      "tc": 24,
+      "mc": 87,
+      "cc": 142,
+      "loc": 3200,
+      "dit": 3,
+      "mi": 72.4,
+      "ce": 2,
+      "ca": 5,
+      "i": 0.29,
+      "err": 0,
+      "warn": 3,
+      "ns": [
+        {
+          "n": "SampleApp.Core.Models",
+          "tc": 8,
+          "mc": 24,
+          "cc": 28,
+          "loc": 620,
+          "dit": 2,
+          "mi": 82.1,
+          "types": [
+            {
+              "n": "User",
+              "fn": "SampleApp.Core.Models.User",
+              "dit": 1,
+              "cc": 4,
+              "loc": 85,
+              "mi": 88.2,
+              "m": [
+                { "n": "Validate()", "cc": 3, "loc": 18, "hv": 45.2, "mi": 78.5, "sl": 12, "el": 30 },
+                { "n": "ToString()", "cc": 1, "loc": 5, "hv": 12.0, "mi": 95.0, "sl": 32, "el": 37 }
+              ]
+            },
+            {
+              "n": "Order",
+              "fn": "SampleApp.Core.Models.Order",
+              "dit": 1,
+              "cc": 6,
+              "loc": 140,
+              "mi": 74.3,
+              "m": [
+                { "n": "CalculateTotal()", "cc": 4, "loc": 32, "hv": 120.5, "mi": 62.1, "sl": 15, "el": 47 },
+                { "n": "ApplyDiscount(decimal)", "cc": 2, "loc": 12, "hv": 38.0, "mi": 85.7, "sl": 49, "el": 61 }
+              ]
+            },
+            {
+              "n": "Product",
+              "fn": "SampleApp.Core.Models.Product",
+              "dit": 1,
+              "cc": 2,
+              "loc": 45,
+              "mi": 91.0,
+              "m": [
+                { "n": "get_Price", "cc": 1, "loc": 3, "hv": 8.0, "mi": 96.0, "sl": 8, "el": 11 },
+                { "n": "IsInStock()", "cc": 1, "loc": 4, "hv": 10.5, "mi": 94.0, "sl": 13, "el": 17 }
+              ]
+            },
+            { "n": "Address", "fn": "SampleApp.Core.Models.Address", "dit": 1, "cc": 2, "loc": 35, "mi": 92.5 },
+            { "n": "Category", "fn": "SampleApp.Core.Models.Category", "dit": 1, "cc": 1, "loc": 20, "mi": 95.0 },
+            { "n": "PaymentInfo", "fn": "SampleApp.Core.Models.PaymentInfo", "dit": 1, "cc": 3, "loc": 55, "mi": 80.0 },
+            { "n": "ShippingOption", "fn": "SampleApp.Core.Models.ShippingOption", "dit": 1, "cc": 2, "loc": 30, "mi": 88.0 },
+            { "n": "Discount", "fn": "SampleApp.Core.Models.Discount", "dit": 1, "cc": 8, "loc": 210, "mi": 58.5 }
+          ]
+        },
+        {
+          "n": "SampleApp.Core.Services",
+          "tc": 10,
+          "mc": 38,
+          "cc": 65,
+          "loc": 1400,
+          "dit": 2,
+          "mi": 68.3,
+          "types": [
+            {
+              "n": "OrderService",
+              "fn": "SampleApp.Core.Services.OrderService",
+              "dit": 1,
+              "cc": 18,
+              "loc": 320,
+              "mi": 55.2,
+              "m": [
+                { "n": "ProcessOrderAsync(Order)", "cc": 8, "loc": 65, "hv": 280.0, "mi": 42.1, "sl": 22, "el": 87 },
+                { "n": "ValidateOrder(Order)", "cc": 5, "loc": 35, "hv": 150.0, "mi": 58.3, "sl": 89, "el": 124 },
+                { "n": "CancelOrder(int)", "cc": 3, "loc": 22, "hv": 85.0, "mi": 72.0, "sl": 126, "el": 148 },
+                { "n": "GetOrderHistory(int)", "cc": 2, "loc": 15, "hv": 55.0, "mi": 80.5, "sl": 150, "el": 165 }
+              ]
+            },
+            {
+              "n": "UserService",
+              "fn": "SampleApp.Core.Services.UserService",
+              "dit": 1,
+              "cc": 12,
+              "loc": 250,
+              "mi": 61.0,
+              "m": [
+                { "n": "AuthenticateAsync(string, string)", "cc": 6, "loc": 42, "hv": 200.0, "mi": 48.5, "sl": 18, "el": 60 },
+                { "n": "RegisterAsync(User)", "cc": 4, "loc": 30, "hv": 120.0, "mi": 65.0, "sl": 62, "el": 92 },
+                { "n": "GetProfileAsync(int)", "cc": 2, "loc": 12, "hv": 40.0, "mi": 82.0, "sl": 94, "el": 106 }
+              ]
+            },
+            { "n": "PaymentService", "fn": "SampleApp.Core.Services.PaymentService", "dit": 1, "cc": 10, "loc": 200, "mi": 58.0 },
+            { "n": "ShippingService", "fn": "SampleApp.Core.Services.ShippingService", "dit": 1, "cc": 6, "loc": 120, "mi": 70.0 },
+            { "n": "NotificationService", "fn": "SampleApp.Core.Services.NotificationService", "dit": 1, "cc": 4, "loc": 80, "mi": 78.0 },
+            { "n": "CacheService", "fn": "SampleApp.Core.Services.CacheService", "dit": 1, "cc": 3, "loc": 60, "mi": 82.0 },
+            { "n": "InventoryService", "fn": "SampleApp.Core.Services.InventoryService", "dit": 1, "cc": 5, "loc": 110, "mi": 72.0 },
+            { "n": "ReportService", "fn": "SampleApp.Core.Services.ReportService", "dit": 1, "cc": 7, "loc": 160, "mi": 64.0 },
+            { "n": "IOrderService", "fn": "SampleApp.Core.Services.IOrderService", "dit": 0, "cc": 0, "loc": 15, "mi": 100.0 },
+            { "n": "IUserService", "fn": "SampleApp.Core.Services.IUserService", "dit": 0, "cc": 0, "loc": 10, "mi": 100.0 }
+          ]
+        },
+        {
+          "n": "SampleApp.Core.Extensions",
+          "tc": 3,
+          "mc": 12,
+          "cc": 18,
+          "loc": 280,
+          "dit": 1,
+          "mi": 76.0,
+          "types": [
+            { "n": "StringExtensions", "fn": "SampleApp.Core.Extensions.StringExtensions", "dit": 1, "cc": 8, "loc": 120, "mi": 70.0 },
+            { "n": "DateTimeExtensions", "fn": "SampleApp.Core.Extensions.DateTimeExtensions", "dit": 1, "cc": 5, "loc": 90, "mi": 75.0 },
+            { "n": "CollectionExtensions", "fn": "SampleApp.Core.Extensions.CollectionExtensions", "dit": 1, "cc": 5, "loc": 70, "mi": 83.0 }
+          ]
+        },
+        {
+          "n": "SampleApp.Core.Abstractions",
+          "tc": 3,
+          "mc": 13,
+          "cc": 31,
+          "loc": 900,
+          "dit": 3,
+          "mi": 65.0
+        }
+      ]
+    },
+    {
+      "n": "SampleApp.Infrastructure",
+      "tc": 12,
+      "mc": 45,
+      "cc": 98,
+      "loc": 2100,
+      "dit": 2,
+      "mi": 65.8,
+      "ce": 4,
+      "ca": 2,
+      "i": 0.67,
+      "err": 2,
+      "warn": 8,
+      "ns": [
+        {
+          "n": "SampleApp.Infrastructure.Data",
+          "tc": 6,
+          "mc": 22,
+          "cc": 45,
+          "loc": 980,
+          "dit": 2,
+          "mi": 62.0,
+          "types": [
+            {
+              "n": "AppDbContext",
+              "fn": "SampleApp.Infrastructure.Data.AppDbContext",
+              "dit": 2,
+              "cc": 15,
+              "loc": 350,
+              "mi": 52.0,
+              "m": [
+                { "n": "OnModelCreating(ModelBuilder)", "cc": 12, "loc": 180, "hv": 500.0, "mi": 35.0, "sl": 25, "el": 205 },
+                { "n": "SaveChangesAsync(CancellationToken)", "cc": 3, "loc": 25, "hv": 80.0, "mi": 74.0, "sl": 207, "el": 232 }
+              ]
+            },
+            { "n": "UserRepository", "fn": "SampleApp.Infrastructure.Data.UserRepository", "dit": 1, "cc": 8, "loc": 160, "mi": 66.0 },
+            { "n": "OrderRepository", "fn": "SampleApp.Infrastructure.Data.OrderRepository", "dit": 1, "cc": 10, "loc": 200, "mi": 60.0 },
+            { "n": "ProductRepository", "fn": "SampleApp.Infrastructure.Data.ProductRepository", "dit": 1, "cc": 6, "loc": 120, "mi": 70.0 },
+            { "n": "UnitOfWork", "fn": "SampleApp.Infrastructure.Data.UnitOfWork", "dit": 1, "cc": 4, "loc": 80, "mi": 75.0 },
+            { "n": "DbMigrationService", "fn": "SampleApp.Infrastructure.Data.DbMigrationService", "dit": 1, "cc": 2, "loc": 70, "mi": 80.0 }
+          ]
+        },
+        {
+          "n": "SampleApp.Infrastructure.External",
+          "tc": 6,
+          "mc": 23,
+          "cc": 53,
+          "loc": 1120,
+          "dit": 1,
+          "mi": 69.0,
+          "types": [
+            { "n": "EmailProvider", "fn": "SampleApp.Infrastructure.External.EmailProvider", "dit": 1, "cc": 12, "loc": 280, "mi": 55.0 },
+            { "n": "PaymentGateway", "fn": "SampleApp.Infrastructure.External.PaymentGateway", "dit": 1, "cc": 15, "loc": 340, "mi": 48.0 },
+            { "n": "StorageClient", "fn": "SampleApp.Infrastructure.External.StorageClient", "dit": 1, "cc": 8, "loc": 180, "mi": 68.0 },
+            { "n": "LoggingAdapter", "fn": "SampleApp.Infrastructure.External.LoggingAdapter", "dit": 1, "cc": 4, "loc": 80, "mi": 82.0 },
+            { "n": "CacheAdapter", "fn": "SampleApp.Infrastructure.External.CacheAdapter", "dit": 1, "cc": 6, "loc": 120, "mi": 72.0 },
+            { "n": "HttpClientWrapper", "fn": "SampleApp.Infrastructure.External.HttpClientWrapper", "dit": 1, "cc": 8, "loc": 120, "mi": 74.0 }
+          ]
+        }
+      ]
+    },
+    {
+      "n": "SampleApp.Web",
+      "tc": 18,
+      "mc": 52,
+      "cc": 78,
+      "loc": 1850,
+      "dit": 4,
+      "mi": 78.2,
+      "ce": 3,
+      "ca": 0,
+      "i": 1.0,
+      "err": 0,
+      "warn": 1,
+      "ns": [
+        {
+          "n": "SampleApp.Web.Controllers",
+          "tc": 5,
+          "mc": 18,
+          "cc": 30,
+          "loc": 600,
+          "dit": 2,
+          "mi": 75.0
+        },
+        {
+          "n": "SampleApp.Web.ViewModels",
+          "tc": 8,
+          "mc": 20,
+          "cc": 22,
+          "loc": 450,
+          "dit": 1,
+          "mi": 88.0
+        },
+        {
+          "n": "SampleApp.Web.Middleware",
+          "tc": 3,
+          "mc": 8,
+          "cc": 14,
+          "loc": 400,
+          "dit": 1,
+          "mi": 70.0
+        },
+        {
+          "n": "SampleApp.Web.Filters",
+          "tc": 2,
+          "mc": 6,
+          "cc": 12,
+          "loc": 400,
+          "dit": 4,
+          "mi": 68.0
+        }
+      ]
+    },
+    {
+      "n": "SampleApp.Tests",
+      "tc": 10,
+      "mc": 65,
+      "cc": 70,
+      "loc": 2800,
+      "dit": 1,
+      "mi": 85.0,
+      "ce": 3,
+      "ca": 0,
+      "i": 1.0,
+      "err": 0,
+      "warn": 0
+    },
+    {
+      "n": "SampleApp.Common",
+      "tc": 5,
+      "mc": 15,
+      "cc": 20,
+      "loc": 400,
+      "dit": 1,
+      "mi": 90.1,
+      "ce": 0,
+      "ca": 4,
+      "i": 0.0,
+      "err": 0,
+      "warn": 0
+    }
+  ],
+  "g": {
+    "p": {
+      "n": [
+        [0, "SampleApp.Core", 3200],
+        [1, "SampleApp.Infrastructure", 2100],
+        [2, "SampleApp.Web", 1850],
+        [3, "SampleApp.Tests", 2800],
+        [4, "SampleApp.Common", 400]
+      ],
+      "e": [
+        [1, 0, 8],
+        [2, 0, 12],
+        [2, 1, 5],
+        [3, 0, 15],
+        [3, 1, 3],
+        [3, 2, 2],
+        [0, 4, 6],
+        [1, 4, 4],
+        [2, 4, 3]
+      ]
+    },
+    "ns": {
+      "n": [
+        [0, "SampleApp.Core.Models", 620, 28, 82.1, 8, 24, 1, 4, 0.2],
+        [1, "SampleApp.Core.Services", 1400, 65, 68.3, 10, 38, 3, 3, 0.5],
+        [2, "SampleApp.Core.Extensions", 280, 18, 76.0, 3, 12, 0, 2, 0.0],
+        [3, "SampleApp.Core.Abstractions", 900, 31, 65.0, 3, 13, 1, 5, 0.17],
+        [4, "SampleApp.Infrastructure.Data", 980, 45, 62.0, 6, 22, 2, 1, 0.67],
+        [5, "SampleApp.Infrastructure.External", 1120, 53, 69.0, 6, 23, 4, 0, 1.0],
+        [6, "SampleApp.Web.Controllers", 600, 30, 75.0, 5, 18, 3, 0, 1.0],
+        [7, "SampleApp.Web.ViewModels", 450, 22, 88.0, 8, 20, 1, 2, 0.33],
+        [8, "SampleApp.Web.Middleware", 400, 14, 70.0, 3, 8, 2, 0, 1.0],
+        [9, "SampleApp.Web.Filters", 400, 12, 68.0, 2, 6, 1, 0, 1.0]
+      ],
+      "e": [
+        [1, 0, 15],
+        [1, 3, 8],
+        [4, 0, 10],
+        [4, 1, 5],
+        [4, 3, 3],
+        [5, 1, 7],
+        [5, 3, 4],
+        [6, 1, 12],
+        [6, 7, 8],
+        [6, 0, 3],
+        [8, 1, 4],
+        [8, 3, 2],
+        [9, 6, 3],
+        [2, 0, 5],
+        [7, 0, 6]
+      ]
+    }
+  }
+}

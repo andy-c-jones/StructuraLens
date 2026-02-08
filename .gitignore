@@ -45,3 +45,7 @@ Thumbs.db
 *.tmp
 *.temp
 node_modules
+
+# Astro / web report template
+web/dist/
+web/.astro/

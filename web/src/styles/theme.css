@@ -1,0 +1,38 @@
+/* Theme variables - dark mode default, light mode via media query */
+:root {
+  --bg: #1a1a2e;
+  --bg-card: #16213e;
+  --bg-hover: #1f3460;
+  --text: #eee;
+  --text-muted: #888;
+  --accent: #4cc9f0;
+  --success: #4ade80;
+  --warning: #fbbf24;
+  --error: #f87171;
+  --border: #334;
+  --node-default: #1f3460;
+  --heat-green: #2d5a3d;
+  --heat-yellow: #6b5b2d;
+  --heat-red: #5a2d2d;
+  --node-text: #eee;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f5f5f7;
+    --bg-card: #fff;
+    --bg-hover: #e8e8ec;
+    --text: #1d1d1f;
+    --text-muted: #6e6e73;
+    --accent: #0066cc;
+    --success: #28a745;
+    --warning: #f0ad4e;
+    --error: #dc3545;
+    --border: #d2d2d7;
+    --node-default: #a0b4d4;
+    --heat-green: #a8d5ba;
+    --heat-yellow: #f0e6b8;
+    --heat-red: #e8b8b8;
+    --node-text: #1d1d1f;
+  }
+}

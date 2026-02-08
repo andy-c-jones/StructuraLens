@@ -16,6 +16,7 @@ A high-performance .NET 10 CLI tool for analyzing C# codebases. StructuraLens pr
 ### Prerequisites
 
 - .NET 10 SDK
+- Node.js 18+ and npm
 
 ### Installation
 
@@ -163,6 +164,7 @@ structuralens analyze LargeSolution.sln --aggregation-strategy SQLite --verbose
 ### Prerequisites
 
 - .NET 10 SDK
+- Node.js 18+ and npm (for HTML report template)
 - Git
 
 ### Build Steps
@@ -172,6 +174,12 @@ git clone https://github.com/your-org/structuralens.git
 cd structuralens
 dotnet restore
 dotnet build -c Release
+```
+
+The .NET build automatically runs `npm install` and `npm run build` in `web/` to produce the HTML report template. To skip the web build (e.g. when iterating on C# code only):
+
+```bash
+dotnet build -p:SkipWebBuild=true
 ```
 
 ### Run Tests
@@ -186,6 +194,51 @@ dotnet test
 dotnet run --project src/StructuraLens.Cli -- analyze <path>
 ```
 
+## HTML Report Development
+
+The interactive HTML report is built as an [Astro](https://astro.build/) project in `web/`. Astro compiles all CSS, TypeScript, and HTML into a single self-contained HTML file that is embedded into the .NET assembly as a resource at build time.
+
+### Architecture
+
+- **Template**: `web/src/pages/index.astro` — the single-page report layout
+- **Styles**: `web/src/styles/` — theme, layout, components, and graph CSS
+- **Scripts**: `web/src/scripts/` — TypeScript modules for tabs, tables, charts, D3 graph, etc.
+- **Test data**: `web/src/test-data/` — golden JSON fixtures used during dev mode
+
+In dev mode (`astro dev`), the template loads test data from `web/src/test-data/`. In production (`astro build`), it emits `{{PLACEHOLDER}}` tokens that the C# `HtmlReportGenerator` replaces with real analysis data at runtime.
+
+### Dev Server
+
+Start the Astro dev server with hot-reload to iterate on the report UI:
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+This serves the report at `http://localhost:4321` using the golden test data. Changes to `.astro`, `.ts`, and `.css` files are reflected instantly.
+
+### Production Build
+
+Build the single-file HTML template:
+
+```bash
+cd web
+npm run build
+```
+
+The output is written to `web/dist/index.html` and embedded into `StructuraLens.Core.dll` as a .NET resource on the next `dotnet build`.
+
+### Type Checking
+
+Run the Astro TypeScript checker to validate all scripts:
+
+```bash
+cd web
+npx astro check
+```
+
 ## Project Structure
 
 ```
@@ -195,6 +248,11 @@ StructuraLens/
 │   └── StructuraLens.Cli/       # CLI application
 ├── tests/
 │   └── StructuraLens.Tests/     # TUnit tests
+├── web/                          # Astro project for HTML report template
+│   ├── src/pages/index.astro    # Report template (single page)
+│   ├── src/scripts/             # TypeScript modules (tabs, tables, D3 graph)
+│   ├── src/styles/              # CSS (theme, layout, components, graph)
+│   └── src/test-data/           # Golden JSON fixtures for dev mode
 └── docs/                         # Documentation
 ```
 

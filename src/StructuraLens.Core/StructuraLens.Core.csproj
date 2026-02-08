@@ -26,4 +26,21 @@
     <PackageReference Include="Microsoft.Build.Utilities.Core" Version="18.0.2" ExcludeAssets="runtime" PrivateAssets="all" />
   </ItemGroup>
 
+  <!-- Embed the Astro-built HTML report template as a managed resource -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\web\dist\index.html" LogicalName="StructuraLens.Core.report-template.html" />
+  </ItemGroup>
+
+  <!-- Build the web template before compiling C# -->
+  <Target Name="BuildWebTemplate" BeforeTargets="BeforeBuild"
+          Condition="'$(SkipWebBuild)' != 'true' AND Exists('$(MSBuildThisFileDirectory)..\..\web\package.json')">
+    <!-- Only run npm install if node_modules is missing -->
+    <Exec Command="npm install --prefer-offline --no-audit"
+          WorkingDirectory="$(MSBuildThisFileDirectory)..\..\web"
+          Condition="!Exists('$(MSBuildThisFileDirectory)..\..\web\node_modules')" />
+    <!-- Only rebuild if the template is older than the source files -->
+    <Exec Command="npm run build"
+          WorkingDirectory="$(MSBuildThisFileDirectory)..\..\web" />
+  </Target>
+
 </Project>

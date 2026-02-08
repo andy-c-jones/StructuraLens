@@ -1,0 +1,17 @@
+[
+  { "project": "SampleApp.Infrastructure", "id": "CS0234", "message": "The type or namespace name 'OldService' does not exist in the namespace 'SampleApp.Infrastructure'", "severity": "error", "file": "ServiceRegistration.cs", "line": 45, "category": "Compiler" },
+  { "project": "SampleApp.Infrastructure", "id": "CS0103", "message": "The name 'legacyConfig' does not exist in the current context", "severity": "error", "file": "AppDbContext.cs", "line": 112, "category": "Compiler" },
+  { "project": "SampleApp.Core", "id": "CS8602", "message": "Dereference of a possibly null reference.", "severity": "warning", "file": "OrderService.cs", "line": 67, "category": "Compiler" },
+  { "project": "SampleApp.Core", "id": "CS8604", "message": "Possible null reference argument for parameter 'user' in 'void UserService.ValidateUser(User user)'.", "severity": "warning", "file": "UserService.cs", "line": 34, "category": "Compiler" },
+  { "project": "SampleApp.Core", "id": "CA1822", "message": "Member 'FormatDate' does not access instance data and can be marked as static", "severity": "warning", "file": "DateTimeExtensions.cs", "line": 22, "category": "Design" },
+  { "project": "SampleApp.Infrastructure", "id": "CS0618", "message": "'OldMethod()' is obsolete: 'Use NewMethod() instead'", "severity": "warning", "file": "EmailProvider.cs", "line": 55, "category": "Compiler" },
+  { "project": "SampleApp.Infrastructure", "id": "CS8600", "message": "Converting null literal or possible null value to non-nullable type.", "severity": "warning", "file": "PaymentGateway.cs", "line": 88, "category": "Compiler" },
+  { "project": "SampleApp.Infrastructure", "id": "CA2007", "message": "Consider calling ConfigureAwait on the awaited task", "severity": "warning", "file": "StorageClient.cs", "line": 41, "category": "Reliability" },
+  { "project": "SampleApp.Infrastructure", "id": "IDE0060", "message": "Remove unused parameter 'cancellationToken'", "severity": "warning", "file": "CacheAdapter.cs", "line": 19, "category": "Style" },
+  { "project": "SampleApp.Infrastructure", "id": "CS0168", "message": "The variable 'ex' is declared but never used", "severity": "warning", "file": "HttpClientWrapper.cs", "line": 73, "category": "Compiler" },
+  { "project": "SampleApp.Infrastructure", "id": "CA1031", "message": "Modify 'ProcessAsync' to catch a more specific allowed exception type, or rethrow the exception", "severity": "warning", "file": "PaymentGateway.cs", "line": 102, "category": "Design" },
+  { "project": "SampleApp.Infrastructure", "id": "CS0219", "message": "The variable 'timeout' is assigned but its value is never used", "severity": "warning", "file": "HttpClientWrapper.cs", "line": 15, "category": "Compiler" },
+  { "project": "SampleApp.Web", "id": "CS8618", "message": "Non-nullable property 'Logger' must contain a non-null value when exiting constructor.", "severity": "warning", "file": "BaseController.cs", "line": 8, "category": "Compiler" },
+  { "project": "SampleApp.Infrastructure", "id": "CS0414", "message": "The field '_retryCount' is assigned but its value is never used", "severity": "info", "file": "EmailProvider.cs", "line": 12, "category": "Compiler" },
+  { "project": "SampleApp.Core", "id": "IDE0059", "message": "Unnecessary assignment of a value to 'result'", "severity": "info", "file": "PaymentService.cs", "line": 45, "category": "Style" }
+]

@@ -7,6 +7,7 @@ Keep this file concise, actionable, and aligned with existing docs.
 - StructuraLens is a .NET 10 CLI tool for analyzing C# codebases.
 - Core logic lives in `src/StructuraLens.Core`; CLI wrapper in `src/StructuraLens.Cli`.
 - Tests live in `tests/StructuraLens.Tests` and use TUnit.
+- HTML report UI lives in `web/` (Astro + TypeScript + D3).
 
 ## Required Rules (Copilot)
 Source: `.github/copilot-instructions.md`
@@ -46,6 +47,12 @@ There is no separate linter configured; rely on `dotnet build` and tests.
 ### Run CLI Locally
 - `dotnet run --project src/StructuraLens.Cli -- analyze StructuraLens.slnx --format summary`
 - `dotnet run --project src/StructuraLens.Cli -- analyze <path.sln> --format html --out report.html`
+
+### Web / HTML Report
+- `dotnet build` auto-runs `npm run build` in `web/` via MSBuild target. Skip with `-p:SkipWebBuild=true`.
+- Dev server: `cd web && npm install && npm run dev` (serves at localhost:4321 with test data).
+- Type check: `cd web && npx astro check`.
+- Template uses `{{PLACEHOLDER}}` tokens in prod; `HtmlReportGenerator.cs` replaces them at runtime.
 
 ## Code Style Guidelines
 Follow existing code in `src/StructuraLens.Core` and `src/StructuraLens.Cli`.
@@ -118,6 +125,7 @@ Follow existing code in `src/StructuraLens.Core` and `src/StructuraLens.Cli`.
 src/StructuraLens.Core/   # Core logic (analysis, export, models, infra)
 src/StructuraLens.Cli/    # CLI wrapper and DI
 tests/StructuraLens.Tests/# TUnit tests
+web/                     # Astro project → single-file HTML report template
 docs/                    # Design, architecture, usage
 ```
 
