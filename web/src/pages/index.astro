@@ -72,20 +72,20 @@ if (isDev) {
     </div>
 
     <div class="tabs">
-      <div class="tab active" data-tab="summary">Summary</div>
+      {showDiffTab && <div class="tab active" data-tab="diff">Diff</div>}
+      <div class={showDiffTab ? "tab" : "tab active"} data-tab="summary">Summary</div>
       <div class="tab" data-tab="projects">Projects</div>
       <div class="tab" data-tab="coupling">Coupling</div>
       <div class="tab" data-tab="graph">Graph</div>
       <div class="tab" data-tab="diagnostics">Diagnostics</div>
-      {showDiffTab && <div class="tab" data-tab="diff">Diff</div>}
     </div>
 
-    <div id="summary" class="tab-content active"></div>
+    <div id="diff" class={showDiffTab ? "tab-content active" : "tab-content"}></div>
+    <div id="summary" class={showDiffTab ? "tab-content" : "tab-content active"}></div>
     <div id="projects" class="tab-content"></div>
     <div id="coupling" class="tab-content"></div>
     <div id="graph" class="tab-content"></div>
     <div id="diagnostics" class="tab-content"></div>
-    <div id="diff" class="tab-content"></div>
   </div>
 
   <footer class="copyright">

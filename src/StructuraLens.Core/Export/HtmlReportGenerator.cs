@@ -18,7 +18,20 @@ public sealed class HtmlReportGenerator : IReportGenerator
     /// The diff tab button markup to remove when no diff data is present.
     /// Must match the exact HTML emitted by the Astro production build.
     /// </summary>
-    private const string DiffTabButton = """<div class="tab" data-tab="diff">Diff</div>""";
+    private const string DiffTabButton = """<div class="tab active" data-tab="diff">Diff</div>""";
+    
+    /// <summary>
+    /// The diff tab content div to remove when no diff data is present.
+    /// </summary>
+    private const string DiffTabContent = """<div id="diff" class="tab-content active"></div>""";
+    
+    /// <summary>
+    /// Class attribute to update when diff tab is removed (make summary active).
+    /// </summary>
+    private const string SummaryTabInactive = """<div class="tab" data-tab="summary">Summary</div>""";
+    private const string SummaryTabActive = """<div class="tab active" data-tab="summary">Summary</div>""";
+    private const string SummaryContentInactive = """<div id="summary" class="tab-content"></div>""";
+    private const string SummaryContentActive = """<div id="summary" class="tab-content active"></div>""";
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -45,7 +58,7 @@ public sealed class HtmlReportGenerator : IReportGenerator
     {
         var (compactJson, diagnosticsJson) = SerializeReportData(report);
         var diffJson = JsonSerializer.Serialize(diff, JsonOptions);
-        return BuildHtml(report, compactJson, diagnosticsJson, diffJson);
+        return BuildHtml(report, compactJson, diagnosticsJson, diffJson, diff);
     }
 
     private (string compactJson, string diagnosticsJson) SerializeReportData(AnalysisReport report)
@@ -79,13 +92,13 @@ public sealed class HtmlReportGenerator : IReportGenerator
         return JsonSerializer.Serialize(diagnostics);
     }
 
-    private string BuildHtml(AnalysisReport report, string compactJson, string diagnosticsJson, string? diffJson)
+    private string BuildHtml(AnalysisReport report, string compactJson, string diagnosticsJson, string? diffJson, AnalysisDiffReport? diff = null)
     {
         var template = LoadTemplate();
 
         var solutionName = Path.GetFileName(report.SolutionPath);
         var analyzedAt = report.AnalyzedAt.ToString("yyyy-MM-dd HH:mm:ss UTC");
-        var gitInfoHtml = BuildGitInfoHtml(report);
+        var gitInfoHtml = diff is not null ? BuildDiffGitInfoHtml(diff) : BuildGitInfoHtml(report);
         var copyrightYear = DateTime.UtcNow.Year.ToString();
 
         // Replace simple text placeholders
@@ -104,11 +117,14 @@ public sealed class HtmlReportGenerator : IReportGenerator
         html = html.Replace("{{DIAGNOSTICS_DATA}}", EscapeForJsString(diagnosticsJson));
         html = html.Replace("{{DIFF_DATA}}", EscapeForJsString(diffJson ?? "null"));
 
-        // When there is no diff, remove the diff tab button so the UI doesn't
-        // show an empty Diff tab.
+        // When there is no diff, remove the diff tab button and content,
+        // and make the summary tab active instead.
         if (diffJson is null)
         {
             html = html.Replace(DiffTabButton, string.Empty);
+            html = html.Replace(DiffTabContent, string.Empty);
+            html = html.Replace(SummaryTabInactive, SummaryTabActive);
+            html = html.Replace(SummaryContentInactive, SummaryContentActive);
         }
 
         return html;
@@ -128,6 +144,21 @@ public sealed class HtmlReportGenerator : IReportGenerator
         return $"""
             <div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 5px;">
               <div><strong>Git:</strong> {report.GitInfo.BranchName} @ {report.GitInfo.CommitSha[..7]}{dirtyBadge}</div>
+            </div>
+            """;
+    }
+
+    private static string BuildDiffGitInfoHtml(AnalysisDiffReport diff)
+    {
+        // For diff reports, show base → head comparison without "Uncommitted Changes" badge
+        var baseBranch = diff.Base.BranchName ?? "unknown";
+        var headBranch = diff.Head.BranchName ?? "unknown";
+        var baseSha = diff.Base.CommitSha?[..7] ?? "unknown";
+        var headSha = diff.Head.CommitSha?[..7] ?? "unknown";
+
+        return $"""
+            <div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 5px;">
+              <div><strong>Git:</strong> {baseBranch} @ {baseSha} → {headBranch} @ {headSha}</div>
             </div>
             """;
     }

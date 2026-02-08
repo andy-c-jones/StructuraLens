@@ -404,6 +404,55 @@ public class HtmlReportGeneratorTests
         await Assert.That(html).Contains("null");
     }
 
+    [Test]
+    public async Task GenerateHtml_WithDiff_ShowsBaseAndHeadGitInfo()
+    {
+        // Arrange
+        var generator = CreateGenerator();
+        var report = CreateMinimalReport();
+        var diff = CreateMinimalDiff();
+
+        // Act
+        var html = generator.GenerateHtml(report, diff);
+
+        // Assert — should show base → head format without "Uncommitted Changes"
+        await Assert.That(html).Contains("main @ aaa1111");
+        await Assert.That(html).Contains("feature/test @ bbb2222");
+        await Assert.That(html).Contains("→");
+        await Assert.That(html).DoesNotContain("Uncommitted Changes");
+    }
+
+    [Test]
+    public async Task GenerateHtml_WithDiff_DiffTabIsFirstAndActive()
+    {
+        // Arrange
+        var generator = CreateGenerator();
+        var report = CreateMinimalReport();
+        var diff = CreateMinimalDiff();
+
+        // Act
+        var html = generator.GenerateHtml(report, diff);
+
+        // Assert — diff tab should be first and active
+        await Assert.That(html).Contains("""<div class="tab active" data-tab="diff">Diff</div>""");
+        await Assert.That(html).Contains("""<div id="diff" class="tab-content active">""");
+    }
+
+    [Test]
+    public async Task GenerateHtml_WithoutDiff_SummaryTabIsActive()
+    {
+        // Arrange
+        var generator = CreateGenerator();
+        var report = CreateMinimalReport();
+
+        // Act
+        var html = generator.GenerateHtml(report);
+
+        // Assert — summary tab should be active when no diff
+        await Assert.That(html).Contains("""<div class="tab active" data-tab="summary">Summary</div>""");
+        await Assert.That(html).Contains("""<div id="summary" class="tab-content active">""");
+    }
+
     // ---------------------------------------------------------------
     // JSON escaping
     // ---------------------------------------------------------------
