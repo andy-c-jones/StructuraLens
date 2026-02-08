@@ -48,14 +48,10 @@ public static class UnifiedMetricsCalculator
 
         private double CalculateMaintainabilityIndex()
         {
-            if (HalsteadVolume <= 0 || LinesOfCode <= 0)
-                return 100.0;
-
-            var lnVolume = Math.Log(HalsteadVolume);
-            var lnLoc = Math.Log(LinesOfCode);
-            var rawMi = 171 - (5.2 * lnVolume) - (0.23 * CyclomaticComplexity) - (16.2 * lnLoc);
-            var normalizedMi = 100.0 * rawMi / 171.0;
-            return Math.Max(0, Math.Min(100, normalizedMi));
+            return MaintainabilityIndexCalculator.Calculate(
+                HalsteadVolume,
+                CyclomaticComplexity,
+                LinesOfCode);
         }
     }
 
