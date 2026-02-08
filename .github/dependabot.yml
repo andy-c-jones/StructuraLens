@@ -16,6 +16,8 @@ updates:
     commit-message:
       prefix: "chore"
       include: "scope"
+    pull-request-branch-name:
+      separator: "-"
 
   # NuGet dependencies - Production (Core + CLI)
   # Monitors all NuGet packages except test dependencies
@@ -37,6 +39,8 @@ updates:
     commit-message:
       prefix: "chore"
       include: "scope"
+    pull-request-branch-name:
+      separator: "-"
 
   # NuGet dependencies - Development (Tests)
   # Monitors test-related packages separately
@@ -54,3 +58,5 @@ updates:
     commit-message:
       prefix: "chore"
       include: "scope"
+    pull-request-branch-name:
+      separator: "-"
