@@ -12,41 +12,8 @@ using StructuraLens.Core.Export;
 using StructuraLens.Core.Infrastructure;
 using StructuraLens.Core.Models;
 
-// Configure DI container
-var services = new ServiceCollection();
-
-// Logging configuration
-services.AddLogging(builder =>
-{
-    builder
-        .AddConsole(options =>
-        {
-            options.FormatterName = "simple";
-        })
-        .SetMinimumLevel(LogLevel.Information);
-});
-
-// CLI logging (for Program class)
-services.AddSingleton<ILogger<Program>>(sp => 
-    sp.GetRequiredService<ILoggerFactory>().CreateLogger<Program>());
-
-// Core services
-services.AddSingleton<IMetricsCalculator, MetricsCalculator>();
-services.AddSingleton<ICouplingAnalyzer, CouplingAnalyzer>();
-services.AddSingleton<ISolutionAnalyzer, SolutionAnalyzer>();
-
-// Infrastructure services
-services.AddSingleton<INuGetRestorer, NuGetRestorer>();
-services.AddSingleton<IMSBuildRegistrationService, MSBuildRegistrationService>();
-services.AddSingleton<IMSBuildWorkspaceFactory, MSBuildWorkspaceFactory>();
-services.AddSingleton<IFileSystemService, FileSystemService>();
-services.AddSingleton<IGitRepositoryService, GitRepositoryService>();
-
-// Export services
-services.AddSingleton<IReportExporter, CompactReportExporter>();
-services.AddSingleton<IReportGenerator, HtmlReportGenerator>();
-
-var serviceProvider = services.BuildServiceProvider();
+// Configure DI container with default logging
+var serviceProvider = ConfigureServices(LogLevel.Information);
 
 // Create options
 var outputOption = new Option<string?>("--out", "-o")
@@ -144,42 +111,9 @@ analyzeCommand.SetAction(async (parseResult, cancellationToken) =>
     };
 
     // Adjust logging level based on verbose flag
-    IServiceProvider executionServiceProvider;
-    if (verbose)
-    {
-        var verboseServices = new ServiceCollection();
-        verboseServices.AddLogging(builder =>
-        {
-            builder
-                .AddConsole(options =>
-                {
-                    options.FormatterName = "simple";
-                })
-                .SetMinimumLevel(LogLevel.Debug);
-        });
-        
-        // CLI logging (for Program class)
-        verboseServices.AddSingleton<ILogger<Program>>(sp => 
-            sp.GetRequiredService<ILoggerFactory>().CreateLogger<Program>());
-        
-        // Register all other services
-        verboseServices.AddSingleton<IMetricsCalculator, MetricsCalculator>();
-        verboseServices.AddSingleton<ICouplingAnalyzer, CouplingAnalyzer>();
-        verboseServices.AddSingleton<ISolutionAnalyzer, SolutionAnalyzer>();
-        verboseServices.AddSingleton<INuGetRestorer, NuGetRestorer>();
-        verboseServices.AddSingleton<IMSBuildRegistrationService, MSBuildRegistrationService>();
-        verboseServices.AddSingleton<IMSBuildWorkspaceFactory, MSBuildWorkspaceFactory>();
-        verboseServices.AddSingleton<IFileSystemService, FileSystemService>();
-        verboseServices.AddSingleton<IGitRepositoryService, GitRepositoryService>();
-        verboseServices.AddSingleton<IReportExporter, CompactReportExporter>();
-        verboseServices.AddSingleton<IReportGenerator, HtmlReportGenerator>();
-        
-        executionServiceProvider = verboseServices.BuildServiceProvider();
-    }
-    else
-    {
-        executionServiceProvider = serviceProvider;
-    }
+    var executionServiceProvider = verbose 
+        ? ConfigureServices(LogLevel.Debug)
+        : serviceProvider;
 
     return await ExecuteAnalysisAsync(path, output, format, analysisOptions, executionServiceProvider, cancellationToken);
 });
@@ -690,4 +624,42 @@ static string SanitizeBranchName(string branchName)
     }
     
     return result;
+}
+
+static IServiceProvider ConfigureServices(LogLevel logLevel)
+{
+    var services = new ServiceCollection();
+
+    // Logging configuration
+    services.AddLogging(builder =>
+    {
+        builder
+            .AddConsole(options =>
+            {
+                options.FormatterName = "simple";
+            })
+            .SetMinimumLevel(logLevel);
+    });
+
+    // CLI logging (for Program class)
+    services.AddSingleton<ILogger<Program>>(sp => 
+        sp.GetRequiredService<ILoggerFactory>().CreateLogger<Program>());
+
+    // Core services
+    services.AddSingleton<IMetricsCalculator, MetricsCalculator>();
+    services.AddSingleton<ICouplingAnalyzer, CouplingAnalyzer>();
+    services.AddSingleton<ISolutionAnalyzer, SolutionAnalyzer>();
+
+    // Infrastructure services
+    services.AddSingleton<INuGetRestorer, NuGetRestorer>();
+    services.AddSingleton<IMSBuildRegistrationService, MSBuildRegistrationService>();
+    services.AddSingleton<IMSBuildWorkspaceFactory, MSBuildWorkspaceFactory>();
+    services.AddSingleton<IFileSystemService, FileSystemService>();
+    services.AddSingleton<IGitRepositoryService, GitRepositoryService>();
+
+    // Export services
+    services.AddSingleton<IReportExporter, CompactReportExporter>();
+    services.AddSingleton<IReportGenerator, HtmlReportGenerator>();
+
+    return services.BuildServiceProvider();
 }
