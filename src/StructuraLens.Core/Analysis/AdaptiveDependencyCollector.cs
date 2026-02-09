@@ -11,12 +11,12 @@ namespace StructuraLens.Core.Analysis;
 /// </summary>
 public sealed class AdaptiveDependencyCollector : IDependencyCollector
 {
-    private volatile IDependencyCollector _current;
+    private IDependencyCollector _current;
     private readonly long _memoryThresholdBytes;
     private readonly int _sqliteBatchSize;
     private int _edgesSinceLastCheck;
-    private long _totalEdgesAdded; // Track total ourselves
-    private volatile bool _hasMigrated;
+    private long _totalEdgesAdded;
+    private bool _hasMigrated;
     private readonly object _migrationLock = new();
     private const int CheckInterval = 10000; // Check memory every 10K edges
     
@@ -39,15 +39,15 @@ public sealed class AdaptiveDependencyCollector : IDependencyCollector
     {
         lock (_migrationLock)
         {
-            Interlocked.Increment(ref _totalEdgesAdded);
+            _totalEdgesAdded++;
             
             // Periodically check memory pressure
             if (!_hasMigrated)
             {
-                var currentCount = Interlocked.Increment(ref _edgesSinceLastCheck);
-                if (currentCount >= CheckInterval)
+                _edgesSinceLastCheck++;
+                if (_edgesSinceLastCheck >= CheckInterval)
                 {
-                    Interlocked.Exchange(ref _edgesSinceLastCheck, 0);
+                    _edgesSinceLastCheck = 0;
                     CheckMemoryPressure();
                 }
             }
