@@ -179,7 +179,7 @@ public sealed class DiffReportRendererTests
         var markdown = renderer.RenderMarkdown(diff);
 
         // Assert - Project table should show severe MI drop and warning increase
-        await Assert.That(markdown).Contains("### Top Maintainability Changes");
+        await Assert.That(markdown).Contains("### Maintainability Changes");
         await Assert.That(markdown).Contains("TestProject");
         await Assert.That(markdown).Contains("🔴 **-15.0**"); // MI delta
         await Assert.That(markdown).Contains("⚠️ **+5**"); // Warnings delta in project row
@@ -224,19 +224,19 @@ public sealed class DiffReportRendererTests
         await Assert.That(markdown).Contains("## StructuraLens Diff Summary");
         
         var diagnosticsIndex = markdown.IndexOf("### Diagnostics");
-        var topChangesIndex = markdown.IndexOf("### Top Maintainability Changes");
-        var metricsIndex = markdown.IndexOf("### Top Level Metrics");
+        var topChangesIndex = markdown.IndexOf("### Maintainability Changes");
+        var metricsIndex = markdown.IndexOf("### Overall Metrics");
         
         // Diagnostics should come first
         await Assert.That(diagnosticsIndex).IsGreaterThan(0);
         
-        // Top Level Metrics should come last
+        // Overall Metrics should come last
         await Assert.That(metricsIndex).IsGreaterThan(diagnosticsIndex);
         
-        // Top Maintainability Changes should be between Diagnostics and Top Level Metrics (if projects exist)
-        // Since CreateDiffReport has no projects, Top Maintainability Changes won't be present
-        // but Top Level Metrics should still be there
-        await Assert.That(markdown).Contains("### Top Level Metrics");
+        // Maintainability Changes should be between Diagnostics and Overall Metrics (if projects exist)
+        // Since CreateDiffReport has no projects, Maintainability Changes won't be present
+        // but Overall Metrics should still be there
+        await Assert.That(markdown).Contains("### Overall Metrics");
     }
 
     [Test]
@@ -309,7 +309,7 @@ public sealed class DiffReportRendererTests
         var markdown = renderer.RenderMarkdown(diff);
 
         // Assert
-        await Assert.That(markdown).Contains("### Top New Diagnostics");
+        await Assert.That(markdown).Contains("### New Diagnostics");
         await Assert.That(markdown).Contains("🚨 **CS0103** in `TestProject`");
         await Assert.That(markdown).Contains("The name 'foo' does not exist");
         await Assert.That(markdown).Contains("Location: `Program.cs:42:10`");
@@ -329,15 +329,16 @@ public sealed class DiffReportRendererTests
         var markdown = renderer.RenderMarkdown(diff);
 
         // Assert - Should not have the section if no new diagnostics
-        await Assert.That(markdown).DoesNotContain("### Top New Diagnostics");
+        await Assert.That(markdown).DoesNotContain("### New Diagnostics");
     }
 
     [Test]
-    public async Task RenderMarkdown_WithMoreThan10NewDiagnostics_ShowsTop10ByPriority()
+    public async Task RenderMarkdown_WithMoreThan20NewDiagnostics_ShowsTop20ByPriorityWithWarning()
     {
         // Arrange
         var renderer = new DiffReportRenderer();
-        var topNewErrors = Enumerable.Range(1, 5).Select(i => new DiagnosticDiffItem
+        // Create 10 errors (1-10)
+        var topNewErrors = Enumerable.Range(1, 10).Select(i => new DiagnosticDiffItem
         {
             Project = $"Project{i}",
             Id = $"CS{i:D4}",
@@ -348,8 +349,8 @@ public sealed class DiffReportRendererTests
             Column = 1
         }).ToList();
         
-        // Create 10 warnings (6-15)
-        var topNewWarnings = Enumerable.Range(6, 10).Select(i => new DiagnosticDiffItem
+        // Create 15 warnings (11-25)
+        var topNewWarnings = Enumerable.Range(11, 15).Select(i => new DiagnosticDiffItem
         {
             Project = $"Project{i}",
             Id = $"CS{i:D4}",
@@ -372,16 +373,16 @@ public sealed class DiffReportRendererTests
                 BaseCyclomaticComplexity = 100, HeadCyclomaticComplexity = 100,
                 BaseLinesOfCode = 1000, HeadLinesOfCode = 1000,
                 BaseAvgMaintainabilityIndex = 80.0, HeadAvgMaintainabilityIndex = 80.0,
-                BaseErrors = 0, HeadErrors = 5,
-                BaseWarnings = 0, HeadWarnings = 10,
+                BaseErrors = 0, HeadErrors = 10,
+                BaseWarnings = 0, HeadWarnings = 15,
                 BaseInfo = 0, HeadInfo = 0,
                 BaseHidden = 0, HeadHidden = 0
             },
             Projects = [],
             Diagnostics = new DiagnosticDiffSummary
             {
-                BaseErrors = 0, HeadErrors = 5,
-                BaseWarnings = 0, HeadWarnings = 10,
+                BaseErrors = 0, HeadErrors = 10,
+                BaseWarnings = 0, HeadWarnings = 15,
                 TopNewErrors = topNewErrors,
                 TopNewWarnings = topNewWarnings
             }
@@ -390,15 +391,20 @@ public sealed class DiffReportRendererTests
         // Act
         var markdown = renderer.RenderMarkdown(diff);
 
-        // Assert - Should show all 5 errors (priority 4) and only 5 warnings (priority 3) to reach the 10 item limit
-        await Assert.That(markdown).Contains("### Top New Diagnostics");
+        // Assert - Should show all 10 errors (priority 4) and only 10 warnings (priority 3) to reach the 20 item limit
+        await Assert.That(markdown).Contains("### 🚨 New Diagnostics"); // Alarming emoji when >20
         await Assert.That(markdown).Contains("🚨 **CS0001**"); // Error 1
-        await Assert.That(markdown).Contains("🚨 **CS0005**"); // Error 5
-        await Assert.That(markdown).Contains("⚠️ **CS0010**"); // Warning 10
-        await Assert.That(markdown).Contains("⚠️ **CS0014**"); // Warning 14
+        await Assert.That(markdown).Contains("🚨 **CS0010**"); // Error 10
+        await Assert.That(markdown).Contains("⚠️ **CS0011**"); // Warning 11 (first warning)
+        await Assert.That(markdown).Contains("⚠️ **CS0020**"); // Warning 20 (10th warning)
         
-        // Should not show warning 15 (the 11th item after 5 errors + 5 warnings)
-        await Assert.That(markdown).DoesNotContain("**CS0015**");
+        // Should not show warning 21 and beyond (the 21st+ items)
+        await Assert.That(markdown).DoesNotContain("**CS0021**");
+        await Assert.That(markdown).DoesNotContain("**CS0025**");
+        
+        // Should show the warning message about too many diagnostics
+        await Assert.That(markdown).Contains("Too many diagnostic issues added to show all of them");
+        await Assert.That(markdown).Contains("(25 total, showing 20)");
     }
 
     [Test]
@@ -702,15 +708,15 @@ public sealed class DiffReportRendererTests
 
         // Assert - Verify all sections are present in the correct order
         var diagnosticsIndex = markdown.IndexOf("### Diagnostics");
-        var topNewDiagnosticsIndex = markdown.IndexOf("### Top New Diagnostics");
+        var newDiagnosticsIndex = markdown.IndexOf("### New Diagnostics");
         var internalDependenciesIndex = markdown.IndexOf("### Internal Dependencies Changes");
-        var topChangesIndex = markdown.IndexOf("### Top Maintainability Changes");
-        var metricsIndex = markdown.IndexOf("### Top Level Metrics");
+        var topChangesIndex = markdown.IndexOf("### Maintainability Changes");
+        var metricsIndex = markdown.IndexOf("### Overall Metrics");
 
-        // Order should be: Diagnostics -> Top New Diagnostics -> Internal Dependencies -> Top Maintainability Changes -> Top Level Metrics
-        await Assert.That(diagnosticsIndex).IsGreaterThan(0);
-        await Assert.That(topNewDiagnosticsIndex).IsGreaterThan(diagnosticsIndex);
-        await Assert.That(internalDependenciesIndex).IsGreaterThan(topNewDiagnosticsIndex);
+        // Order should be: New Diagnostics -> Diagnostics -> Internal Dependencies -> Maintainability Changes -> Overall Metrics
+        await Assert.That(newDiagnosticsIndex).IsGreaterThan(0);
+        await Assert.That(diagnosticsIndex).IsGreaterThan(newDiagnosticsIndex);
+        await Assert.That(internalDependenciesIndex).IsGreaterThan(diagnosticsIndex);
         await Assert.That(topChangesIndex).IsGreaterThan(internalDependenciesIndex);
         await Assert.That(metricsIndex).IsGreaterThan(topChangesIndex);
     }
@@ -975,7 +981,7 @@ public sealed class DiffReportRendererTests
         // Assert - Verify section ordering
         var internalDepsIndex = markdown.IndexOf("### Internal Dependencies Changes");
         var externalDepsIndex = markdown.IndexOf("### External Dependencies Changes");
-        var maintainabilityIndex = markdown.IndexOf("### Top Maintainability Changes");
+        var maintainabilityIndex = markdown.IndexOf("### Maintainability Changes");
         
         await Assert.That(internalDepsIndex).IsGreaterThan(0);
         await Assert.That(externalDepsIndex).IsGreaterThan(internalDepsIndex);

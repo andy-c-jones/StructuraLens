@@ -20,7 +20,10 @@ public sealed class DiffReportRenderer
         sb.AppendLine($"Head: `{ShortSha(diff.Head.CommitSha)}` {diff.Head.BranchName}");
         sb.AppendLine();
 
-        // Section 1: Diagnostics (most critical - errors and warnings)
+        // Section 1: New Diagnostics (up to 20 most important, with warning if more)
+        RenderNewDiagnostics(diff, sb);
+
+        // Section 2: Diagnostics (most critical - errors and warnings)
         sb.AppendLine("### Diagnostics");
         sb.AppendLine();
         sb.AppendLine("| Metric | Base | Head | Delta |");
@@ -43,52 +46,17 @@ public sealed class DiffReportRenderer
         sb.AppendLine(BuildRow("Hidden", diff.Totals.BaseHidden, diff.Totals.HeadHidden, diff.Totals.HiddenDelta));
         sb.AppendLine();
 
-        // Section 2: Top New Diagnostics (up to 10 most important)
-        RenderTopNewDiagnostics(diff, sb);
-
         // Section 3: Internal Dependencies Changes
         RenderInternalDependenciesChanges(diff, sb, maxProjects);
 
         // Section 4: External Dependencies Changes
         RenderExternalDependenciesChanges(diff, sb, maxProjects);
 
-        // Section 5: Top Maintainability Changes (per-project breakdown)
-        if (diff.Projects.Count > 0)
-        {
-            sb.AppendLine("### Top Maintainability Changes");
-            sb.AppendLine();
-            sb.AppendLine("| Project | MI (Base) | MI (Head) | Delta | Complexity Δ | LOC Δ | Warnings Δ |");
-            sb.AppendLine("| --- | ---: | ---: | ---: | ---: | ---: | ---: |");
+        // Section 5: Maintainability Changes (per-project breakdown - only projects with changes)
+        RenderMaintainabilityChanges(diff, sb);
 
-            foreach (var project in diff.Projects
-                .Where(p => !p.IsAdded && !p.IsRemoved)
-                .OrderByDescending(p => Math.Abs(p.MaintainabilityDelta))
-                .Take(maxProjects))
-            {
-                // Determine MI delta severity
-                var miDeltaSemantic = project.MaintainabilityDelta <= SevereMaintainabilityDrop 
-                    ? DeltaSemantic.SevereDecrease
-                    : project.MaintainabilityDelta <= ModerateMaintainabilityDrop 
-                    ? DeltaSemantic.ModerateDecrease
-                    : project.MaintainabilityDelta > 0 
-                    ? DeltaSemantic.GoodIncrease
-                    : DeltaSemantic.Neutral;
-
-                // Determine warnings delta semantic
-                var warningsSemantic = project.WarningsDelta > 0 
-                    ? DeltaSemantic.BadIncrease 
-                    : project.WarningsDelta < 0 
-                    ? DeltaSemantic.GoodDecrease 
-                    : DeltaSemantic.Neutral;
-
-                sb.AppendLine(
-                    $"| {Escape(project.Name)} | {project.Base.AvgMaintainabilityIndex:0.0} | {project.Head.AvgMaintainabilityIndex:0.0} | {FormatDelta(project.MaintainabilityDelta, miDeltaSemantic)} | {FormatDelta(project.CyclomaticComplexityDelta)} | {FormatDelta(project.LinesOfCodeDelta)} | {FormatDelta(project.WarningsDelta, warningsSemantic)} |");
-            }
-            sb.AppendLine();
-        }
-
-        // Section 6: Top Level Metrics (overall statistics)
-        sb.AppendLine("### Top Level Metrics");
+        // Section 6: Overall Metrics (overall statistics)
+        sb.AppendLine("### Overall Metrics");
         sb.AppendLine();
         sb.AppendLine("| Metric | Base | Head | Delta |");
         sb.AppendLine("| --- | ---: | ---: | ---: |");
@@ -127,7 +95,7 @@ public sealed class DiffReportRenderer
         return sb.ToString();
     }
 
-    private static void RenderTopNewDiagnostics(AnalysisDiffReport diff, StringBuilder sb)
+    private static void RenderNewDiagnostics(AnalysisDiffReport diff, StringBuilder sb)
     {
         // Gather all new diagnostics (errors, warnings, info, hidden) with priority weighting
         var allNewDiagnostics = new List<(DiagnosticDiffItem Item, int Priority)>();
@@ -138,16 +106,23 @@ public sealed class DiffReportRenderer
         foreach (var warning in diff.Diagnostics.TopNewWarnings)
             allNewDiagnostics.Add((warning, 3));
         
-        // Take top 10 by priority, then by project name for stability
+        var totalDiagnosticsCount = allNewDiagnostics.Count;
+        
+        // Take top 20 by priority, then by project name for stability
         var topDiagnostics = allNewDiagnostics
             .OrderByDescending(x => x.Priority)
             .ThenBy(x => x.Item.Project)
-            .Take(10)
+            .Take(20)
             .ToList();
 
         if (topDiagnostics.Count > 0)
         {
-            sb.AppendLine("### Top New Diagnostics");
+            // Add alarming emoji if more than 20 diagnostics exist
+            var title = totalDiagnosticsCount > 20 
+                ? "### 🚨 New Diagnostics" 
+                : "### New Diagnostics";
+            
+            sb.AppendLine(title);
             sb.AppendLine();
             
             foreach (var (item, priority) in topDiagnostics)
@@ -165,6 +140,57 @@ public sealed class DiffReportRenderer
                 sb.AppendLine($"  - Location: `{item.File}:{item.Line}:{item.Column}`");
                 sb.AppendLine();
             }
+            
+            // Add warning if there are more than 20 diagnostics
+            if (totalDiagnosticsCount > 20)
+            {
+                sb.AppendLine($"🚨 **Too many diagnostic issues added to show all of them** ({totalDiagnosticsCount} total, showing 20)");
+                sb.AppendLine();
+            }
+        }
+    }
+
+    private static void RenderMaintainabilityChanges(AnalysisDiffReport diff, StringBuilder sb)
+    {
+        // Filter projects to only those with actual changes
+        var projectsWithChanges = diff.Projects
+            .Where(p => !p.IsAdded && !p.IsRemoved)
+            .Where(p => p.MaintainabilityDelta != 0 
+                || p.CyclomaticComplexityDelta != 0 
+                || p.LinesOfCodeDelta != 0 
+                || p.WarningsDelta != 0)
+            .OrderByDescending(p => Math.Abs(p.MaintainabilityDelta))
+            .ToList();
+
+        if (projectsWithChanges.Count > 0)
+        {
+            sb.AppendLine("### Maintainability Changes");
+            sb.AppendLine();
+            sb.AppendLine("| Project | MI (Base) | MI (Head) | Delta | Complexity Δ | LOC Δ | Warnings Δ |");
+            sb.AppendLine("| --- | ---: | ---: | ---: | ---: | ---: | ---: |");
+
+            foreach (var project in projectsWithChanges)
+            {
+                // Determine MI delta severity
+                var miDeltaSemantic = project.MaintainabilityDelta <= SevereMaintainabilityDrop 
+                    ? DeltaSemantic.SevereDecrease
+                    : project.MaintainabilityDelta <= ModerateMaintainabilityDrop 
+                    ? DeltaSemantic.ModerateDecrease
+                    : project.MaintainabilityDelta > 0 
+                    ? DeltaSemantic.GoodIncrease
+                    : DeltaSemantic.Neutral;
+
+                // Determine warnings delta semantic
+                var warningsSemantic = project.WarningsDelta > 0 
+                    ? DeltaSemantic.BadIncrease 
+                    : project.WarningsDelta < 0 
+                    ? DeltaSemantic.GoodDecrease 
+                    : DeltaSemantic.Neutral;
+
+                sb.AppendLine(
+                    $"| {Escape(project.Name)} | {project.Base.AvgMaintainabilityIndex:0.0} | {project.Head.AvgMaintainabilityIndex:0.0} | {FormatDelta(project.MaintainabilityDelta, miDeltaSemantic)} | {FormatDelta(project.CyclomaticComplexityDelta)} | {FormatDelta(project.LinesOfCodeDelta)} | {FormatDelta(project.WarningsDelta, warningsSemantic)} |");
+            }
+            sb.AppendLine();
         }
     }
 
