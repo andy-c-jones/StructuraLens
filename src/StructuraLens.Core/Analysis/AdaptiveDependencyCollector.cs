@@ -37,6 +37,9 @@ public sealed class AdaptiveDependencyCollector : IDependencyCollector
     /// <inheritdoc />
     public void AddDependency(DependencyEdge edge)
     {
+        // Capture reference first to avoid race with migration switching _current
+        var collector = _current;
+        
         Interlocked.Increment(ref _totalEdgesAdded);
         
         // Periodically check memory pressure
@@ -47,10 +50,12 @@ public sealed class AdaptiveDependencyCollector : IDependencyCollector
             {
                 CheckMemoryPressure();
             }
+            
+            // Refresh after potential migration so we don't add to the old collector
+            collector = _current;
         }
         
-        // Always read _current immediately before use (volatile ensures visibility)
-        _current.AddDependency(edge);
+        collector.AddDependency(edge);
     }
     
     /// <inheritdoc />
@@ -117,8 +122,9 @@ public sealed class AdaptiveDependencyCollector : IDependencyCollector
         Console.WriteLine($"[StructuraLens] Migrating {existingEdges.Count} unique edges to disk...");
         sqlite.AddDependencies(existingEdges);
         
-        // Do NOT dispose the old collector - threads may still hold references to it
-        // from before the migration. Let GC handle cleanup when all references are gone.
+        // Do NOT dispose the old collector - threads that captured a local reference
+        // before migration may still be calling AddDependency on it. Let GC handle
+        // cleanup when all references are gone.
         // Note: InMemoryDependencyCollector.Dispose() is a no-op anyway.
         
         // Force garbage collection to reclaim memory
