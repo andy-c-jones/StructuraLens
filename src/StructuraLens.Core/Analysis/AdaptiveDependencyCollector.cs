@@ -162,15 +162,18 @@ public sealed class AdaptiveDependencyCollector : IDependencyCollector
     /// <inheritdoc />
     public DependencyCollectorStats GetStats()
     {
-        var stats = _current.GetStats();
-        // Override with our own total count, but keep the unique count from the current collector
-        return new DependencyCollectorStats(
-            TotalEdgesAdded: _totalEdgesAdded,
-            UniqueEdgesCount: stats.UniqueEdgesCount,
-            MemoryUsageBytes: stats.MemoryUsageBytes,
-            Strategy: $"Adaptive-{stats.Strategy}",
-            DatabasePath: stats.DatabasePath
-        );
+        lock (_migrationLock)
+        {
+            var stats = _current.GetStats();
+            // Override with our own total count, but keep the unique count from the current collector
+            return new DependencyCollectorStats(
+                TotalEdgesAdded: _totalEdgesAdded,
+                UniqueEdgesCount: stats.UniqueEdgesCount,
+                MemoryUsageBytes: stats.MemoryUsageBytes,
+                Strategy: $"Adaptive-{stats.Strategy}",
+                DatabasePath: stats.DatabasePath
+            );
+        }
     }
     
     /// <inheritdoc />
