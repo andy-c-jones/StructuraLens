@@ -11,12 +11,13 @@ namespace StructuraLens.Core.Analysis;
 /// </summary>
 public sealed class AdaptiveDependencyCollector : IDependencyCollector
 {
-    private IDependencyCollector _current;
+    private IDependencyCollector? _current;
     private readonly long _memoryThresholdBytes;
     private readonly int _sqliteBatchSize;
     private int _edgesSinceLastCheck;
     private long _totalEdgesAdded;
     private bool _hasMigrated;
+    private bool _disposed;
     private readonly object _migrationLock = new();
     private const int CheckInterval = 10000; // Check memory every 10K edges
     
@@ -39,6 +40,8 @@ public sealed class AdaptiveDependencyCollector : IDependencyCollector
     {
         lock (_migrationLock)
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            
             _totalEdgesAdded++;
             
             // Periodically check memory pressure
@@ -52,7 +55,7 @@ public sealed class AdaptiveDependencyCollector : IDependencyCollector
                 }
             }
             
-            _current.AddDependency(edge);
+            _current!.AddDependency(edge);
         }
     }
     
@@ -123,7 +126,8 @@ public sealed class AdaptiveDependencyCollector : IDependencyCollector
     {
         lock (_migrationLock)
         {
-            return _current.GetAggregatedDependencies();
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            return _current!.GetAggregatedDependencies();
         }
     }
     
@@ -132,7 +136,8 @@ public sealed class AdaptiveDependencyCollector : IDependencyCollector
     {
         lock (_migrationLock)
         {
-            return _current.GetAggregatedDependencies(type);
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            return _current!.GetAggregatedDependencies(type);
         }
     }
     
@@ -141,7 +146,9 @@ public sealed class AdaptiveDependencyCollector : IDependencyCollector
     {
         lock (_migrationLock)
         {
-            var stats = _current.GetStats();
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            
+            var stats = _current!.GetStats();
             // Override with our own total count, but keep the unique count from the current collector
             return new DependencyCollectorStats(
                 TotalEdgesAdded: _totalEdgesAdded,
@@ -158,6 +165,8 @@ public sealed class AdaptiveDependencyCollector : IDependencyCollector
     {
         lock (_migrationLock)
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            
             // If currently using SQLite, dispose and reset to InMemory
             if (_hasMigrated)
             {
@@ -167,7 +176,7 @@ public sealed class AdaptiveDependencyCollector : IDependencyCollector
             }
             else
             {
-                _current.Reset();
+                _current!.Reset();
             }
             
             _edgesSinceLastCheck = 0;
@@ -180,7 +189,12 @@ public sealed class AdaptiveDependencyCollector : IDependencyCollector
     {
         lock (_migrationLock)
         {
+            if (_disposed)
+                return;
+            
             _current?.Dispose();
+            _current = null;
+            _disposed = true;
         }
     }
     
@@ -193,6 +207,7 @@ public sealed class AdaptiveDependencyCollector : IDependencyCollector
         {
             lock (_migrationLock)
             {
+                ObjectDisposedException.ThrowIf(_disposed, this);
                 return _hasMigrated;
             }
         }
@@ -207,6 +222,7 @@ public sealed class AdaptiveDependencyCollector : IDependencyCollector
         {
             lock (_migrationLock)
             {
+                ObjectDisposedException.ThrowIf(_disposed, this);
                 return _current switch
                 {
                     InMemoryDependencyCollector => "InMemory",
