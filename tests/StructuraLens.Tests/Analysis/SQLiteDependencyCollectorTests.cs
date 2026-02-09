@@ -314,4 +314,78 @@ public class SQLiteDependencyCollectorTests
             }
         }
     }
+    
+    [Test]
+    public async Task FlushBatch_MassiveBatch_AutoChunksCorrectly()
+    {
+        // Arrange - Create collector with batch size that exceeds parameter limit (8,000 rows)
+        using var collector = new SQLiteDependencyCollector(batchSize: 20_000);
+        
+        // Act - Add 20,000 edges (would be 80,000 parameters without chunking)
+        for (int i = 0; i < 20_000; i++)
+        {
+            collector.AddDependency(
+                new DependencyEdge($"Entity_{i}", $"Target_{i}", 
+                    DependencyType.TypeReference, 1));
+        }
+        
+        var result = collector.GetAggregatedDependencies();
+        
+        // Assert - Should handle gracefully via chunking (3 chunks: 8K + 8K + 4K)
+        await Assert.That(result.Count).IsEqualTo(20_000);
+        
+        var stats = collector.GetStats();
+        await Assert.That(stats.TotalEdgesAdded).IsEqualTo(20_000);
+        await Assert.That(stats.UniqueEdgesCount).IsEqualTo(20_000);
+    }
+    
+    [Test]
+    public async Task FlushBatch_ExactlyAtChunkLimit_HandlesCorrectly()
+    {
+        // Arrange - Batch size exactly at chunk limit (8,000 rows = 32,000 params)
+        using var collector = new SQLiteDependencyCollector(batchSize: 8_000);
+        
+        // Act - Add exactly 8,000 edges (at the chunk boundary)
+        for (int i = 0; i < 8_000; i++)
+        {
+            collector.AddDependency(
+                new DependencyEdge($"Entity_{i}", $"Target_{i}", 
+                    DependencyType.TypeReference, 1));
+        }
+        
+        var result = collector.GetAggregatedDependencies();
+        
+        // Assert - Should fit in single chunk
+        await Assert.That(result.Count).IsEqualTo(8_000);
+    }
+    
+    [Test]
+    public async Task FlushBatch_RequiresMultipleChunks_AllDataPreserved()
+    {
+        // Arrange - Force exactly 3 chunks (8K + 8K + 1K = 17K total)
+        using var collector = new SQLiteDependencyCollector(batchSize: 17_000);
+        
+        // Act - Add 17,000 unique edges with unique reference counts
+        for (int i = 0; i < 17_000; i++)
+        {
+            collector.AddDependency(
+                new DependencyEdge($"Entity_{i}", $"Target_{i}", 
+                    DependencyType.TypeReference, i + 1)); // Unique counts
+        }
+        
+        var result = collector.GetAggregatedDependencies();
+        
+        // Assert - All edges preserved across chunks
+        await Assert.That(result.Count).IsEqualTo(17_000);
+        
+        // Verify a sample from each chunk
+        var firstChunk = result.First(e => e.FromEntity == "Entity_0");
+        await Assert.That(firstChunk.ReferenceCount).IsEqualTo(1);
+        
+        var secondChunk = result.First(e => e.FromEntity == "Entity_9000");
+        await Assert.That(secondChunk.ReferenceCount).IsEqualTo(9001);
+        
+        var thirdChunk = result.First(e => e.FromEntity == "Entity_16000");
+        await Assert.That(thirdChunk.ReferenceCount).IsEqualTo(16001);
+    }
 }
