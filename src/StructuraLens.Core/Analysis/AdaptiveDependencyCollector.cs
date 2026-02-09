@@ -43,16 +43,20 @@ public sealed class AdaptiveDependencyCollector : IDependencyCollector
         Interlocked.Increment(ref _totalEdgesAdded);
         
         // Periodically check memory pressure
-        if (!_hasMigrated && Interlocked.Increment(ref _edgesSinceLastCheck) >= CheckInterval)
+        if (!_hasMigrated)
         {
-            // Atomic test-and-reset to prevent thundering herd
-            if (Interlocked.CompareExchange(ref _edgesSinceLastCheck, 0, CheckInterval) >= CheckInterval)
+            var currentCount = Interlocked.Increment(ref _edgesSinceLastCheck);
+            if (currentCount >= CheckInterval)
             {
-                CheckMemoryPressure();
+                // Atomic reset: only the thread that sees its own value wins
+                if (Interlocked.CompareExchange(ref _edgesSinceLastCheck, 0, currentCount) == currentCount)
+                {
+                    CheckMemoryPressure();
+                }
+                
+                // Refresh after potential migration so we don't add to the old collector
+                collector = _current;
             }
-            
-            // Refresh after potential migration so we don't add to the old collector
-            collector = _current;
         }
         
         collector.AddDependency(edge);
