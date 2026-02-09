@@ -144,7 +144,8 @@ public class MetricsTests
             SolutionPath: "/solution.sln",
             AnalyzedAt: DateTime.UtcNow,
             Projects: projects,
-            Warnings: []);
+            Warnings: [],
+            ToolVersion: "test");
 
         await Assert.That(report.TotalProjects).IsEqualTo(3);
     }
@@ -169,7 +170,8 @@ public class MetricsTests
             SolutionPath: "/solution.sln",
             AnalyzedAt: DateTime.UtcNow,
             Projects: projects,
-            Warnings: []);
+            Warnings: [],
+            ToolVersion: "test");
 
         await Assert.That(report.TotalTypes).IsEqualTo(3);
     }
@@ -200,7 +202,8 @@ public class MetricsTests
             SolutionPath: "/solution.sln",
             AnalyzedAt: DateTime.UtcNow,
             Projects: projects,
-            Warnings: []);
+            Warnings: [],
+            ToolVersion: "test");
 
         await Assert.That(report.TotalMethods).IsEqualTo(3);
     }

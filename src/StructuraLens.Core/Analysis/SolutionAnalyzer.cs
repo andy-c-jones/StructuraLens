@@ -161,7 +161,8 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
             SolutionPath: fullPath,
             AnalyzedAt: DateTime.UtcNow,
             Projects: projectMetricsList.ToList(),
-            Warnings: _warnings.ToList())
+            Warnings: _warnings.ToList(),
+            ToolVersion: _options.ToolVersion)
         {
             CouplingAnalysis = couplingAnalysis,
             AggregationStats = collectorStats,
@@ -221,7 +222,8 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
             SolutionPath: fullPath,
             AnalyzedAt: DateTime.UtcNow,
             Projects: [projectMetrics],
-            Warnings: _warnings.ToList())
+            Warnings: _warnings.ToList(),
+            ToolVersion: _options.ToolVersion)
         {
             CouplingAnalysis = couplingAnalysis,
             GitInfo = gitInfo

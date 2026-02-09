@@ -80,7 +80,8 @@ public record AnalysisReport(
     string SolutionPath,
     DateTime AnalyzedAt,
     IReadOnlyList<ProjectMetrics> Projects,
-    IReadOnlyList<string> Warnings)
+    IReadOnlyList<string> Warnings,
+    string ToolVersion)
 {
     public int TotalProjects => Projects.Count;
     public int TotalTypes => Projects.Sum(p => p.Types.Count);

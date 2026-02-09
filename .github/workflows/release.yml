@@ -33,11 +33,20 @@ jobs:
       - name: Test
         run: dotnet test --no-build -c Release --verbosity normal
 
+      - name: Semantic Release
+        uses: cycjimmy/semantic-release-action@v6
+        id: semantic
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build multi-platform binaries
+        if: steps.semantic.outputs.new_release_published == 'true'
+        env:
+          VERSION: ${{ steps.semantic.outputs.new_release_version }}
         run: |
-          echo "Building binaries for all platforms..."
+          echo "Building binaries for version ${VERSION} for all platforms..."
           
-          # Build for each platform
+          # Build for each platform with version injected
           dotnet publish src/StructuraLens.Cli/StructuraLens.Cli.csproj \
             -c Release \
             -r linux-arm64 \
@@ -45,6 +54,9 @@ jobs:
             -p:PublishSingleFile=true \
             -p:IncludeNativeLibrariesForSelfExtract=true \
             -p:IncludeAllContentForSelfExtract=true \
+            -p:Version=${VERSION} \
+            -p:AssemblyVersion=${VERSION} \
+            -p:InformationalVersion=${VERSION} \
             -o ./publish/linux-arm64
 
           dotnet publish src/StructuraLens.Cli/StructuraLens.Cli.csproj \
@@ -54,6 +66,9 @@ jobs:
             -p:PublishSingleFile=true \
             -p:IncludeNativeLibrariesForSelfExtract=true \
             -p:IncludeAllContentForSelfExtract=true \
+            -p:Version=${VERSION} \
+            -p:AssemblyVersion=${VERSION} \
+            -p:InformationalVersion=${VERSION} \
             -o ./publish/linux-x64
 
           dotnet publish src/StructuraLens.Cli/StructuraLens.Cli.csproj \
@@ -63,6 +78,9 @@ jobs:
             -p:PublishSingleFile=true \
             -p:IncludeNativeLibrariesForSelfExtract=true \
             -p:IncludeAllContentForSelfExtract=true \
+            -p:Version=${VERSION} \
+            -p:AssemblyVersion=${VERSION} \
+            -p:InformationalVersion=${VERSION} \
             -o ./publish/osx-arm64
 
           dotnet publish src/StructuraLens.Cli/StructuraLens.Cli.csproj \
@@ -72,15 +90,12 @@ jobs:
             -p:PublishSingleFile=true \
             -p:IncludeNativeLibrariesForSelfExtract=true \
             -p:IncludeAllContentForSelfExtract=true \
+            -p:Version=${VERSION} \
+            -p:AssemblyVersion=${VERSION} \
+            -p:InformationalVersion=${VERSION} \
             -o ./publish/win-x64
 
-          echo "All platform builds completed successfully!"
-
-      - name: Semantic Release
-        uses: cycjimmy/semantic-release-action@v6
-        id: semantic
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          echo "All platform builds completed successfully for version ${VERSION}!"
 
       - name: Create versioned release archives
         if: steps.semantic.outputs.new_release_published == 'true'
