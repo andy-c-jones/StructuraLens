@@ -72,4 +72,10 @@ public class AnalysisOptions
     /// Default: false.
     /// </summary>
     public bool VerboseLogging { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the tool version to include in analysis reports.
+    /// Default: "unknown".
+    /// </summary>
+    public string ToolVersion { get; set; } = "unknown";
 }

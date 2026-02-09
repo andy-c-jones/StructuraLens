@@ -53,6 +53,11 @@ public record CompactReport
     [JsonPropertyName("gitDirty")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool GitIsDirty { get; init; }
+
+    /// <summary>Tool version used to generate the report.</summary>
+    [JsonPropertyName("toolVer")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ToolVersion { get; init; }
 }
 
 /// <summary>Compact project metrics.</summary>

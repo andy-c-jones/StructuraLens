@@ -44,7 +44,8 @@ public class HtmlReportGeneratorTests
             SolutionPath: solutionPath,
             AnalyzedAt: analyzedAt ?? new DateTime(2025, 6, 15, 14, 30, 0, DateTimeKind.Utc),
             Projects: [project],
-            Warnings: [])
+            Warnings: [],
+            ToolVersion: "test")
         {
             GitInfo = gitInfo,
         };
@@ -486,7 +487,8 @@ public class HtmlReportGeneratorTests
             SolutionPath: "test.sln",
             AnalyzedAt: DateTime.UtcNow,
             Projects: [project],
-            Warnings: []);
+            Warnings: [],
+            ToolVersion: "test");
 
         var generator = CreateGenerator();
 

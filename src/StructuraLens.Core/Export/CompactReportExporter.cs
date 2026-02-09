@@ -30,7 +30,8 @@ public sealed class CompactReportExporter : IReportExporter
             GitCommitSha = report.GitInfo?.CommitSha,
             GitBranch = report.GitInfo?.BranchName,
             GitRemoteUrl = report.GitInfo?.RemoteUrl,
-            GitIsDirty = report.GitInfo?.IsDirty ?? false
+            GitIsDirty = report.GitInfo?.IsDirty ?? false,
+            ToolVersion = report.ToolVersion
         };
     }
 
@@ -57,7 +58,8 @@ public sealed class CompactReportExporter : IReportExporter
             GitCommitSha = report.GitInfo?.CommitSha,
             GitBranch = report.GitInfo?.BranchName,
             GitRemoteUrl = report.GitInfo?.RemoteUrl,
-            GitIsDirty = report.GitInfo?.IsDirty ?? false
+            GitIsDirty = report.GitInfo?.IsDirty ?? false,
+            ToolVersion = report.ToolVersion
         };
     }
 

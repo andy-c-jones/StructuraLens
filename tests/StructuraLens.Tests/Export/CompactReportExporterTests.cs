@@ -37,7 +37,8 @@ public class CompactReportExporterTests
             SolutionPath: "test.sln",
             AnalyzedAt: DateTime.UtcNow,
             Projects: new List<ProjectMetrics> { project },
-            Warnings: new List<string>());
+            Warnings: new List<string>(),
+            ToolVersion: "test");
     }
 
     [Test]
@@ -267,7 +268,8 @@ public class CompactReportExporterTests
             SolutionPath: "test.sln",
             AnalyzedAt: DateTime.UtcNow,
             Projects: new List<ProjectMetrics> { project },
-            Warnings: new List<string>());
+            Warnings: new List<string>(),
+            ToolVersion: "test");
 
         // Act
         var compactReport = exporter.Export(report);
@@ -366,7 +368,8 @@ public class CompactReportExporterTests
             SolutionPath: "test.sln",
             AnalyzedAt: DateTime.UtcNow,
             Projects: new List<ProjectMetrics> { project },
-            Warnings: new List<string>());
+            Warnings: new List<string>(),
+            ToolVersion: "test");
 
         // Act
         var compactReport = exporter.Export(report);
@@ -385,7 +388,8 @@ public class CompactReportExporterTests
             SolutionPath: "empty.sln",
             AnalyzedAt: DateTime.UtcNow,
             Projects: new List<ProjectMetrics>(),
-            Warnings: new List<string>());
+            Warnings: new List<string>(),
+            ToolVersion: "test");
 
         // Act
         var compactReport = exporter.Export(report);
@@ -440,7 +444,8 @@ public class CompactReportExporterTests
             SolutionPath: "test.sln",
             AnalyzedAt: DateTime.UtcNow,
             Projects: new List<ProjectMetrics> { project },
-            Warnings: []);
+            Warnings: [],
+            ToolVersion: "test");
 
         // Act
         var compactReport = exporter.ExportHierarchical(report, includeMethodDetails: false, includeTypeDetails: true);
@@ -477,7 +482,8 @@ public class CompactReportExporterTests
             SolutionPath: "test.sln",
             AnalyzedAt: DateTime.UtcNow,
             Projects: new List<ProjectMetrics> { project },
-            Warnings: []);
+            Warnings: [],
+            ToolVersion: "test");
 
         // Act
         var compactReport = exporter.ExportHierarchical(report, includeMethodDetails: false, includeTypeDetails: true);
@@ -571,7 +577,8 @@ public class CompactReportExporterTests
             SolutionPath: "test.sln",
             AnalyzedAt: DateTime.UtcNow,
             Projects: new List<ProjectMetrics> { project },
-            Warnings: []);
+            Warnings: [],
+            ToolVersion: "test");
 
         // Act
         var compactReport = exporter.ExportHierarchical(report, includeMethodDetails: false, includeTypeDetails: true);
@@ -637,7 +644,8 @@ public class CompactReportExporterTests
             SolutionPath: "test.sln",
             AnalyzedAt: DateTime.UtcNow,
             Projects: new List<ProjectMetrics> { project },
-            Warnings: [])
+            Warnings: [],
+            ToolVersion: "test")
         {
             CouplingAnalysis = new CouplingAnalysis("test.sln", DateTime.UtcNow)
             {
@@ -709,7 +717,8 @@ public class CompactReportExporterTests
             SolutionPath: "test.sln",
             AnalyzedAt: DateTime.UtcNow,
             Projects: new List<ProjectMetrics> { project },
-            Warnings: [])
+            Warnings: [],
+            ToolVersion: "test")
         {
             CouplingAnalysis = new CouplingAnalysis("test.sln", DateTime.UtcNow)
             {
@@ -761,7 +770,8 @@ public class CompactReportExporterTests
             SolutionPath: "test.sln",
             AnalyzedAt: DateTime.UtcNow,
             Projects: new List<ProjectMetrics> { project },
-            Warnings: [])
+            Warnings: [],
+            ToolVersion: "test")
         {
             CouplingAnalysis = new CouplingAnalysis("test.sln", DateTime.UtcNow)
             {
@@ -842,7 +852,8 @@ public class CompactReportExporterTests
             SolutionPath: "test.sln",
             AnalyzedAt: DateTime.UtcNow,
             Projects: new List<ProjectMetrics> { project },
-            Warnings: [])
+            Warnings: [],
+            ToolVersion: "test")
         {
             CouplingAnalysis = new CouplingAnalysis("test.sln", DateTime.UtcNow)
             {
@@ -915,7 +926,8 @@ public class CompactReportExporterTests
             SolutionPath: "test.sln",
             AnalyzedAt: DateTime.UtcNow,
             Projects: new List<ProjectMetrics> { project },
-            Warnings: [])
+            Warnings: [],
+            ToolVersion: "test")
         {
             CouplingAnalysis = new CouplingAnalysis("test.sln", DateTime.UtcNow)
             {
@@ -951,7 +963,8 @@ public class CompactReportExporterTests
             SolutionPath: "test.sln",
             AnalyzedAt: DateTime.UtcNow,
             Projects: new List<ProjectMetrics> { project },
-            Warnings: [])
+            Warnings: [],
+            ToolVersion: "test")
         {
             CouplingAnalysis = new CouplingAnalysis("test.sln", DateTime.UtcNow)
             {
@@ -1064,7 +1077,8 @@ public class CompactReportExporterTests
             SolutionPath: "test.sln",
             AnalyzedAt: DateTime.UtcNow,
             Projects: new List<ProjectMetrics> { project },
-            Warnings: new List<string>());
+            Warnings: new List<string>(),
+            ToolVersion: "test");
 
         // Act
         var compactReport = exporter.Export(report);

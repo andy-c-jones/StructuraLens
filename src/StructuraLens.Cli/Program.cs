@@ -1,4 +1,5 @@
 using System.CommandLine;
+using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.DependencyInjection;
@@ -14,6 +15,15 @@ using StructuraLens.Core.Models;
 
 // Configure DI container with default logging
 var serviceProvider = ConfigureServices(LogLevel.Information);
+
+// Helper to get application version
+static string GetVersion()
+{
+    var version = Assembly.GetEntryAssembly()?
+        .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
+        .InformationalVersion;
+    return version ?? "unknown";
+}
 
 // Create options
 var outputOption = new Option<string?>("--out", "-o")
@@ -107,7 +117,8 @@ analyzeCommand.SetAction(async (parseResult, cancellationToken) =>
     {
         AggregationStrategy = Enum.Parse<DependencyAggregationStrategy>(aggregationStrategy, ignoreCase: true),
         MemoryThresholdMB = memoryThreshold,
-        SQLiteBatchSize = sqliteBatchSize
+        SQLiteBatchSize = sqliteBatchSize,
+        ToolVersion = GetVersion()
     };
 
     // Adjust logging level based on verbose flag
@@ -150,7 +161,7 @@ static async Task<int> ExecuteAnalysisAsync(
     
     try
     {
-        ProgramLog.ApplicationStartup(logger, "0.1.0");
+        ProgramLog.ApplicationStartup(logger, GetVersion());
         ProgramLog.AnalyzingPath(logger, path);
         ProgramLog.CouplingModeEnabled(logger, "All");
         
@@ -414,12 +425,26 @@ static async Task<int> ExecuteDiffAsync(
 
 // Create root command
 var rootCommand = new RootCommand("StructuraLens - C# code complexity analyzer");
+
+// Add --version option
+var versionOption = new Option<bool>("--version")
+{
+    Description = "Display version information"
+};
+rootCommand.Options.Add(versionOption);
+
 rootCommand.Subcommands.Add(analyzeCommand);
 rootCommand.Subcommands.Add(diffCommand);
 
-rootCommand.SetAction(_ =>
+rootCommand.SetAction((parseResult) =>
 {
-    Console.WriteLine("StructuraLens v0.1.0");
+    if (parseResult.GetValue(versionOption))
+    {
+        Console.WriteLine($"StructuraLens v{GetVersion()}");
+        return 0;
+    }
+    
+    Console.WriteLine($"StructuraLens v{GetVersion()}");
     Console.WriteLine("Usage: structuralens <command> [options]");
     Console.WriteLine();
     Console.WriteLine("Commands:");
@@ -436,6 +461,7 @@ return await parseResult.InvokeAsync();
 static void PrintSummary(AnalysisReport report, ILogger logger)
 {
     Console.WriteLine("=== Analysis Summary ===");
+    Console.WriteLine($"Tool Version: v{report.ToolVersion}");
     Console.WriteLine($"Solution: {report.SolutionPath}");
     Console.WriteLine($"Analyzed at: {report.AnalyzedAt:O}");
     Console.WriteLine();

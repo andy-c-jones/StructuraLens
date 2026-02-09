@@ -107,7 +107,8 @@ public sealed class HtmlReportGenerator : IReportGenerator
             .Replace("{{SOLUTION_NAME}}", solutionName)
             .Replace("{{ANALYZED_AT}}", analyzedAt)
             .Replace("{{GIT_INFO_HTML}}", gitInfoHtml)
-            .Replace("{{COPYRIGHT_YEAR}}", copyrightYear);
+            .Replace("{{COPYRIGHT_YEAR}}", copyrightYear)
+            .Replace("{{TOOL_VERSION}}", report.ToolVersion);
 
         // Replace JSON data placeholders.
         // These sit inside JS double-quoted string literals produced by Astro's
