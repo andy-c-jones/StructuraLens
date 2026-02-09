@@ -57,11 +57,6 @@ public sealed class AdaptiveDependencyCollector : IDependencyCollector
     }
     
     /// <inheritdoc />
-    /// <remarks>
-    /// Bulk addition optimized for performance: memory pressure is only checked
-    /// once (on the first edge) rather than per edge. This is intentional to
-    /// reduce overhead during large batch operations.
-    /// </remarks>
     public void AddDependencies(IEnumerable<DependencyEdge> edges)
     {
         foreach (var edge in edges)
