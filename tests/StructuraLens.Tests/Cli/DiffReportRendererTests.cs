@@ -392,7 +392,7 @@ public sealed class DiffReportRendererTests
         var markdown = renderer.RenderMarkdown(diff);
 
         // Assert - Should show all 10 errors (priority 4) and only 10 warnings (priority 3) to reach the 20 item limit
-        await Assert.That(markdown).Contains("### 🔥 New Diagnostics"); // Alarming emoji when >20
+        await Assert.That(markdown).Contains("### 🚨 New Diagnostics"); // Alarming emoji when >20
         await Assert.That(markdown).Contains("🚨 **CS0001**"); // Error 1
         await Assert.That(markdown).Contains("🚨 **CS0010**"); // Error 10
         await Assert.That(markdown).Contains("⚠️ **CS0011**"); // Warning 11 (first warning)

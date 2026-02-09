@@ -119,7 +119,7 @@ public sealed class DiffReportRenderer
         {
             // Add alarming emoji if more than 20 diagnostics exist
             var title = totalDiagnosticsCount > 20 
-                ? "### 🔥 New Diagnostics" 
+                ? "### 🚨 New Diagnostics" 
                 : "### New Diagnostics";
             
             sb.AppendLine(title);
@@ -144,7 +144,7 @@ public sealed class DiffReportRenderer
             // Add warning if there are more than 20 diagnostics
             if (totalDiagnosticsCount > 20)
             {
-                sb.AppendLine($"⚠️ **Too many diagnostic issues added to show all of them** ({totalDiagnosticsCount} total, showing 20)");
+                sb.AppendLine($"🚨 **Too many diagnostic issues added to show all of them** ({totalDiagnosticsCount} total, showing 20)");
                 sb.AppendLine();
             }
         }
