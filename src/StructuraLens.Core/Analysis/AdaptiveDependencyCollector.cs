@@ -14,6 +14,7 @@ public sealed class AdaptiveDependencyCollector : IDependencyCollector
     private IDependencyCollector? _current;
     private readonly long _memoryThresholdBytes;
     private readonly int _sqliteBatchSize;
+    private readonly Func<long> _memoryProvider;
     private int _edgesSinceLastCheck;
     private long _totalEdgesAdded;
     private bool _hasMigrated;
@@ -26,10 +27,18 @@ public sealed class AdaptiveDependencyCollector : IDependencyCollector
     /// </summary>
     /// <param name="memoryThresholdMB">Memory threshold in MB. When exceeded, migrates to SQLite.</param>
     /// <param name="sqliteBatchSize">Batch size for SQLite collector after migration.</param>
-    public AdaptiveDependencyCollector(long memoryThresholdMB = 1024, int sqliteBatchSize = 1000)
+    /// <param name="memoryProvider">
+    /// Optional function that returns current memory usage in bytes.
+    /// Defaults to <c>GC.GetTotalMemory(false)</c>. Override in tests for deterministic behavior.
+    /// </param>
+    public AdaptiveDependencyCollector(
+        long memoryThresholdMB = 1024,
+        int sqliteBatchSize = 1000,
+        Func<long>? memoryProvider = null)
     {
         _memoryThresholdBytes = memoryThresholdMB * 1024 * 1024;
         _sqliteBatchSize = sqliteBatchSize;
+        _memoryProvider = memoryProvider ?? (() => GC.GetTotalMemory(false));
         _current = new InMemoryDependencyCollector();
         _hasMigrated = false;
         _totalEdgesAdded = 0;
@@ -103,7 +112,7 @@ public sealed class AdaptiveDependencyCollector : IDependencyCollector
             if (_hasMigrated || _disposed)
                 return;
             
-            currentMemory = GC.GetTotalMemory(false);
+            currentMemory = _memoryProvider();
             
             if (currentMemory <= _memoryThresholdBytes)
                 return;

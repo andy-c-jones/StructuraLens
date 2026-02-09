@@ -5,6 +5,11 @@ namespace StructuraLens.Tests.Analysis;
 
 public class AdaptiveDependencyCollectorTests
 {
+    /// <summary>
+    /// Memory provider that always reports memory above a 1 MB threshold,
+    /// ensuring deterministic migration regardless of actual process memory.
+    /// </summary>
+    private static readonly Func<long> AlwaysAboveThreshold = () => 2 * 1024 * 1024;
     [Test]
     public async Task AddDependency_BelowThreshold_StaysInMemory()
     {
@@ -123,8 +128,9 @@ public class AdaptiveDependencyCollectorTests
     [Test]
     public async Task AddDependency_LowThreshold_MigratesToSQLite()
     {
-        // Arrange - Very low threshold (1 MB) to force migration
-        using var collector = new AdaptiveDependencyCollector(memoryThresholdMB: 1, sqliteBatchSize: 100);
+        // Arrange - Very low threshold (1 MB) with deterministic memory provider to force migration
+        using var collector = new AdaptiveDependencyCollector(
+            memoryThresholdMB: 1, sqliteBatchSize: 100, memoryProvider: AlwaysAboveThreshold);
         
         // Act - Add more than CheckInterval (10K) edges to trigger memory check
         for (int i = 0; i < 12000; i++)
@@ -146,8 +152,9 @@ public class AdaptiveDependencyCollectorTests
     [Test]
     public async Task Migration_PreservesAllData()
     {
-        // Arrange - Low threshold to trigger migration
-        using var collector = new AdaptiveDependencyCollector(memoryThresholdMB: 1, sqliteBatchSize: 100);
+        // Arrange - Low threshold with deterministic memory provider to trigger migration
+        using var collector = new AdaptiveDependencyCollector(
+            memoryThresholdMB: 1, sqliteBatchSize: 100, memoryProvider: AlwaysAboveThreshold);
         
         // Act - Add edges before and after migration
         for (int i = 0; i < 5000; i++)
@@ -222,8 +229,9 @@ public class AdaptiveDependencyCollectorTests
     [Test]
     public async Task AfterMigration_ContinuesToWork()
     {
-        // Arrange - Very low threshold
-        using var collector = new AdaptiveDependencyCollector(memoryThresholdMB: 1, sqliteBatchSize: 100);
+        // Arrange - Very low threshold with deterministic memory provider
+        using var collector = new AdaptiveDependencyCollector(
+            memoryThresholdMB: 1, sqliteBatchSize: 100, memoryProvider: AlwaysAboveThreshold);
         
         // Act - Force migration
         for (int i = 0; i < 11000; i++)
@@ -248,8 +256,9 @@ public class AdaptiveDependencyCollectorTests
     [Test]
     public async Task ParallelAdd_DuringMigration_NoDataLoss()
     {
-        // Arrange - Low threshold to trigger migration mid-stream
-        using var collector = new AdaptiveDependencyCollector(memoryThresholdMB: 1, sqliteBatchSize: 100);
+        // Arrange - Low threshold with deterministic memory provider to trigger migration mid-stream
+        using var collector = new AdaptiveDependencyCollector(
+            memoryThresholdMB: 1, sqliteBatchSize: 100, memoryProvider: AlwaysAboveThreshold);
         var tasks = new List<Task>();
         var edgesPerTask = 3000;
         var taskCount = 10;
@@ -287,8 +296,9 @@ public class AdaptiveDependencyCollectorTests
     [Test]
     public async Task Migration_OnlyOccursOnce_UnderHighConcurrency()
     {
-        // Arrange - Low threshold to force migration
-        using var collector = new AdaptiveDependencyCollector(memoryThresholdMB: 1, sqliteBatchSize: 100);
+        // Arrange - Low threshold with deterministic memory provider to force migration
+        using var collector = new AdaptiveDependencyCollector(
+            memoryThresholdMB: 1, sqliteBatchSize: 100, memoryProvider: AlwaysAboveThreshold);
         var tasks = new List<Task>();
         
         // Act - Spam additions from many threads to race towards migration threshold
@@ -321,8 +331,9 @@ public class AdaptiveDependencyCollectorTests
     [Test]
     public async Task Reset_AfterMigration_ResetsToInMemory()
     {
-        // Arrange - Low threshold to force migration
-        using var collector = new AdaptiveDependencyCollector(memoryThresholdMB: 1, sqliteBatchSize: 100);
+        // Arrange - Low threshold with deterministic memory provider to force migration
+        using var collector = new AdaptiveDependencyCollector(
+            memoryThresholdMB: 1, sqliteBatchSize: 100, memoryProvider: AlwaysAboveThreshold);
         
         // Force migration
         for (int i = 0; i < 12000; i++)
