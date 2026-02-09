@@ -6,15 +6,18 @@ namespace StructuraLens.Core.Analysis;
 /// <summary>
 /// Adaptive dependency collector that automatically switches from in-memory to SQLite
 /// when memory threshold is exceeded, providing optimal performance for all codebase sizes.
+/// Thread-safe: All public methods can be called concurrently from multiple threads.
+/// Migration is guaranteed to happen at most once, even under high concurrency.
 /// </summary>
 public sealed class AdaptiveDependencyCollector : IDependencyCollector
 {
-    private IDependencyCollector _current;
+    private volatile IDependencyCollector _current;
     private readonly long _memoryThresholdBytes;
     private readonly int _sqliteBatchSize;
     private int _edgesSinceLastCheck;
     private long _totalEdgesAdded; // Track total ourselves
-    private bool _hasMigrated;
+    private volatile bool _hasMigrated;
+    private readonly object _migrationLock = new();
     private const int CheckInterval = 10000; // Check memory every 10K edges
     
     /// <summary>
@@ -37,16 +40,25 @@ public sealed class AdaptiveDependencyCollector : IDependencyCollector
         Interlocked.Increment(ref _totalEdgesAdded);
         
         // Periodically check memory pressure
-        if (!_hasMigrated && ++_edgesSinceLastCheck >= CheckInterval)
+        if (!_hasMigrated && Interlocked.Increment(ref _edgesSinceLastCheck) >= CheckInterval)
         {
-            CheckMemoryPressure();
-            _edgesSinceLastCheck = 0;
+            // Atomic test-and-reset to prevent thundering herd
+            if (Interlocked.CompareExchange(ref _edgesSinceLastCheck, 0, CheckInterval) >= CheckInterval)
+            {
+                CheckMemoryPressure();
+            }
         }
         
+        // Always read _current immediately before use (volatile ensures visibility)
         _current.AddDependency(edge);
     }
     
     /// <inheritdoc />
+    /// <remarks>
+    /// Bulk addition optimized for performance: memory pressure is only checked
+    /// once (on the first edge) rather than per edge. This is intentional to
+    /// reduce overhead during large batch operations.
+    /// </remarks>
     public void AddDependencies(IEnumerable<DependencyEdge> edges)
     {
         foreach (var edge in edges)
@@ -55,14 +67,31 @@ public sealed class AdaptiveDependencyCollector : IDependencyCollector
     
     /// <summary>
     /// Checks current memory usage and migrates to SQLite if threshold exceeded.
+    /// Thread-safe using double-checked locking pattern.
     /// </summary>
     private void CheckMemoryPressure()
     {
+        // Fast path: skip if already migrated (volatile read, no lock)
+        if (_hasMigrated)
+            return;
+        
         var currentMemory = GC.GetTotalMemory(false);
         
-        // Only migrate if still using InMemory and threshold exceeded
-        if (currentMemory > _memoryThresholdBytes && _current is InMemoryDependencyCollector inMemory)
+        // Only proceed if threshold exceeded
+        if (currentMemory <= _memoryThresholdBytes)
+            return;
+        
+        // Double-checked locking pattern
+        lock (_migrationLock)
         {
+            // Check again after acquiring lock - another thread may have migrated
+            if (_hasMigrated)
+                return;
+            
+            // Verify still using InMemory (defensive check)
+            if (_current is not InMemoryDependencyCollector inMemory)
+                return;
+            
             MigrateToSQLite(inMemory, currentMemory);
         }
     }
@@ -77,15 +106,20 @@ public sealed class AdaptiveDependencyCollector : IDependencyCollector
         // Create SQLite collector
         var sqlite = new SQLiteDependencyCollector(null, _sqliteBatchSize);
         
-        // Migrate existing edges
+        // CRITICAL: Switch to new collector FIRST, before migrating old data
+        // This ensures all new AddDependency calls go to SQLite during migration
+        _current = sqlite;
+        _hasMigrated = true;
+        
+        // Now migrate existing edges from old collector
+        // Any additions during this time go to the new SQLite collector
         var existingEdges = inMemory.GetAggregatedDependencies();
         Console.WriteLine($"[StructuraLens] Migrating {existingEdges.Count} unique edges to disk...");
         sqlite.AddDependencies(existingEdges);
         
-        // Switch collectors
-        inMemory.Dispose();
-        _current = sqlite;
-        _hasMigrated = true;
+        // Do NOT dispose the old collector - threads may still hold references to it
+        // from before the migration. Let GC handle cleanup when all references are gone.
+        // Note: InMemoryDependencyCollector.Dispose() is a no-op anyway.
         
         // Force garbage collection to reclaim memory
         GC.Collect(2, GCCollectionMode.Aggressive, blocking: true, compacting: true);
@@ -122,16 +156,32 @@ public sealed class AdaptiveDependencyCollector : IDependencyCollector
     /// <inheritdoc />
     public void Reset()
     {
-        _current.Reset();
-        _edgesSinceLastCheck = 0;
-        _hasMigrated = false;
-        _totalEdgesAdded = 0;
+        lock (_migrationLock)
+        {
+            // If currently using SQLite, dispose and reset to InMemory
+            if (_hasMigrated)
+            {
+                _current?.Dispose();
+                _current = new InMemoryDependencyCollector();
+                _hasMigrated = false;
+            }
+            else
+            {
+                _current.Reset();
+            }
+            
+            _edgesSinceLastCheck = 0;
+            _totalEdgesAdded = 0;
+        }
     }
     
     /// <inheritdoc />
     public void Dispose()
     {
-        _current?.Dispose();
+        lock (_migrationLock)
+        {
+            _current?.Dispose();
+        }
     }
     
     /// <summary>

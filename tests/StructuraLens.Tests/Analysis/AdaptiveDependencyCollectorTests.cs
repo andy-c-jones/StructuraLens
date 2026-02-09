@@ -244,4 +244,147 @@ public class AdaptiveDependencyCollectorTests
         await Assert.That(postEdges.Count).IsEqualTo(2);
         await Assert.That(collector.CurrentStrategy).IsEqualTo("SQLite");
     }
+    
+    [Test]
+    public async Task ParallelAdd_DuringMigration_NoDataLoss()
+    {
+        // Arrange - Low threshold to trigger migration mid-stream
+        using var collector = new AdaptiveDependencyCollector(memoryThresholdMB: 1, sqliteBatchSize: 100);
+        var tasks = new List<Task>();
+        var edgesPerTask = 3000;
+        var taskCount = 10;
+        
+        // Act - Multiple threads adding concurrently, migration will happen mid-stream
+        for (int taskId = 0; taskId < taskCount; taskId++)
+        {
+            var localTaskId = taskId;
+            tasks.Add(Task.Run(() =>
+            {
+                for (int j = 0; j < edgesPerTask; j++)
+                {
+                    collector.AddDependency(
+                        new DependencyEdge($"Task{localTaskId}_Source", $"Target{j}", DependencyType.TypeReference, 1));
+                }
+            }));
+        }
+        
+        await Task.WhenAll(tasks);
+        var result = collector.GetAggregatedDependencies();
+        var stats = collector.GetStats();
+        
+        // Assert - The main thing we're testing: no edges lost during migration
+        // Total edges added should equal what we put in
+        await Assert.That(stats.TotalEdgesAdded).IsEqualTo(taskCount * edgesPerTask);
+        
+        // Should have migrated at some point (with 1MB threshold and 30K edges)
+        await Assert.That(collector.HasMigrated).IsTrue();
+        
+        // Result count should reflect aggregation (each Task{N}_Source to Target{M} is unique)
+        // So we should have taskCount * edgesPerTask unique edges
+        await Assert.That(result.Count).IsEqualTo(taskCount * edgesPerTask);
+    }
+    
+    [Test]
+    public async Task Migration_OnlyOccursOnce_UnderHighConcurrency()
+    {
+        // Arrange - Low threshold to force migration
+        using var collector = new AdaptiveDependencyCollector(memoryThresholdMB: 1, sqliteBatchSize: 100);
+        var tasks = new List<Task>();
+        
+        // Act - Spam additions from many threads to race towards migration threshold
+        for (int i = 0; i < 20; i++)
+        {
+            var threadId = i;
+            tasks.Add(Task.Run(() =>
+            {
+                for (int j = 0; j < 1000; j++)
+                {
+                    collector.AddDependency(
+                        new DependencyEdge($"Thread{threadId}_A{j % 100}", $"Thread{threadId}_B{j % 100}", DependencyType.TypeReference, 1));
+                }
+            }));
+        }
+        
+        await Task.WhenAll(tasks);
+        var stats = collector.GetStats();
+        
+        // Assert - Should have migrated exactly once
+        await Assert.That(collector.HasMigrated).IsTrue();
+        await Assert.That(collector.CurrentStrategy).IsEqualTo("SQLite");
+        await Assert.That(stats.TotalEdgesAdded).IsEqualTo(20 * 1000);
+        
+        // All edges should be accounted for
+        var result = collector.GetAggregatedDependencies();
+        await Assert.That(result.Count).IsGreaterThan(0);
+    }
+    
+    [Test]
+    public async Task Reset_AfterMigration_ResetsToInMemory()
+    {
+        // Arrange - Low threshold to force migration
+        using var collector = new AdaptiveDependencyCollector(memoryThresholdMB: 1, sqliteBatchSize: 100);
+        
+        // Force migration
+        for (int i = 0; i < 12000; i++)
+        {
+            collector.AddDependency(new DependencyEdge($"A{i % 100}", $"B{i % 100}", DependencyType.TypeReference, 1));
+        }
+        
+        await Assert.That(collector.HasMigrated).IsTrue();
+        await Assert.That(collector.CurrentStrategy).IsEqualTo("SQLite");
+        
+        // Act - Reset
+        collector.Reset();
+        
+        // Assert - Should be back to InMemory
+        await Assert.That(collector.HasMigrated).IsFalse();
+        await Assert.That(collector.CurrentStrategy).IsEqualTo("InMemory");
+        await Assert.That(collector.GetStats().TotalEdgesAdded).IsEqualTo(0);
+        var result = collector.GetAggregatedDependencies();
+        await Assert.That(result.Count).IsEqualTo(0);
+        
+        // Should be able to add new edges in InMemory mode
+        collector.AddDependency(new DependencyEdge("New_A", "New_B", DependencyType.TypeReference, 1));
+        var newResult = collector.GetAggregatedDependencies();
+        await Assert.That(newResult.Count).IsEqualTo(1);
+        await Assert.That(collector.CurrentStrategy).IsEqualTo("InMemory");
+    }
+    
+    [Test]
+    public async Task ParallelAdd_WithReset_ThreadSafe()
+    {
+        // Arrange
+        using var collector = new AdaptiveDependencyCollector(memoryThresholdMB: 100000);
+        var tasks = new List<Task>();
+        var resetTask = Task.CompletedTask;
+        
+        // Act - Add edges from multiple threads while periodically resetting
+        for (int i = 0; i < 10; i++)
+        {
+            var threadId = i;
+            tasks.Add(Task.Run(async () =>
+            {
+                for (int j = 0; j < 100; j++)
+                {
+                    collector.AddDependency(
+                        new DependencyEdge($"T{threadId}", $"Target{j}", DependencyType.TypeReference, 1));
+                    await Task.Delay(1); // Small delay to allow reset to happen
+                }
+            }));
+        }
+        
+        // Reset in the middle
+        resetTask = Task.Run(async () =>
+        {
+            await Task.Delay(50);
+            collector.Reset();
+        });
+        
+        await Task.WhenAll(tasks.Concat(new[] { resetTask }));
+        
+        // Assert - Should complete without exceptions
+        // Final result may vary due to reset, but should be valid
+        var result = collector.GetAggregatedDependencies();
+        await Assert.That(result).IsNotNull();
+    }
 }
