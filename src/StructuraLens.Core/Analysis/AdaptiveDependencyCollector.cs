@@ -187,15 +187,33 @@ public sealed class AdaptiveDependencyCollector : IDependencyCollector
     /// <summary>
     /// Gets whether this collector has migrated to SQLite.
     /// </summary>
-    public bool HasMigrated => _hasMigrated;
+    public bool HasMigrated
+    {
+        get
+        {
+            lock (_migrationLock)
+            {
+                return _hasMigrated;
+            }
+        }
+    }
     
     /// <summary>
     /// Gets the current strategy being used (InMemory or SQLite).
     /// </summary>
-    public string CurrentStrategy => _current switch
+    public string CurrentStrategy
     {
-        InMemoryDependencyCollector => "InMemory",
-        SQLiteDependencyCollector => "SQLite",
-        _ => "Unknown"
-    };
+        get
+        {
+            lock (_migrationLock)
+            {
+                return _current switch
+                {
+                    InMemoryDependencyCollector => "InMemory",
+                    SQLiteDependencyCollector => "SQLite",
+                    _ => "Unknown"
+                };
+            }
+        }
+    }
 }
