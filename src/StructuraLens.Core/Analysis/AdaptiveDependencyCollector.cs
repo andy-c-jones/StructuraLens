@@ -91,6 +91,9 @@ public sealed class AdaptiveDependencyCollector : IDependencyCollector
     /// </summary>
     private void CheckAndMigrateIfNeeded()
     {
+        long currentMemory;
+        int edgeCount;
+        
         _lock.EnterWriteLock();
         try
         {
@@ -100,7 +103,7 @@ public sealed class AdaptiveDependencyCollector : IDependencyCollector
             if (_hasMigrated || _disposed)
                 return;
             
-            var currentMemory = GC.GetTotalMemory(false);
+            currentMemory = GC.GetTotalMemory(false);
             
             if (currentMemory <= _memoryThresholdBytes)
                 return;
@@ -108,28 +111,38 @@ public sealed class AdaptiveDependencyCollector : IDependencyCollector
             if (_current is not InMemoryDependencyCollector inMemory)
                 return;
             
-            MigrateToSQLite(inMemory, currentMemory);
+            edgeCount = MigrateToSQLite(inMemory);
         }
         finally
         {
             _lock.ExitWriteLock();
         }
+        
+        // Log and GC outside the write lock to avoid blocking concurrent operations
+        Console.WriteLine($"[StructuraLens] Memory threshold exceeded ({currentMemory / 1024 / 1024} MB / {_memoryThresholdBytes / 1024 / 1024} MB). Migrating to SQLite...");
+        Console.WriteLine($"[StructuraLens] Migrated {edgeCount} unique edges to disk.");
+        
+        GC.Collect(2, GCCollectionMode.Aggressive, blocking: true, compacting: true);
+        GC.WaitForPendingFinalizers();
+        GC.Collect(2, GCCollectionMode.Aggressive, blocking: true, compacting: true);
+        
+        var afterMemory = GC.GetTotalMemory(false);
+        var reclaimed = currentMemory - afterMemory;
+        Console.WriteLine($"[StructuraLens] Migration complete. Memory: {afterMemory / 1024 / 1024} MB (reclaimed {reclaimed / 1024 / 1024} MB)");
     }
     
     /// <summary>
     /// Migrates from in-memory collector to SQLite collector.
     /// Must be called while holding the write lock.
     /// </summary>
-    private void MigrateToSQLite(InMemoryDependencyCollector inMemory, long currentMemory)
+    /// <returns>The number of unique edges migrated.</returns>
+    private int MigrateToSQLite(InMemoryDependencyCollector inMemory)
     {
-        Console.WriteLine($"[StructuraLens] Memory threshold exceeded ({currentMemory / 1024 / 1024} MB / {_memoryThresholdBytes / 1024 / 1024} MB). Migrating to SQLite...");
-        
         // Create SQLite collector
         var sqlite = new SQLiteDependencyCollector(null, _sqliteBatchSize);
         
         // Snapshot existing edges while we hold the write lock - no concurrent writes possible
         var existingEdges = inMemory.GetAggregatedDependencies();
-        Console.WriteLine($"[StructuraLens] Migrating {existingEdges.Count} unique edges to disk...");
         
         // Migrate data to SQLite
         sqlite.AddDependencies(existingEdges);
@@ -141,14 +154,7 @@ public sealed class AdaptiveDependencyCollector : IDependencyCollector
         // Safe to dispose old collector since no threads can be writing to it (we hold the write lock)
         inMemory.Dispose();
         
-        // Force garbage collection to reclaim memory
-        GC.Collect(2, GCCollectionMode.Aggressive, blocking: true, compacting: true);
-        GC.WaitForPendingFinalizers();
-        GC.Collect(2, GCCollectionMode.Aggressive, blocking: true, compacting: true);
-        
-        var afterMemory = GC.GetTotalMemory(false);
-        var reclaimed = currentMemory - afterMemory;
-        Console.WriteLine($"[StructuraLens] Migration complete. Memory: {afterMemory / 1024 / 1024} MB (reclaimed {reclaimed / 1024 / 1024} MB)");
+        return existingEdges.Count;
     }
     
     /// <inheritdoc />
