@@ -143,11 +143,21 @@ public sealed class AdaptiveDependencyCollector : IDependencyCollector
     
     /// <inheritdoc />
     public IReadOnlyList<DependencyEdge> GetAggregatedDependencies()
-        => _current.GetAggregatedDependencies();
+    {
+        lock (_migrationLock)
+        {
+            return _current.GetAggregatedDependencies();
+        }
+    }
     
     /// <inheritdoc />
     public IReadOnlyList<DependencyEdge> GetAggregatedDependencies(DependencyType type)
-        => _current.GetAggregatedDependencies(type);
+    {
+        lock (_migrationLock)
+        {
+            return _current.GetAggregatedDependencies(type);
+        }
+    }
     
     /// <inheritdoc />
     public DependencyCollectorStats GetStats()
