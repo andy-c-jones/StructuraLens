@@ -10,6 +10,12 @@ public record AnalysisDiffReport
     public DiffTotals Totals { get; init; } = new();
     public IReadOnlyList<ProjectDiff> Projects { get; init; } = [];
     public DiagnosticDiffSummary Diagnostics { get; init; } = new();
+    
+    /// <summary>Dependencies that are new to the entire solution (first project to add them).</summary>
+    public IReadOnlySet<string> NewToSolution { get; init; } = new HashSet<string>();
+    
+    /// <summary>Dependencies that are removed from the entire solution (no projects use them anymore).</summary>
+    public IReadOnlySet<string> RemovedFromSolution { get; init; } = new HashSet<string>();
 }
 
 /// <summary>Metadata for a single analyzed report.</summary>
@@ -93,6 +99,8 @@ public record ProjectDiff
     public IReadOnlyList<string> RemovedBclDependencies { get; init; } = [];
     public IReadOnlyList<string> AddedPackageDependencies { get; init; } = [];
     public IReadOnlyList<string> RemovedPackageDependencies { get; init; } = [];
+    public IReadOnlyList<string> AddedInternalDependencies { get; init; } = [];
+    public IReadOnlyList<string> RemovedInternalDependencies { get; init; } = [];
 }
 
 /// <summary>Project metrics used in diff output.</summary>
