@@ -173,8 +173,8 @@ public sealed class DiffReportRenderer
         // Find projects with internal dependency changes
         var projectsWithDependencyChanges = diff.Projects
             .Where(p => !p.IsAdded && !p.IsRemoved)
-            .Where(p => p.InternalDependenciesDelta != 0 || p.InternalDependentsDelta != 0)
-            .OrderByDescending(p => Math.Abs(p.InternalDependenciesDelta) + Math.Abs(p.InternalDependentsDelta))
+            .Where(p => p.AddedInternalDependencies.Count > 0 || p.RemovedInternalDependencies.Count > 0)
+            .OrderByDescending(p => p.AddedInternalDependencies.Count + p.RemovedInternalDependencies.Count)
             .Take(maxProjects)
             .ToList();
 
@@ -182,39 +182,38 @@ public sealed class DiffReportRenderer
         {
             sb.AppendLine("### Internal Dependencies Changes");
             sb.AppendLine();
-            sb.AppendLine("| Project | Dependencies Δ | Dependents Δ | Ratio (Base) | Ratio (Head) | Ratio Δ |");
-            sb.AppendLine("| --- | ---: | ---: | ---: | ---: | ---: |");
 
             foreach (var project in projectsWithDependencyChanges)
             {
-                var depsSemantic = project.InternalDependenciesDelta > 0 
-                    ? DeltaSemantic.BadIncrease 
-                    : project.InternalDependenciesDelta < 0 
-                    ? DeltaSemantic.GoodDecrease 
-                    : DeltaSemantic.Neutral;
+                sb.AppendLine($"#### {Escape(project.Name)}");
+                sb.AppendLine();
 
-                var dependentsSemantic = project.InternalDependentsDelta > 0 
-                    ? DeltaSemantic.GoodIncrease  // More things depend on us = good if we're a library
-                    : project.InternalDependentsDelta < 0 
-                    ? DeltaSemantic.Neutral  // Fewer things depend on us
-                    : DeltaSemantic.Neutral;
+                // Show added internal dependencies
+                if (project.AddedInternalDependencies.Count > 0)
+                {
+                    sb.AppendLine($"**🔍 Added Internal Dependencies ({project.AddedInternalDependencies.Count}):**");
+                    foreach (var dep in project.AddedInternalDependencies)
+                    {
+                        var isNewToSolution = diff.NewToSolution.Contains(dep);
+                        var marker = isNewToSolution ? " 🆕 (new to solution)" : "";
+                        sb.AppendLine($"- `{dep}`{marker}");
+                    }
+                    sb.AppendLine();
+                }
 
-                var ratioSemantic = project.DependencyRatioDelta > 0.1 
-                    ? DeltaSemantic.BadIncrease  // Becoming more consumer-like
-                    : project.DependencyRatioDelta < -0.1 
-                    ? DeltaSemantic.GoodIncrease  // Becoming more provider-like
-                    : DeltaSemantic.Neutral;
-
-                sb.AppendLine(
-                    $"| {Escape(project.Name)} | " +
-                    $"{FormatDelta(project.InternalDependenciesDelta, depsSemantic)} | " +
-                    $"{FormatDelta(project.InternalDependentsDelta, dependentsSemantic)} | " +
-                    $"{project.Base.DependencyRatio:0.00} | " +
-                    $"{project.Head.DependencyRatio:0.00} | " +
-                    $"{FormatDelta(project.DependencyRatioDelta, ratioSemantic)} |");
+                // Show removed internal dependencies
+                if (project.RemovedInternalDependencies.Count > 0)
+                {
+                    sb.AppendLine($"**✅ Removed Internal Dependencies ({project.RemovedInternalDependencies.Count}):**");
+                    foreach (var dep in project.RemovedInternalDependencies)
+                    {
+                        var isRemovedFromSolution = diff.RemovedFromSolution.Contains(dep);
+                        var marker = isRemovedFromSolution ? " 🗑️ (removed from solution)" : "";
+                        sb.AppendLine($"- `{dep}`{marker}");
+                    }
+                    sb.AppendLine();
+                }
             }
-            
-            sb.AppendLine();
         }
     }
 
@@ -244,7 +243,9 @@ public sealed class DiffReportRenderer
                     sb.AppendLine($"**🔍 Added BCL Dependencies ({project.AddedBclDependencies.Count}):**");
                     foreach (var dep in project.AddedBclDependencies)
                     {
-                        sb.AppendLine($"- `{dep}`");
+                        var isNewToSolution = diff.NewToSolution.Contains(dep);
+                        var marker = isNewToSolution ? " 🆕 (new to solution)" : "";
+                        sb.AppendLine($"- `{dep}`{marker}");
                     }
                     sb.AppendLine();
                 }
@@ -255,7 +256,9 @@ public sealed class DiffReportRenderer
                     sb.AppendLine($"**✅ Removed BCL Dependencies ({project.RemovedBclDependencies.Count}):**");
                     foreach (var dep in project.RemovedBclDependencies)
                     {
-                        sb.AppendLine($"- `{dep}`");
+                        var isRemovedFromSolution = diff.RemovedFromSolution.Contains(dep);
+                        var marker = isRemovedFromSolution ? " 🗑️ (removed from solution)" : "";
+                        sb.AppendLine($"- `{dep}`{marker}");
                     }
                     sb.AppendLine();
                 }
@@ -266,7 +269,9 @@ public sealed class DiffReportRenderer
                     sb.AppendLine($"**🔍 Added Third-Party Packages ({project.AddedPackageDependencies.Count}):**");
                     foreach (var dep in project.AddedPackageDependencies)
                     {
-                        sb.AppendLine($"- `{dep}`");
+                        var isNewToSolution = diff.NewToSolution.Contains(dep);
+                        var marker = isNewToSolution ? " 🆕 (new to solution)" : "";
+                        sb.AppendLine($"- `{dep}`{marker}");
                     }
                     sb.AppendLine();
                 }
@@ -277,7 +282,9 @@ public sealed class DiffReportRenderer
                     sb.AppendLine($"**✅ Removed Third-Party Packages ({project.RemovedPackageDependencies.Count}):**");
                     foreach (var dep in project.RemovedPackageDependencies)
                     {
-                        sb.AppendLine($"- `{dep}`");
+                        var isRemovedFromSolution = diff.RemovedFromSolution.Contains(dep);
+                        var marker = isRemovedFromSolution ? " 🗑️ (removed from solution)" : "";
+                        sb.AppendLine($"- `{dep}`{marker}");
                     }
                     sb.AppendLine();
                 }

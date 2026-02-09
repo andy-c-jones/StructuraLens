@@ -447,7 +447,9 @@ public sealed class DiffReportRendererTests
                         CyclomaticComplexity = 100,
                         LinesOfCode = 1000,
                         Warnings = 0
-                    }
+                    },
+                    AddedInternalDependencies = ["ProviderProject"],
+                    RemovedInternalDependencies = []
                 },
                 new ProjectDiff
                 {
@@ -471,7 +473,9 @@ public sealed class DiffReportRendererTests
                         CyclomaticComplexity = 100,
                         LinesOfCode = 1000,
                         Warnings = 0
-                    }
+                    },
+                    AddedInternalDependencies = [],
+                    RemovedInternalDependencies = []
                 }
             ]
         };
@@ -483,11 +487,6 @@ public sealed class DiffReportRendererTests
         await Assert.That(markdown).Contains("### Internal Dependencies Changes");
         await Assert.That(markdown).Contains("ConsumerProject");
         await Assert.That(markdown).Contains("ProviderProject");
-        await Assert.That(markdown).Contains("Dependencies Δ");
-        await Assert.That(markdown).Contains("Dependents Δ");
-        await Assert.That(markdown).Contains("Ratio (Base)");
-        await Assert.That(markdown).Contains("Ratio (Head)");
-        await Assert.That(markdown).Contains("Ratio Δ");
     }
 
     [Test]
@@ -660,7 +659,9 @@ public sealed class DiffReportRendererTests
                         CyclomaticComplexity = 120,
                         LinesOfCode = 1200,
                         Warnings = 2
-                    }
+                    },
+                    AddedInternalDependencies = ["SharedProject"],
+                    RemovedInternalDependencies = []
                 }
             ],
             Diagnostics = new DiagnosticDiffSummary
@@ -961,7 +962,9 @@ public sealed class DiffReportRendererTests
                     AddedBclDependencies = ["Microsoft.Extensions.Logging", "System.Text.Json"],
                     RemovedBclDependencies = [],
                     AddedPackageDependencies = ["Newtonsoft.Json"],
-                    RemovedPackageDependencies = []
+                    RemovedPackageDependencies = [],
+                    AddedInternalDependencies = ["SharedProject"],
+                    RemovedInternalDependencies = []
                 }
             ]
         };

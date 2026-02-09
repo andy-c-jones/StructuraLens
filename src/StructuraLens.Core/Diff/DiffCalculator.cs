@@ -34,6 +34,12 @@ public sealed class DiffCalculator
             var addedPackages = headPackageSet.Except(basePackageSet).OrderBy(x => x).ToList();
             var removedPackages = basePackageSet.Except(headPackageSet).OrderBy(x => x).ToList();
 
+            // Compute added/removed internal dependencies
+            var baseInternalDeps = GetInternalDependencyNames(name, baseReport);
+            var headInternalDeps = GetInternalDependencyNames(name, headReport);
+            var addedInternalDeps = headInternalDeps.Except(baseInternalDeps).OrderBy(x => x).ToList();
+            var removedInternalDeps = baseInternalDeps.Except(headInternalDeps).OrderBy(x => x).ToList();
+
             projectDiffs.Add(new ProjectDiff
             {
                 Name = name,
@@ -44,7 +50,9 @@ public sealed class DiffCalculator
                 AddedBclDependencies = addedBcl,
                 RemovedBclDependencies = removedBcl,
                 AddedPackageDependencies = addedPackages,
-                RemovedPackageDependencies = removedPackages
+                RemovedPackageDependencies = removedPackages,
+                AddedInternalDependencies = addedInternalDeps,
+                RemovedInternalDependencies = removedInternalDeps
             });
         }
 
@@ -52,6 +60,9 @@ public sealed class DiffCalculator
         var headTotals = BuildTotals(headReport);
 
         var diagnostics = BuildDiagnosticsDiff(baseReport, headReport);
+
+        // Compute solution-level presence tracking
+        var (newToSolution, removedFromSolution) = ComputeSolutionLevelPresence(projectDiffs, baseReport, headReport);
 
         return new AnalysisDiffReport
         {
@@ -93,8 +104,74 @@ public sealed class DiffCalculator
                 HeadHidden = headTotals.Hidden
             },
             Projects = projectDiffs,
-            Diagnostics = diagnostics
+            Diagnostics = diagnostics,
+            NewToSolution = newToSolution,
+            RemovedFromSolution = removedFromSolution
         };
+    }
+
+    private static HashSet<string> GetInternalDependencyNames(string projectName, AnalysisReport report)
+    {
+        var projectCoupling = report.CouplingAnalysis?.ProjectCoupling
+            .FirstOrDefault(pc => string.Equals(pc.EntityName, projectName, StringComparison.OrdinalIgnoreCase));
+
+        if (projectCoupling == null)
+            return [];
+
+        var dependencyNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var edge in projectCoupling.InternalOutbound)
+        {
+            dependencyNames.Add(edge.ToEntity);
+        }
+
+        return dependencyNames;
+    }
+
+    private static (IReadOnlySet<string> NewToSolution, IReadOnlySet<string> RemovedFromSolution) ComputeSolutionLevelPresence(
+        List<ProjectDiff> projectDiffs,
+        AnalysisReport baseReport,
+        AnalysisReport headReport)
+    {
+        // Collect all dependencies in base and head
+        var baseDependencies = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var headDependencies = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var project in baseReport.Projects)
+        {
+            // External dependencies
+            foreach (var dep in project.PackageReferences)
+            {
+                baseDependencies.Add(dep);
+            }
+
+            // Internal dependencies
+            var internalDeps = GetInternalDependencyNames(project.Name, baseReport);
+            foreach (var dep in internalDeps)
+            {
+                baseDependencies.Add(dep);
+            }
+        }
+
+        foreach (var project in headReport.Projects)
+        {
+            // External dependencies
+            foreach (var dep in project.PackageReferences)
+            {
+                headDependencies.Add(dep);
+            }
+
+            // Internal dependencies
+            var internalDeps = GetInternalDependencyNames(project.Name, headReport);
+            foreach (var dep in internalDeps)
+            {
+                headDependencies.Add(dep);
+            }
+        }
+
+        var newToSolution = headDependencies.Except(baseDependencies).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var removedFromSolution = baseDependencies.Except(headDependencies).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        return (newToSolution, removedFromSolution);
     }
 
     private static ProjectDiffMetrics ToMetrics(ProjectMetrics project, AnalysisReport report)
