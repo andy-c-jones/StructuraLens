@@ -1,10 +1,10 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.Extensions.Logging;
-using System.Xml.Linq;
 
 using StructuraLens.Core.Abstractions;
 using StructuraLens.Core.Analysis.Logging;
+using StructuraLens.Core.Infrastructure;
 using StructuraLens.Core.Models;
 
 namespace StructuraLens.Core.Analysis;
@@ -332,6 +332,8 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
 
     /// <summary>
     /// Reads top-level PackageReference items from a .csproj file.
+    /// Uses MSBuild APIs to support Directory.Build.props, Directory.Packages.props,
+    /// and Central Package Management (CPM).
     /// </summary>
     private List<string> ReadPackageReferences(string? projectFilePath)
     {
@@ -342,14 +344,10 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
 
         try
         {
-            var doc = XDocument.Load(projectFilePath);
-            return doc.Descendants()
-                .Where(e => e.Name.LocalName == "PackageReference")
-                .Select(e => e.Attribute("Include")?.Value)
-                .Where(name => !string.IsNullOrEmpty(name))
-                .Distinct()
-                .OrderBy(name => name)
-                .ToList()!;
+            // Use MSBuild-based reader to support hierarchical imports and CPM
+            var reader = new PackageReferenceReader(_logger);
+            var packages = reader.ReadPackageReferences(projectFilePath);
+            return packages;
         }
         catch (Exception ex)
         {
