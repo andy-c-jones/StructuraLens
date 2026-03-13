@@ -14,15 +14,15 @@ function getHeatColor(ratio: number): string {
 
   const colors = isDark
     ? {
-        green: [45, 90, 61],
-        yellow: [107, 91, 45],
-        red: [90, 45, 45],
-      }
+      green: [45, 90, 61],
+      yellow: [107, 91, 45],
+      red: [90, 45, 45],
+    }
     : {
-        green: [168, 213, 186],
-        yellow: [240, 230, 184],
-        red: [232, 184, 184],
-      };
+      green: [168, 213, 186],
+      yellow: [240, 230, 184],
+      red: [232, 184, 184],
+    };
 
   let r: number, g: number, b: number;
   if (ratio < 0.5) {
@@ -487,7 +487,7 @@ function renderGraph(
 
   simulation.on("tick", () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    link.each(function (d: any) {
+    link.each(function(d: any) {
       const dx = d.target.x - d.source.x;
       const dy = d.target.y - d.source.y;
       const dist = Math.sqrt(dx * dx + dy * dy);

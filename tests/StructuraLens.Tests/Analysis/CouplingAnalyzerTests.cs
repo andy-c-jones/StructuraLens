@@ -60,7 +60,7 @@ public class CouplingAnalyzerTests
         // Assert
         await Assert.That(dependencies).IsNotNull();
         await Assert.That(dependencies.Count).IsGreaterThan(0);
-        
+
         // Should find namespace references
         var namespaceDeps = dependencies.Where(d => d.Type == DependencyType.NamespaceReference).ToList();
         await Assert.That(namespaceDeps.Count).IsGreaterThan(0);
@@ -130,13 +130,13 @@ public class CouplingAnalyzerTests
 
         // Assert
         await Assert.That(dependencies).IsNotNull();
-        
+
         // Should find type references from DerivedClass to BaseClass
         var typeDeps = dependencies.Where(d => d.Type == DependencyType.TypeReference).ToList();
         await Assert.That(typeDeps.Count).IsGreaterThan(0);
-        
-        var derivedToBase = typeDeps.Where(d => 
-            d.FromEntity.Contains("DerivedClass") && 
+
+        var derivedToBase = typeDeps.Where(d =>
+            d.FromEntity.Contains("DerivedClass") &&
             d.ToEntity.Contains("BaseClass")).ToList();
         await Assert.That(derivedToBase.Count).IsGreaterThan(0);
     }
@@ -177,7 +177,7 @@ public class CouplingAnalyzerTests
         var analyzer = CreateAnalyzer();
         var workspace = new AdhocWorkspace();
         var solution = workspace.CurrentSolution;
-        
+
         var project1 = ProjectInfo.Create(
             ProjectId.CreateNewId(),
             VersionStamp.Default,
@@ -190,7 +190,7 @@ public class CouplingAnalyzerTests
             "Project2",
             "Project2",
             LanguageNames.CSharp);
-        
+
         solution = solution.AddProject(project1).AddProject(project2);
 
         var dependencies = new List<DependencyEdge>
@@ -205,7 +205,7 @@ public class CouplingAnalyzerTests
         await Assert.That(analysis).IsNotNull();
         await Assert.That(analysis.ProjectCoupling.Count).IsEqualTo(2);
         await Assert.That(analysis.Summary.TotalDependencies).IsGreaterThan(0);
-        
+
         var project1Coupling = analysis.ProjectCoupling.FirstOrDefault(p => p.EntityName == "Project1");
         await Assert.That(project1Coupling).IsNotNull();
         await Assert.That(project1Coupling!.InternalOutbound.Count).IsGreaterThan(0);
@@ -223,9 +223,9 @@ public class CouplingAnalyzerTests
             "TestProject",
             "TestProject",
             LanguageNames.CSharp);
-        
+
         var project = workspace.AddProject(projectInfo);
-        
+
         var code = """
             namespace TestNamespace
             {
@@ -237,7 +237,7 @@ public class CouplingAnalyzerTests
                 }
             }
             """;
-        
+
         var sourceText = SourceText.From(code);
         var document = project.AddDocument("test.cs", sourceText);
         project = document.Project;
@@ -266,9 +266,9 @@ public class CouplingAnalyzerTests
             "TestProject",
             LanguageNames.CSharp,
             metadataReferences: new[] { MetadataReference.CreateFromFile(typeof(object).Assembly.Location) });
-        
+
         var project = workspace.AddProject(projectInfo);
-        
+
         var code1 = """
             using Namespace2;
             
@@ -280,7 +280,7 @@ public class CouplingAnalyzerTests
                 }
             }
             """;
-        
+
         var code2 = """
             namespace Namespace2
             {
@@ -289,7 +289,7 @@ public class CouplingAnalyzerTests
                 }
             }
             """;
-        
+
         var doc1 = project.AddDocument("file1.cs", SourceText.From(code1));
         project = doc1.Project;
         var doc2 = project.AddDocument("file2.cs", SourceText.From(code2));
@@ -302,11 +302,11 @@ public class CouplingAnalyzerTests
         await Assert.That(result.namespaceCoupling).IsNotNull();
         await Assert.That(result.dependencies).IsNotNull();
         await Assert.That(result.dependencies.Count).IsGreaterThan(0);
-        
+
         // Should find coupling between Namespace1 and Namespace2
-        var namespaceDep = result.dependencies.FirstOrDefault(d => 
+        var namespaceDep = result.dependencies.FirstOrDefault(d =>
             d.Type == DependencyType.NamespaceReference &&
-            d.FromEntity == "Namespace1" && 
+            d.FromEntity == "Namespace1" &&
             d.ToEntity == "Namespace2");
         await Assert.That(namespaceDep).IsNotNull();
     }
@@ -343,7 +343,7 @@ public class CouplingAnalyzerTests
         var analyzer = CreateAnalyzer();
         var workspace = new AdhocWorkspace();
         var solution = workspace.CurrentSolution;
-        
+
         var project1 = ProjectInfo.Create(
             ProjectId.CreateNewId(),
             VersionStamp.Default,
@@ -356,7 +356,7 @@ public class CouplingAnalyzerTests
             "Project2",
             "Project2",
             LanguageNames.CSharp);
-        
+
         solution = solution.AddProject(project1).AddProject(project2);
 
         var dependencies = new List<DependencyEdge>
@@ -375,22 +375,22 @@ public class CouplingAnalyzerTests
         // Assert
         await Assert.That(analysis).IsNotNull();
         await Assert.That(analysis.ProjectCoupling.Count).IsEqualTo(2);
-        
+
         var project1Coupling = analysis.ProjectCoupling.FirstOrDefault(p => p.EntityName == "Project1");
         await Assert.That(project1Coupling).IsNotNull();
-        
+
         // Project1 should have 1 internal dependency (Project2)
         await Assert.That(project1Coupling!.InternalDependencies).IsEqualTo(1);
-        
+
         // External deps at coupling level should be 0 (now tracked via PackageReferences)
         await Assert.That(project1Coupling.TotalExternalDependencies).IsEqualTo(0);
-        
+
         var project2Coupling = analysis.ProjectCoupling.FirstOrDefault(p => p.EntityName == "Project2");
         await Assert.That(project2Coupling).IsNotNull();
-        
+
         // Project2 should have 0 internal dependencies
         await Assert.That(project2Coupling!.InternalDependencies).IsEqualTo(0);
-        
+
         // Project2 should have 1 internal dependent (Project1)
         await Assert.That(project2Coupling.InternalDependents).IsEqualTo(1);
     }
@@ -450,7 +450,7 @@ public class CouplingAnalyzerTests
         var analyzer = CreateAnalyzer();
         var workspace = new AdhocWorkspace();
         var solution = workspace.CurrentSolution;
-        
+
         var project1 = ProjectInfo.Create(
             ProjectId.CreateNewId(),
             VersionStamp.Default,
@@ -463,7 +463,7 @@ public class CouplingAnalyzerTests
             "Project2",
             "Project2",
             LanguageNames.CSharp);
-        
+
         solution = solution.AddProject(project1).AddProject(project2);
 
         var dependencies = new List<DependencyEdge>

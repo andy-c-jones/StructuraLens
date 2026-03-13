@@ -200,6 +200,21 @@ dotnet run --project src/StructuraLens.Cli -- analyze MySolution.sln --format su
 dotnet run --project src/StructuraLens.Cli -- analyze StructuraLens.slnx --format summary
 ```
 
+### Formatting Checks (Husky.NET)
+
+Git pre-commit hooks are managed with Husky.NET and run formatting verification automatically.
+
+```bash
+# Restore local tools (includes Husky.NET)
+dotnet tool restore
+
+# Install git hooks (once per clone)
+dotnet husky install
+
+# Run the same formatting check manually
+dotnet format --verify-no-changes
+```
+
 ### Adding a New Metric Calculator
 
 1. Create calculator class in `src/StructuraLens.Core/Analysis/Calculators/`
@@ -228,9 +243,10 @@ dotnet run --project src/StructuraLens.Cli -- analyze StructuraLens.slnx --forma
 
 1. **Run tests:** `dotnet test`
 2. **Build in Release:** `dotnet build -c Release`
-3. **Self-analyze:** `dotnet run --project src/StructuraLens.Cli -- analyze StructuraLens.slnx --format summary`
-4. **Check for warnings:** `dotnet build /warnaserror`
-5. **Update documentation** if needed
+3. **Verify formatting:** `dotnet format --verify-no-changes`
+4. **Self-analyze:** `dotnet run --project src/StructuraLens.Cli -- analyze StructuraLens.slnx --format summary`
+5. **Check for warnings:** `dotnet build /warnaserror`
+6. **Update documentation** if needed
 
 ## PR Checklist
 
@@ -252,6 +268,10 @@ StructuraLens uses semantic-release for automated versioning:
 - Other types → no version bump (chore, docs, test, refactor)
 
 **Ensure PR title is accurate** - it becomes the release note entry!
+
+## License
+
+StructuraLens is licensed under the **MIT License** (`MIT`).
 
 ## Architecture Overview
 

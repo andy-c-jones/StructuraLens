@@ -11,11 +11,11 @@ public class SQLiteDependencyCollectorTests
         // Arrange
         using var collector = new SQLiteDependencyCollector();
         var edge = new DependencyEdge("A", "B", DependencyType.TypeReference, 1);
-        
+
         // Act
         collector.AddDependency(edge);
         var result = collector.GetAggregatedDependencies();
-        
+
         // Assert
         await Assert.That(result.Count).IsEqualTo(1);
         await Assert.That(result[0].FromEntity).IsEqualTo("A");
@@ -23,69 +23,69 @@ public class SQLiteDependencyCollectorTests
         await Assert.That(result[0].Type).IsEqualTo(DependencyType.TypeReference);
         await Assert.That(result[0].ReferenceCount).IsEqualTo(1);
     }
-    
+
     [Test]
     public async Task AddDependency_DuplicateEdges_Aggregates()
     {
         // Arrange
         using var collector = new SQLiteDependencyCollector();
-        
+
         // Act
         collector.AddDependency(new DependencyEdge("A", "B", DependencyType.TypeReference, 1));
         collector.AddDependency(new DependencyEdge("A", "B", DependencyType.TypeReference, 1));
         collector.AddDependency(new DependencyEdge("A", "B", DependencyType.TypeReference, 1));
-        
+
         var result = collector.GetAggregatedDependencies();
-        
+
         // Assert
         await Assert.That(result.Count).IsEqualTo(1);
         await Assert.That(result[0].ReferenceCount).IsEqualTo(3);
     }
-    
+
     [Test]
     public async Task AddDependency_DifferentTypes_KeepsSeparate()
     {
         // Arrange
         using var collector = new SQLiteDependencyCollector();
-        
+
         // Act
         collector.AddDependency(new DependencyEdge("A", "B", DependencyType.TypeReference, 1));
         collector.AddDependency(new DependencyEdge("A", "B", DependencyType.NamespaceReference, 1));
-        
+
         var result = collector.GetAggregatedDependencies();
-        
+
         // Assert
         await Assert.That(result.Count).IsEqualTo(2);
     }
-    
+
     [Test]
     public async Task AddDependency_MultipleEdges_AggregatesCorrectly()
     {
         // Arrange
         using var collector = new SQLiteDependencyCollector();
-        
+
         // Act
         collector.AddDependency(new DependencyEdge("A", "B", DependencyType.TypeReference, 1));
         collector.AddDependency(new DependencyEdge("A", "C", DependencyType.TypeReference, 1));
         collector.AddDependency(new DependencyEdge("B", "C", DependencyType.TypeReference, 1));
         collector.AddDependency(new DependencyEdge("A", "B", DependencyType.TypeReference, 2)); // Duplicate with count 2
-        
+
         var result = collector.GetAggregatedDependencies();
-        
+
         // Assert
         await Assert.That(result.Count).IsEqualTo(3);
-        
+
         var aToB = result.First(e => e.FromEntity == "A" && e.ToEntity == "B");
         await Assert.That(aToB.ReferenceCount).IsEqualTo(3); // 1 + 2
     }
-    
+
     [Test]
     public async Task AddDependency_ParallelAdds_ThreadSafe()
     {
         // Arrange
         using var collector = new SQLiteDependencyCollector();
         var tasks = new List<Task>();
-        
+
         // Act - 100 tasks, each adding 1000 identical edges
         for (int i = 0; i < 100; i++)
         {
@@ -98,42 +98,42 @@ public class SQLiteDependencyCollectorTests
                 }
             }));
         }
-        
+
         await Task.WhenAll(tasks);
         var result = collector.GetAggregatedDependencies();
-        
+
         // Assert
         await Assert.That(result.Count).IsEqualTo(1);
         await Assert.That(result[0].ReferenceCount).IsEqualTo(100_000);
     }
-    
+
     [Test]
     public async Task GetAggregatedDependencies_ByType_FiltersCorrectly()
     {
         // Arrange
         using var collector = new SQLiteDependencyCollector();
-        
+
         collector.AddDependency(new DependencyEdge("A", "B", DependencyType.TypeReference, 1));
         collector.AddDependency(new DependencyEdge("C", "D", DependencyType.TypeReference, 1));
         collector.AddDependency(new DependencyEdge("X", "Y", DependencyType.NamespaceReference, 1));
         collector.AddDependency(new DependencyEdge("P", "Q", DependencyType.ProjectReference, 1));
-        
+
         // Act
         var typeRefs = collector.GetAggregatedDependencies(DependencyType.TypeReference);
         var namespaceRefs = collector.GetAggregatedDependencies(DependencyType.NamespaceReference);
         var projectRefs = collector.GetAggregatedDependencies(DependencyType.ProjectReference);
-        
+
         // Assert
         await Assert.That(typeRefs.Count).IsEqualTo(2);
         await Assert.That(namespaceRefs.Count).IsEqualTo(1);
         await Assert.That(projectRefs.Count).IsEqualTo(1);
-        
+
         foreach (var edge in typeRefs)
         {
             await Assert.That(edge.Type).IsEqualTo(DependencyType.TypeReference);
         }
     }
-    
+
     [Test]
     public async Task AddDependencies_Batch_WorksCorrectly()
     {
@@ -145,28 +145,28 @@ public class SQLiteDependencyCollectorTests
             new DependencyEdge("B", "C", DependencyType.TypeReference, 1),
             new DependencyEdge("C", "D", DependencyType.TypeReference, 1)
         };
-        
+
         // Act
         collector.AddDependencies(edges);
         var result = collector.GetAggregatedDependencies();
-        
+
         // Assert
         await Assert.That(result.Count).IsEqualTo(3);
     }
-    
+
     [Test]
     public async Task GetStats_ReturnsCorrectInformation()
     {
         // Arrange
         using var collector = new SQLiteDependencyCollector();
-        
+
         collector.AddDependency(new DependencyEdge("A", "B", DependencyType.TypeReference, 1));
         collector.AddDependency(new DependencyEdge("A", "B", DependencyType.TypeReference, 1));
         collector.AddDependency(new DependencyEdge("C", "D", DependencyType.TypeReference, 1));
-        
+
         // Act
         var stats = collector.GetStats();
-        
+
         // Assert
         await Assert.That(stats.TotalEdgesAdded).IsEqualTo(3);
         await Assert.That(stats.UniqueEdgesCount).IsEqualTo(2);
@@ -174,33 +174,33 @@ public class SQLiteDependencyCollectorTests
         await Assert.That(stats.MemoryUsageBytes).IsGreaterThan(0);
         await Assert.That(stats.DeduplicationRatio).IsGreaterThan(0); // (3-2)/3 = 0.33
     }
-    
+
     [Test]
     public async Task Reset_ClearsAllData()
     {
         // Arrange
         using var collector = new SQLiteDependencyCollector();
-        
+
         collector.AddDependency(new DependencyEdge("A", "B", DependencyType.TypeReference, 1));
         collector.AddDependency(new DependencyEdge("C", "D", DependencyType.TypeReference, 1));
-        
+
         // Act
         collector.Reset();
         var result = collector.GetAggregatedDependencies();
         var stats = collector.GetStats();
-        
+
         // Assert
         await Assert.That(result.Count).IsEqualTo(0);
         await Assert.That(stats.TotalEdgesAdded).IsEqualTo(0);
         await Assert.That(stats.UniqueEdgesCount).IsEqualTo(0);
     }
-    
+
     [Test]
     public async Task AddDependency_LargeDataset_HandlesEfficiently()
     {
         // Arrange
         using var collector = new SQLiteDependencyCollector(batchSize: 500);
-        
+
         // Act - Add 10,000 edges with some duplicates
         for (int i = 0; i < 10_000; i++)
         {
@@ -209,79 +209,79 @@ public class SQLiteDependencyCollectorTests
             var to = $"Entity_{(i + 1) % 1000}";
             collector.AddDependency(new DependencyEdge(from, to, DependencyType.TypeReference, 1));
         }
-        
+
         var result = collector.GetAggregatedDependencies();
         var stats = collector.GetStats();
-        
+
         // Assert - Should have aggregated duplicates
         await Assert.That(stats.TotalEdgesAdded).IsEqualTo(10_000);
         await Assert.That(result.Count).IsLessThan(10_000); // Many duplicates
         await Assert.That(result.Count).IsGreaterThan(0);
     }
-    
+
     [Test]
     public async Task AddDependency_BatchFlush_TriggersCorrectly()
     {
         // Arrange - Small batch size to test flushing
         using var collector = new SQLiteDependencyCollector(batchSize: 3);
-        
+
         // Act - Add exactly batch size + 1 to trigger flush
         collector.AddDependency(new DependencyEdge("A", "B", DependencyType.TypeReference, 1));
         collector.AddDependency(new DependencyEdge("B", "C", DependencyType.TypeReference, 1));
         collector.AddDependency(new DependencyEdge("C", "D", DependencyType.TypeReference, 1));
         // This should trigger a flush ^
         collector.AddDependency(new DependencyEdge("D", "E", DependencyType.TypeReference, 1));
-        
+
         var result = collector.GetAggregatedDependencies();
-        
+
         // Assert - All edges should be stored, even across batch boundaries
         await Assert.That(result.Count).IsEqualTo(4);
     }
-    
+
     [Test]
     public async Task Dispose_CleansUpTempDatabase()
     {
         // Arrange
         string? dbPath = null;
-        
+
         {
             using var collector = new SQLiteDependencyCollector();
             collector.AddDependency(new DependencyEdge("A", "B", DependencyType.TypeReference, 1));
-            
+
             // Get the database path from stats
             var stats = collector.GetStats();
             dbPath = stats.DatabasePath;
-            
+
             // Database should exist while collector is alive
             await Assert.That(File.Exists(dbPath)).IsTrue();
         } // Dispose happens here
-        
+
         // Assert - Database should be cleaned up after dispose
         // Note: There may be a slight delay for file deletion
         await Task.Delay(100);
         await Assert.That(File.Exists(dbPath)).IsFalse();
     }
-    
+
     [Test]
     public async Task CustomDatabasePath_UsesPersistentFile()
     {
         // Arrange
         var customPath = Path.Combine(Path.GetTempPath(), $"test_db_{Guid.NewGuid()}.db");
-        
+
         try
         {
             // Act
             using (var collector = new SQLiteDependencyCollector(customPath))
             {
                 collector.AddDependency(new DependencyEdge("A", "B", DependencyType.TypeReference, 1));
-                
+
                 // Database should exist
                 await Assert.That(File.Exists(customPath)).IsTrue();
             }
-            
+
             // Assert - Custom path database should NOT be auto-deleted
             await Assert.That(File.Exists(customPath)).IsTrue();
-            
+
             // Can reopen and read data
             using (var collector2 = new SQLiteDependencyCollector(customPath))
             {
@@ -294,14 +294,14 @@ public class SQLiteDependencyCollectorTests
         {
             // Cleanup - SQLite may have WAL files that take a moment to close
             await Task.Delay(200);
-            
+
             try
             {
                 if (File.Exists(customPath))
                 {
                     File.Delete(customPath);
                 }
-                
+
                 // Also delete WAL and SHM files if they exist
                 var walPath = customPath + "-wal";
                 var shmPath = customPath + "-shm";
@@ -314,77 +314,77 @@ public class SQLiteDependencyCollectorTests
             }
         }
     }
-    
+
     [Test]
     public async Task FlushBatch_MassiveBatch_AutoChunksCorrectly()
     {
         // Arrange - Create collector with batch size that exceeds parameter limit (8,000 rows)
         using var collector = new SQLiteDependencyCollector(batchSize: 20_000);
-        
+
         // Act - Add 20,000 edges (would be 80,000 parameters without chunking)
         for (int i = 0; i < 20_000; i++)
         {
             collector.AddDependency(
-                new DependencyEdge($"Entity_{i}", $"Target_{i}", 
+                new DependencyEdge($"Entity_{i}", $"Target_{i}",
                     DependencyType.TypeReference, 1));
         }
-        
+
         var result = collector.GetAggregatedDependencies();
-        
+
         // Assert - Should handle gracefully via chunking (3 chunks: 8K + 8K + 4K)
         await Assert.That(result.Count).IsEqualTo(20_000);
-        
+
         var stats = collector.GetStats();
         await Assert.That(stats.TotalEdgesAdded).IsEqualTo(20_000);
         await Assert.That(stats.UniqueEdgesCount).IsEqualTo(20_000);
     }
-    
+
     [Test]
     public async Task FlushBatch_ExactlyAtChunkLimit_HandlesCorrectly()
     {
         // Arrange - Batch size exactly at chunk limit (8,000 rows = 32,000 params)
         using var collector = new SQLiteDependencyCollector(batchSize: 8_000);
-        
+
         // Act - Add exactly 8,000 edges (at the chunk boundary)
         for (int i = 0; i < 8_000; i++)
         {
             collector.AddDependency(
-                new DependencyEdge($"Entity_{i}", $"Target_{i}", 
+                new DependencyEdge($"Entity_{i}", $"Target_{i}",
                     DependencyType.TypeReference, 1));
         }
-        
+
         var result = collector.GetAggregatedDependencies();
-        
+
         // Assert - Should fit in single chunk
         await Assert.That(result.Count).IsEqualTo(8_000);
     }
-    
+
     [Test]
     public async Task FlushBatch_RequiresMultipleChunks_AllDataPreserved()
     {
         // Arrange - Force exactly 3 chunks (8K + 8K + 1K = 17K total)
         using var collector = new SQLiteDependencyCollector(batchSize: 17_000);
-        
+
         // Act - Add 17,000 unique edges with unique reference counts
         for (int i = 0; i < 17_000; i++)
         {
             collector.AddDependency(
-                new DependencyEdge($"Entity_{i}", $"Target_{i}", 
+                new DependencyEdge($"Entity_{i}", $"Target_{i}",
                     DependencyType.TypeReference, i + 1)); // Unique counts
         }
-        
+
         var result = collector.GetAggregatedDependencies();
-        
+
         // Assert - All edges preserved across chunks
         await Assert.That(result.Count).IsEqualTo(17_000);
-        
+
         // Verify a sample from each chunk
         var firstChunk = result.First(e => e.FromEntity == "Entity_0");
         await Assert.That(firstChunk.ReferenceCount).IsEqualTo(1);
-        
+
         var secondChunk = result.First(e => e.FromEntity == "Entity_9000");
         await Assert.That(secondChunk.ReferenceCount).IsEqualTo(9001);
-        
+
         var thirdChunk = result.First(e => e.FromEntity == "Entity_16000");
         await Assert.That(thirdChunk.ReferenceCount).IsEqualTo(16001);
     }

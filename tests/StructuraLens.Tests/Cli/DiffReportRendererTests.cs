@@ -136,7 +136,7 @@ public sealed class DiffReportRendererTests
             LinesOfCode = 1200,
             Warnings = 10
         };
-        
+
         var diff = new AnalysisDiffReport
         {
             Base = new DiffMetadata
@@ -153,16 +153,26 @@ public sealed class DiffReportRendererTests
             },
             Totals = new DiffTotals
             {
-                BaseProjects = 1, HeadProjects = 1,
-                BaseTypes = 10, HeadTypes = 10,
-                BaseMethods = 50, HeadMethods = 50,
-                BaseCyclomaticComplexity = 100, HeadCyclomaticComplexity = 120,
-                BaseLinesOfCode = 1000, HeadLinesOfCode = 1200,
-                BaseAvgMaintainabilityIndex = 85.0, HeadAvgMaintainabilityIndex = 70.0,
-                BaseErrors = 0, HeadErrors = 0,
-                BaseWarnings = 5, HeadWarnings = 10,
-                BaseInfo = 0, HeadInfo = 0,
-                BaseHidden = 0, HeadHidden = 0
+                BaseProjects = 1,
+                HeadProjects = 1,
+                BaseTypes = 10,
+                HeadTypes = 10,
+                BaseMethods = 50,
+                HeadMethods = 50,
+                BaseCyclomaticComplexity = 100,
+                HeadCyclomaticComplexity = 120,
+                BaseLinesOfCode = 1000,
+                HeadLinesOfCode = 1200,
+                BaseAvgMaintainabilityIndex = 85.0,
+                HeadAvgMaintainabilityIndex = 70.0,
+                BaseErrors = 0,
+                HeadErrors = 0,
+                BaseWarnings = 5,
+                HeadWarnings = 10,
+                BaseInfo = 0,
+                HeadInfo = 0,
+                BaseHidden = 0,
+                HeadHidden = 0
             },
             Projects = new[]
             {
@@ -204,7 +214,7 @@ public sealed class DiffReportRendererTests
         var errorLine = lines.First(l => l.Contains("| Errors |"));
         var warningLine = lines.First(l => l.Contains("| Warnings |"));
         var miLine = lines.First(l => l.Contains("| Avg Maintainability |"));
-        
+
         await Assert.That(errorLine).Contains("| 0 |");
         await Assert.That(warningLine).Contains("| 0 |");
         await Assert.That(miLine).Contains("| 0 |");
@@ -222,17 +232,17 @@ public sealed class DiffReportRendererTests
 
         // Assert - Verify all sections are present in the correct order
         await Assert.That(markdown).Contains("## StructuraLens Diff Summary");
-        
+
         var diagnosticsIndex = markdown.IndexOf("### Diagnostics");
         var topChangesIndex = markdown.IndexOf("### Maintainability Changes");
         var metricsIndex = markdown.IndexOf("### Overall Metrics");
-        
+
         // Diagnostics should come first
         await Assert.That(diagnosticsIndex).IsGreaterThan(0);
-        
+
         // Overall Metrics should come last
         await Assert.That(metricsIndex).IsGreaterThan(diagnosticsIndex);
-        
+
         // Maintainability Changes should be between Diagnostics and Overall Metrics (if projects exist)
         // Since CreateDiffReport has no projects, Maintainability Changes won't be present
         // but Overall Metrics should still be there
@@ -250,22 +260,34 @@ public sealed class DiffReportRendererTests
             Head = new DiffMetadata { CommitSha = "def456", BranchName = "feature", AnalyzedAt = DateTime.UtcNow },
             Totals = new DiffTotals
             {
-                BaseProjects = 1, HeadProjects = 1,
-                BaseTypes = 10, HeadTypes = 10,
-                BaseMethods = 50, HeadMethods = 50,
-                BaseCyclomaticComplexity = 100, HeadCyclomaticComplexity = 100,
-                BaseLinesOfCode = 1000, HeadLinesOfCode = 1000,
-                BaseAvgMaintainabilityIndex = 80.0, HeadAvgMaintainabilityIndex = 80.0,
-                BaseErrors = 0, HeadErrors = 2,
-                BaseWarnings = 0, HeadWarnings = 3,
-                BaseInfo = 0, HeadInfo = 0,
-                BaseHidden = 0, HeadHidden = 0
+                BaseProjects = 1,
+                HeadProjects = 1,
+                BaseTypes = 10,
+                HeadTypes = 10,
+                BaseMethods = 50,
+                HeadMethods = 50,
+                BaseCyclomaticComplexity = 100,
+                HeadCyclomaticComplexity = 100,
+                BaseLinesOfCode = 1000,
+                HeadLinesOfCode = 1000,
+                BaseAvgMaintainabilityIndex = 80.0,
+                HeadAvgMaintainabilityIndex = 80.0,
+                BaseErrors = 0,
+                HeadErrors = 2,
+                BaseWarnings = 0,
+                HeadWarnings = 3,
+                BaseInfo = 0,
+                HeadInfo = 0,
+                BaseHidden = 0,
+                HeadHidden = 0
             },
             Projects = [],
             Diagnostics = new DiagnosticDiffSummary
             {
-                BaseErrors = 0, HeadErrors = 2,
-                BaseWarnings = 0, HeadWarnings = 3,
+                BaseErrors = 0,
+                HeadErrors = 2,
+                BaseWarnings = 0,
+                HeadWarnings = 3,
                 TopNewErrors =
                 [
                     new DiagnosticDiffItem
@@ -348,7 +370,7 @@ public sealed class DiffReportRendererTests
             Line = i,
             Column = 1
         }).ToList();
-        
+
         // Create 15 warnings (11-25)
         var topNewWarnings = Enumerable.Range(11, 15).Select(i => new DiagnosticDiffItem
         {
@@ -367,22 +389,34 @@ public sealed class DiffReportRendererTests
             Head = new DiffMetadata { CommitSha = "def456", BranchName = "feature", AnalyzedAt = DateTime.UtcNow },
             Totals = new DiffTotals
             {
-                BaseProjects = 1, HeadProjects = 1,
-                BaseTypes = 10, HeadTypes = 10,
-                BaseMethods = 50, HeadMethods = 50,
-                BaseCyclomaticComplexity = 100, HeadCyclomaticComplexity = 100,
-                BaseLinesOfCode = 1000, HeadLinesOfCode = 1000,
-                BaseAvgMaintainabilityIndex = 80.0, HeadAvgMaintainabilityIndex = 80.0,
-                BaseErrors = 0, HeadErrors = 10,
-                BaseWarnings = 0, HeadWarnings = 15,
-                BaseInfo = 0, HeadInfo = 0,
-                BaseHidden = 0, HeadHidden = 0
+                BaseProjects = 1,
+                HeadProjects = 1,
+                BaseTypes = 10,
+                HeadTypes = 10,
+                BaseMethods = 50,
+                HeadMethods = 50,
+                BaseCyclomaticComplexity = 100,
+                HeadCyclomaticComplexity = 100,
+                BaseLinesOfCode = 1000,
+                HeadLinesOfCode = 1000,
+                BaseAvgMaintainabilityIndex = 80.0,
+                HeadAvgMaintainabilityIndex = 80.0,
+                BaseErrors = 0,
+                HeadErrors = 10,
+                BaseWarnings = 0,
+                HeadWarnings = 15,
+                BaseInfo = 0,
+                HeadInfo = 0,
+                BaseHidden = 0,
+                HeadHidden = 0
             },
             Projects = [],
             Diagnostics = new DiagnosticDiffSummary
             {
-                BaseErrors = 0, HeadErrors = 10,
-                BaseWarnings = 0, HeadWarnings = 15,
+                BaseErrors = 0,
+                HeadErrors = 10,
+                BaseWarnings = 0,
+                HeadWarnings = 15,
                 TopNewErrors = topNewErrors,
                 TopNewWarnings = topNewWarnings
             }
@@ -397,11 +431,11 @@ public sealed class DiffReportRendererTests
         await Assert.That(markdown).Contains("🚨 **CS0010**"); // Error 10
         await Assert.That(markdown).Contains("⚠️ **CS0011**"); // Warning 11 (first warning)
         await Assert.That(markdown).Contains("⚠️ **CS0020**"); // Warning 20 (10th warning)
-        
+
         // Should not show warning 21 and beyond (the 21st+ items)
         await Assert.That(markdown).DoesNotContain("**CS0021**");
         await Assert.That(markdown).DoesNotContain("**CS0025**");
-        
+
         // Should show the warning message about too many diagnostics
         await Assert.That(markdown).Contains("Too many diagnostic issues added to show all of them");
         await Assert.That(markdown).Contains("(25 total, showing 20)");
@@ -418,16 +452,26 @@ public sealed class DiffReportRendererTests
             Head = new DiffMetadata { CommitSha = "def456", BranchName = "feature", AnalyzedAt = DateTime.UtcNow },
             Totals = new DiffTotals
             {
-                BaseProjects = 2, HeadProjects = 2,
-                BaseTypes = 20, HeadTypes = 20,
-                BaseMethods = 100, HeadMethods = 100,
-                BaseCyclomaticComplexity = 200, HeadCyclomaticComplexity = 200,
-                BaseLinesOfCode = 2000, HeadLinesOfCode = 2000,
-                BaseAvgMaintainabilityIndex = 80.0, HeadAvgMaintainabilityIndex = 80.0,
-                BaseErrors = 0, HeadErrors = 0,
-                BaseWarnings = 0, HeadWarnings = 0,
-                BaseInfo = 0, HeadInfo = 0,
-                BaseHidden = 0, HeadHidden = 0
+                BaseProjects = 2,
+                HeadProjects = 2,
+                BaseTypes = 20,
+                HeadTypes = 20,
+                BaseMethods = 100,
+                HeadMethods = 100,
+                BaseCyclomaticComplexity = 200,
+                HeadCyclomaticComplexity = 200,
+                BaseLinesOfCode = 2000,
+                HeadLinesOfCode = 2000,
+                BaseAvgMaintainabilityIndex = 80.0,
+                HeadAvgMaintainabilityIndex = 80.0,
+                BaseErrors = 0,
+                HeadErrors = 0,
+                BaseWarnings = 0,
+                HeadWarnings = 0,
+                BaseInfo = 0,
+                HeadInfo = 0,
+                BaseHidden = 0,
+                HeadHidden = 0
             },
             Projects =
             [
@@ -506,16 +550,26 @@ public sealed class DiffReportRendererTests
             Head = new DiffMetadata { CommitSha = "def456", BranchName = "feature", AnalyzedAt = DateTime.UtcNow },
             Totals = new DiffTotals
             {
-                BaseProjects = 1, HeadProjects = 1,
-                BaseTypes = 10, HeadTypes = 10,
-                BaseMethods = 50, HeadMethods = 50,
-                BaseCyclomaticComplexity = 100, HeadCyclomaticComplexity = 100,
-                BaseLinesOfCode = 1000, HeadLinesOfCode = 1000,
-                BaseAvgMaintainabilityIndex = 80.0, HeadAvgMaintainabilityIndex = 80.0,
-                BaseErrors = 0, HeadErrors = 0,
-                BaseWarnings = 0, HeadWarnings = 0,
-                BaseInfo = 0, HeadInfo = 0,
-                BaseHidden = 0, HeadHidden = 0
+                BaseProjects = 1,
+                HeadProjects = 1,
+                BaseTypes = 10,
+                HeadTypes = 10,
+                BaseMethods = 50,
+                HeadMethods = 50,
+                BaseCyclomaticComplexity = 100,
+                HeadCyclomaticComplexity = 100,
+                BaseLinesOfCode = 1000,
+                HeadLinesOfCode = 1000,
+                BaseAvgMaintainabilityIndex = 80.0,
+                HeadAvgMaintainabilityIndex = 80.0,
+                BaseErrors = 0,
+                HeadErrors = 0,
+                BaseWarnings = 0,
+                HeadWarnings = 0,
+                BaseInfo = 0,
+                HeadInfo = 0,
+                BaseHidden = 0,
+                HeadHidden = 0
             },
             Projects =
             [
@@ -564,16 +618,26 @@ public sealed class DiffReportRendererTests
             Head = new DiffMetadata { CommitSha = "def456", BranchName = "feature", AnalyzedAt = DateTime.UtcNow },
             Totals = new DiffTotals
             {
-                BaseProjects = 1, HeadProjects = 2,
-                BaseTypes = 10, HeadTypes = 20,
-                BaseMethods = 50, HeadMethods = 100,
-                BaseCyclomaticComplexity = 100, HeadCyclomaticComplexity = 200,
-                BaseLinesOfCode = 1000, HeadLinesOfCode = 2000,
-                BaseAvgMaintainabilityIndex = 80.0, HeadAvgMaintainabilityIndex = 80.0,
-                BaseErrors = 0, HeadErrors = 0,
-                BaseWarnings = 0, HeadWarnings = 0,
-                BaseInfo = 0, HeadInfo = 0,
-                BaseHidden = 0, HeadHidden = 0
+                BaseProjects = 1,
+                HeadProjects = 2,
+                BaseTypes = 10,
+                HeadTypes = 20,
+                BaseMethods = 50,
+                HeadMethods = 100,
+                BaseCyclomaticComplexity = 100,
+                HeadCyclomaticComplexity = 200,
+                BaseLinesOfCode = 1000,
+                HeadLinesOfCode = 2000,
+                BaseAvgMaintainabilityIndex = 80.0,
+                HeadAvgMaintainabilityIndex = 80.0,
+                BaseErrors = 0,
+                HeadErrors = 0,
+                BaseWarnings = 0,
+                HeadWarnings = 0,
+                BaseInfo = 0,
+                HeadInfo = 0,
+                BaseHidden = 0,
+                HeadHidden = 0
             },
             Projects =
             [
@@ -630,16 +694,26 @@ public sealed class DiffReportRendererTests
             Head = new DiffMetadata { CommitSha = "def456", BranchName = "feature", AnalyzedAt = DateTime.UtcNow },
             Totals = new DiffTotals
             {
-                BaseProjects = 1, HeadProjects = 1,
-                BaseTypes = 10, HeadTypes = 10,
-                BaseMethods = 50, HeadMethods = 50,
-                BaseCyclomaticComplexity = 100, HeadCyclomaticComplexity = 120,
-                BaseLinesOfCode = 1000, HeadLinesOfCode = 1200,
-                BaseAvgMaintainabilityIndex = 80.0, HeadAvgMaintainabilityIndex = 75.0,
-                BaseErrors = 0, HeadErrors = 1,
-                BaseWarnings = 0, HeadWarnings = 2,
-                BaseInfo = 0, HeadInfo = 0,
-                BaseHidden = 0, HeadHidden = 0
+                BaseProjects = 1,
+                HeadProjects = 1,
+                BaseTypes = 10,
+                HeadTypes = 10,
+                BaseMethods = 50,
+                HeadMethods = 50,
+                BaseCyclomaticComplexity = 100,
+                HeadCyclomaticComplexity = 120,
+                BaseLinesOfCode = 1000,
+                HeadLinesOfCode = 1200,
+                BaseAvgMaintainabilityIndex = 80.0,
+                HeadAvgMaintainabilityIndex = 75.0,
+                BaseErrors = 0,
+                HeadErrors = 1,
+                BaseWarnings = 0,
+                HeadWarnings = 2,
+                BaseInfo = 0,
+                HeadInfo = 0,
+                BaseHidden = 0,
+                HeadHidden = 0
             },
             Projects =
             [
@@ -672,8 +746,10 @@ public sealed class DiffReportRendererTests
             ],
             Diagnostics = new DiagnosticDiffSummary
             {
-                BaseErrors = 0, HeadErrors = 1,
-                BaseWarnings = 0, HeadWarnings = 2,
+                BaseErrors = 0,
+                HeadErrors = 1,
+                BaseWarnings = 0,
+                HeadWarnings = 2,
                 TopNewErrors =
                 [
                     new DiagnosticDiffItem
@@ -732,16 +808,26 @@ public sealed class DiffReportRendererTests
             Head = new DiffMetadata { CommitSha = "def456", BranchName = "feature", AnalyzedAt = DateTime.UtcNow },
             Totals = new DiffTotals
             {
-                BaseProjects = 1, HeadProjects = 1,
-                BaseTypes = 10, HeadTypes = 10,
-                BaseMethods = 50, HeadMethods = 50,
-                BaseCyclomaticComplexity = 100, HeadCyclomaticComplexity = 100,
-                BaseLinesOfCode = 1000, HeadLinesOfCode = 1000,
-                BaseAvgMaintainabilityIndex = 80.0, HeadAvgMaintainabilityIndex = 80.0,
-                BaseErrors = 0, HeadErrors = 0,
-                BaseWarnings = 0, HeadWarnings = 0,
-                BaseInfo = 0, HeadInfo = 0,
-                BaseHidden = 0, HeadHidden = 0
+                BaseProjects = 1,
+                HeadProjects = 1,
+                BaseTypes = 10,
+                HeadTypes = 10,
+                BaseMethods = 50,
+                HeadMethods = 50,
+                BaseCyclomaticComplexity = 100,
+                HeadCyclomaticComplexity = 100,
+                BaseLinesOfCode = 1000,
+                HeadLinesOfCode = 1000,
+                BaseAvgMaintainabilityIndex = 80.0,
+                HeadAvgMaintainabilityIndex = 80.0,
+                BaseErrors = 0,
+                HeadErrors = 0,
+                BaseWarnings = 0,
+                HeadWarnings = 0,
+                BaseInfo = 0,
+                HeadInfo = 0,
+                BaseHidden = 0,
+                HeadHidden = 0
             },
             Projects =
             [
@@ -795,16 +881,26 @@ public sealed class DiffReportRendererTests
             Head = new DiffMetadata { CommitSha = "def456", BranchName = "feature", AnalyzedAt = DateTime.UtcNow },
             Totals = new DiffTotals
             {
-                BaseProjects = 1, HeadProjects = 1,
-                BaseTypes = 10, HeadTypes = 10,
-                BaseMethods = 50, HeadMethods = 50,
-                BaseCyclomaticComplexity = 100, HeadCyclomaticComplexity = 100,
-                BaseLinesOfCode = 1000, HeadLinesOfCode = 1000,
-                BaseAvgMaintainabilityIndex = 80.0, HeadAvgMaintainabilityIndex = 80.0,
-                BaseErrors = 0, HeadErrors = 0,
-                BaseWarnings = 0, HeadWarnings = 0,
-                BaseInfo = 0, HeadInfo = 0,
-                BaseHidden = 0, HeadHidden = 0
+                BaseProjects = 1,
+                HeadProjects = 1,
+                BaseTypes = 10,
+                HeadTypes = 10,
+                BaseMethods = 50,
+                HeadMethods = 50,
+                BaseCyclomaticComplexity = 100,
+                HeadCyclomaticComplexity = 100,
+                BaseLinesOfCode = 1000,
+                HeadLinesOfCode = 1000,
+                BaseAvgMaintainabilityIndex = 80.0,
+                HeadAvgMaintainabilityIndex = 80.0,
+                BaseErrors = 0,
+                HeadErrors = 0,
+                BaseWarnings = 0,
+                HeadWarnings = 0,
+                BaseInfo = 0,
+                HeadInfo = 0,
+                BaseHidden = 0,
+                HeadHidden = 0
             },
             Projects =
             [
@@ -859,16 +955,26 @@ public sealed class DiffReportRendererTests
             Head = new DiffMetadata { CommitSha = "def456", BranchName = "feature", AnalyzedAt = DateTime.UtcNow },
             Totals = new DiffTotals
             {
-                BaseProjects = 1, HeadProjects = 1,
-                BaseTypes = 10, HeadTypes = 10,
-                BaseMethods = 50, HeadMethods = 50,
-                BaseCyclomaticComplexity = 100, HeadCyclomaticComplexity = 100,
-                BaseLinesOfCode = 1000, HeadLinesOfCode = 1000,
-                BaseAvgMaintainabilityIndex = 80.0, HeadAvgMaintainabilityIndex = 80.0,
-                BaseErrors = 0, HeadErrors = 0,
-                BaseWarnings = 0, HeadWarnings = 0,
-                BaseInfo = 0, HeadInfo = 0,
-                BaseHidden = 0, HeadHidden = 0
+                BaseProjects = 1,
+                HeadProjects = 1,
+                BaseTypes = 10,
+                HeadTypes = 10,
+                BaseMethods = 50,
+                HeadMethods = 50,
+                BaseCyclomaticComplexity = 100,
+                HeadCyclomaticComplexity = 100,
+                BaseLinesOfCode = 1000,
+                HeadLinesOfCode = 1000,
+                BaseAvgMaintainabilityIndex = 80.0,
+                HeadAvgMaintainabilityIndex = 80.0,
+                BaseErrors = 0,
+                HeadErrors = 0,
+                BaseWarnings = 0,
+                HeadWarnings = 0,
+                BaseInfo = 0,
+                HeadInfo = 0,
+                BaseHidden = 0,
+                HeadHidden = 0
             },
             Projects =
             [
@@ -919,16 +1025,26 @@ public sealed class DiffReportRendererTests
             Head = new DiffMetadata { CommitSha = "def456", BranchName = "feature", AnalyzedAt = DateTime.UtcNow },
             Totals = new DiffTotals
             {
-                BaseProjects = 1, HeadProjects = 1,
-                BaseTypes = 10, HeadTypes = 10,
-                BaseMethods = 50, HeadMethods = 50,
-                BaseCyclomaticComplexity = 100, HeadCyclomaticComplexity = 100,
-                BaseLinesOfCode = 1000, HeadLinesOfCode = 1000,
-                BaseAvgMaintainabilityIndex = 80.0, HeadAvgMaintainabilityIndex = 75.0,
-                BaseErrors = 0, HeadErrors = 0,
-                BaseWarnings = 0, HeadWarnings = 0,
-                BaseInfo = 0, HeadInfo = 0,
-                BaseHidden = 0, HeadHidden = 0
+                BaseProjects = 1,
+                HeadProjects = 1,
+                BaseTypes = 10,
+                HeadTypes = 10,
+                BaseMethods = 50,
+                HeadMethods = 50,
+                BaseCyclomaticComplexity = 100,
+                HeadCyclomaticComplexity = 100,
+                BaseLinesOfCode = 1000,
+                HeadLinesOfCode = 1000,
+                BaseAvgMaintainabilityIndex = 80.0,
+                HeadAvgMaintainabilityIndex = 75.0,
+                BaseErrors = 0,
+                HeadErrors = 0,
+                BaseWarnings = 0,
+                HeadWarnings = 0,
+                BaseInfo = 0,
+                HeadInfo = 0,
+                BaseHidden = 0,
+                HeadHidden = 0
             },
             Projects =
             [
@@ -982,7 +1098,7 @@ public sealed class DiffReportRendererTests
         var internalDepsIndex = markdown.IndexOf("### Internal Dependencies Changes");
         var externalDepsIndex = markdown.IndexOf("### External Dependencies Changes");
         var maintainabilityIndex = markdown.IndexOf("### Maintainability Changes");
-        
+
         await Assert.That(internalDepsIndex).IsGreaterThan(0);
         await Assert.That(externalDepsIndex).IsGreaterThan(internalDepsIndex);
         await Assert.That(maintainabilityIndex).IsGreaterThan(externalDepsIndex);
@@ -999,16 +1115,26 @@ public sealed class DiffReportRendererTests
             Head = new DiffMetadata { CommitSha = "def456", BranchName = "feature", AnalyzedAt = DateTime.UtcNow },
             Totals = new DiffTotals
             {
-                BaseProjects = 1, HeadProjects = 1,
-                BaseTypes = 10, HeadTypes = 10,
-                BaseMethods = 50, HeadMethods = 50,
-                BaseCyclomaticComplexity = 100, HeadCyclomaticComplexity = 100,
-                BaseLinesOfCode = 1000, HeadLinesOfCode = 1000,
-                BaseAvgMaintainabilityIndex = 80.0, HeadAvgMaintainabilityIndex = 80.0,
-                BaseErrors = 0, HeadErrors = 0,
-                BaseWarnings = 0, HeadWarnings = 0,
-                BaseInfo = 0, HeadInfo = 0,
-                BaseHidden = 0, HeadHidden = 0
+                BaseProjects = 1,
+                HeadProjects = 1,
+                BaseTypes = 10,
+                HeadTypes = 10,
+                BaseMethods = 50,
+                HeadMethods = 50,
+                BaseCyclomaticComplexity = 100,
+                HeadCyclomaticComplexity = 100,
+                BaseLinesOfCode = 1000,
+                HeadLinesOfCode = 1000,
+                BaseAvgMaintainabilityIndex = 80.0,
+                HeadAvgMaintainabilityIndex = 80.0,
+                BaseErrors = 0,
+                HeadErrors = 0,
+                BaseWarnings = 0,
+                HeadWarnings = 0,
+                BaseInfo = 0,
+                HeadInfo = 0,
+                BaseHidden = 0,
+                HeadHidden = 0
             },
             Projects =
             [
@@ -1062,16 +1188,26 @@ public sealed class DiffReportRendererTests
             Head = new DiffMetadata { CommitSha = "def456", BranchName = "feature", AnalyzedAt = DateTime.UtcNow },
             Totals = new DiffTotals
             {
-                BaseProjects = 1, HeadProjects = 2,
-                BaseTypes = 10, HeadTypes = 20,
-                BaseMethods = 50, HeadMethods = 100,
-                BaseCyclomaticComplexity = 100, HeadCyclomaticComplexity = 200,
-                BaseLinesOfCode = 1000, HeadLinesOfCode = 2000,
-                BaseAvgMaintainabilityIndex = 80.0, HeadAvgMaintainabilityIndex = 80.0,
-                BaseErrors = 0, HeadErrors = 0,
-                BaseWarnings = 0, HeadWarnings = 0,
-                BaseInfo = 0, HeadInfo = 0,
-                BaseHidden = 0, HeadHidden = 0
+                BaseProjects = 1,
+                HeadProjects = 2,
+                BaseTypes = 10,
+                HeadTypes = 20,
+                BaseMethods = 50,
+                HeadMethods = 100,
+                BaseCyclomaticComplexity = 100,
+                HeadCyclomaticComplexity = 200,
+                BaseLinesOfCode = 1000,
+                HeadLinesOfCode = 2000,
+                BaseAvgMaintainabilityIndex = 80.0,
+                HeadAvgMaintainabilityIndex = 80.0,
+                BaseErrors = 0,
+                HeadErrors = 0,
+                BaseWarnings = 0,
+                HeadWarnings = 0,
+                BaseInfo = 0,
+                HeadInfo = 0,
+                BaseHidden = 0,
+                HeadHidden = 0
             },
             Projects =
             [
@@ -1145,16 +1281,26 @@ public sealed class DiffReportRendererTests
             },
             Totals = new DiffTotals
             {
-                BaseProjects = 1, HeadProjects = 1,
-                BaseTypes = 10, HeadTypes = 10,
-                BaseMethods = 50, HeadMethods = 50,
-                BaseCyclomaticComplexity = baseComplexity, HeadCyclomaticComplexity = headComplexity,
-                BaseLinesOfCode = 1000, HeadLinesOfCode = 1000,
-                BaseAvgMaintainabilityIndex = baseMaintainability, HeadAvgMaintainabilityIndex = headMaintainability,
-                BaseErrors = baseErrors, HeadErrors = headErrors,
-                BaseWarnings = baseWarnings, HeadWarnings = headWarnings,
-                BaseInfo = 0, HeadInfo = 0,
-                BaseHidden = 0, HeadHidden = 0
+                BaseProjects = 1,
+                HeadProjects = 1,
+                BaseTypes = 10,
+                HeadTypes = 10,
+                BaseMethods = 50,
+                HeadMethods = 50,
+                BaseCyclomaticComplexity = baseComplexity,
+                HeadCyclomaticComplexity = headComplexity,
+                BaseLinesOfCode = 1000,
+                HeadLinesOfCode = 1000,
+                BaseAvgMaintainabilityIndex = baseMaintainability,
+                HeadAvgMaintainabilityIndex = headMaintainability,
+                BaseErrors = baseErrors,
+                HeadErrors = headErrors,
+                BaseWarnings = baseWarnings,
+                HeadWarnings = headWarnings,
+                BaseInfo = 0,
+                HeadInfo = 0,
+                BaseHidden = 0,
+                HeadHidden = 0
             },
             Projects = [],
             Diagnostics = new DiagnosticDiffSummary()

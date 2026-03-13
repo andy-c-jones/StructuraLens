@@ -4,7 +4,7 @@
  * Supports multiple types: error, warning, info, success, added, removed.
  */
 interface Props {
-  type: 'error' | 'warning' | 'info' | 'success' | 'added' | 'removed';
+  type: "error" | "warning" | "info" | "success" | "added" | "removed";
   text: string;
   class?: string;
 }
@@ -12,6 +12,6 @@ interface Props {
 const { type, text, class: className } = Astro.props;
 ---
 
-<span class={`badge badge-${type} ${className || ''}`}>
+<span class={`badge badge-${type} ${className || ""}`}>
   {text}
 </span>

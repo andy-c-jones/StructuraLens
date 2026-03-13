@@ -10,10 +10,10 @@ public record AnalysisDiffReport
     public DiffTotals Totals { get; init; } = new();
     public IReadOnlyList<ProjectDiff> Projects { get; init; } = [];
     public DiagnosticDiffSummary Diagnostics { get; init; } = new();
-    
+
     /// <summary>Dependencies that are new to the entire solution (first project to add them).</summary>
     public IReadOnlySet<string> NewToSolution { get; init; } = new HashSet<string>();
-    
+
     /// <summary>Dependencies that are removed from the entire solution (no projects use them anymore).</summary>
     public IReadOnlySet<string> RemovedFromSolution { get; init; } = new HashSet<string>();
 }
@@ -94,7 +94,7 @@ public record ProjectDiff
     public int ExternalDependenciesDelta => Head.ExternalDependencies - Base.ExternalDependencies;
     public int ExternalBclDependenciesDelta => Head.ExternalBclDependencies - Base.ExternalBclDependencies;
     public int ExternalPackageDependenciesDelta => Head.ExternalPackageDependencies - Base.ExternalPackageDependencies;
-    
+
     public IReadOnlyList<string> AddedBclDependencies { get; init; } = [];
     public IReadOnlyList<string> RemovedBclDependencies { get; init; } = [];
     public IReadOnlyList<string> AddedPackageDependencies { get; init; } = [];

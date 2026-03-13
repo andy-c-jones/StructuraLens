@@ -106,18 +106,18 @@ public class MetricsCalculatorTests
             public class Derived : Base { }
             public class DoubleDerived : Derived { }
             """;
-        
+
         var tree = CSharpSyntaxTree.ParseText(code);
         var compilation = CSharpCompilation.Create("TestAssembly")
             .AddReferences(MetadataReference.CreateFromFile(typeof(object).Assembly.Location))
             .AddSyntaxTrees(tree);
-        
+
         var semanticModel = compilation.GetSemanticModel(tree);
         var doubleDerivedClass = tree.GetRoot()
             .DescendantNodes()
             .OfType<ClassDeclarationSyntax>()
             .Last();
-        
+
         var typeSymbol = semanticModel.GetDeclaredSymbol(doubleDerivedClass) as INamedTypeSymbol;
 
         // Act

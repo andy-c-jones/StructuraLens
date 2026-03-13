@@ -8,7 +8,7 @@ namespace StructuraLens.Core.Analysis.Logging;
 internal static partial class SolutionAnalyzerLog
 {
     // Analysis lifecycle events (1000-1099)
-    
+
     [LoggerMessage(
         EventId = 1000,
         Level = LogLevel.Information,
@@ -94,7 +94,7 @@ internal static partial class SolutionAnalyzerLog
     public static partial void AnalyzingProjectCoupling(ILogger logger);
 
     // Debug events (1050-1099)
-    
+
     [LoggerMessage(
         EventId = 1050,
         Level = LogLevel.Debug,
@@ -114,7 +114,7 @@ internal static partial class SolutionAnalyzerLog
     public static partial void DocumentProcessingProgress(ILogger logger, int documentIndex, int documentCount, string projectName);
 
     // Warning events (1100-1199)
-    
+
     [LoggerMessage(
         EventId = 1100,
         Level = LogLevel.Warning,

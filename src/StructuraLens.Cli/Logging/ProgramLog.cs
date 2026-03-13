@@ -8,7 +8,7 @@ namespace StructuraLens.Cli.Logging;
 internal static partial class ProgramLog
 {
     // CLI operation events (4000-4099)
-    
+
     [LoggerMessage(
         EventId = 4000,
         Level = LogLevel.Information,
@@ -148,7 +148,7 @@ internal static partial class ProgramLog
     public static partial void DiffCompleted(ILogger logger, string format, string outputPath);
 
     // Warning events (4100-4199)
-    
+
     [LoggerMessage(
         EventId = 4100,
         Level = LogLevel.Warning,
@@ -162,7 +162,7 @@ internal static partial class ProgramLog
     public static partial void AdditionalWarnings(ILogger logger, int additionalWarningCount);
 
     // Error events (4200-4299)
-    
+
     [LoggerMessage(
         EventId = 4200,
         Level = LogLevel.Error,

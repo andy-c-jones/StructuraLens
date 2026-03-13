@@ -3,5 +3,8 @@
     <Version>0.0.0-dev</Version>
     <AssemblyVersion>0.0.0</AssemblyVersion>
     <InformationalVersion>0.0.0-dev</InformationalVersion>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/andy-c-jones/StructuraLens</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/andy-c-jones/StructuraLens</PackageProjectUrl>
   </PropertyGroup>
 </Project>

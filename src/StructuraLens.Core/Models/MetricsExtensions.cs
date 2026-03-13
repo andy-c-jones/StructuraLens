@@ -14,8 +14,8 @@ public static class MetricsExtensions
         this IEnumerable<MethodMetrics> methods)
     {
         var methodList = methods.ToList();
-        return methodList.Count > 0 
-            ? methodList.Average(m => m.MaintainabilityIndex) 
+        return methodList.Count > 0
+            ? methodList.Average(m => m.MaintainabilityIndex)
             : 0;
     }
 
@@ -56,8 +56,8 @@ public static class MetricsExtensions
         this IEnumerable<TypeMetrics> types)
     {
         var typeList = types.ToList();
-        return typeList.Count > 0 
-            ? typeList.Max(t => t.DepthOfInheritance) 
+        return typeList.Count > 0
+            ? typeList.Max(t => t.DepthOfInheritance)
             : 0;
     }
 

@@ -73,7 +73,7 @@ public sealed class CompactReportExporter : IReportExporter
 
         // Pre-build lookup dictionary for O(1) access to project coupling metrics
         var projectCouplingLookup = report.CouplingAnalysis?.ProjectCoupling
-            .ToDictionary(pc => pc.EntityName, pc => pc) 
+            .ToDictionary(pc => pc.EntityName, pc => pc)
             ?? new Dictionary<string, CouplingMetrics>();
 
         foreach (var project in report.Projects)
@@ -241,7 +241,7 @@ public sealed class CompactReportExporter : IReportExporter
     {
         // Get internal namespaces from our projects and build complete metrics
         var namespaceMetrics = new Dictionary<string, (int TypeCount, int MethodCount, int CC, int LOC, double MI)>();
-        
+
         foreach (var project in projects)
         {
             foreach (var type in project.Types)
@@ -253,7 +253,7 @@ public sealed class CompactReportExporter : IReportExporter
                     {
                         namespaceMetrics[ns] = (0, 0, 0, 0, 0.0);
                     }
-                    
+
                     var current = namespaceMetrics[ns];
                     namespaceMetrics[ns] = (
                         TypeCount: current.TypeCount + 1,
@@ -303,11 +303,11 @@ public sealed class CompactReportExporter : IReportExporter
             nodeIndex[ns] = id;
             var metrics = namespaceMetricsWithAvgMI[ns];
             namespaceCouplingLookup.TryGetValue(ns, out var couplingData);
-            
-            nodes.Add(new object[] 
-            { 
-                id, 
-                ns, 
+
+            nodes.Add(new object[]
+            {
+                id,
+                ns,
                 metrics.LOC,
                 metrics.CC,
                 Math.Round(metrics.AvgMI, 1),
@@ -341,7 +341,7 @@ public sealed class CompactReportExporter : IReportExporter
         // Extract just the method/type name without namespace
         var parenIndex = fullName.IndexOf('(');
         var nameWithoutParams = parenIndex > 0 ? fullName[..parenIndex] : fullName;
-        
+
         var lastDot = nameWithoutParams.LastIndexOf('.');
         var shortName = lastDot > 0 ? nameWithoutParams[(lastDot + 1)..] : nameWithoutParams;
 

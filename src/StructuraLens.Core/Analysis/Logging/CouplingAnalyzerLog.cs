@@ -8,7 +8,7 @@ namespace StructuraLens.Core.Analysis.Logging;
 internal static partial class CouplingAnalyzerLog
 {
     // Analysis events (2000-2099)
-    
+
     [LoggerMessage(
         EventId = 2000,
         Level = LogLevel.Debug,
@@ -34,7 +34,7 @@ internal static partial class CouplingAnalyzerLog
     public static partial void CouplingAnalysisProgress(ILogger logger, int documentIndex, int documentCount, string projectName);
 
     // Warning events (2100-2199)
-    
+
     [LoggerMessage(
         EventId = 2100,
         Level = LogLevel.Warning,

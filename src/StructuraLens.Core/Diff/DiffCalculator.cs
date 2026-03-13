@@ -185,7 +185,7 @@ public sealed class DiffCalculator
         // Extract and categorize package names
         var bclPackages = new List<string>();
         var thirdPartyPackages = new List<string>();
-        
+
         foreach (var package in project.PackageReferences)
         {
             if (IsBclNamespace(package))

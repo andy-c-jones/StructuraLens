@@ -291,7 +291,9 @@ See [Copilot Instructions](.github/copilot-instructions.md) for detailed contrib
 
 ## License
 
-Proprietary. All rights reserved.
+Licensed under the **MIT License** (`MIT`).
+
+See `LICENSE.md` for details.
 
 ## Support
 

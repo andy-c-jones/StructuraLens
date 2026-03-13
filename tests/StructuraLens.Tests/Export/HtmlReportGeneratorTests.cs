@@ -193,7 +193,7 @@ public class HtmlReportGeneratorTests
 
         // Assert
         var expectedYear = DateTime.UtcNow.Year.ToString();
-        await Assert.That(html).Contains(expectedYear + " Andrew \"AJ\" Jones");
+        await Assert.That(html).Contains(expectedYear + " Andrew 'AJ' Jones");
     }
 
     // ---------------------------------------------------------------

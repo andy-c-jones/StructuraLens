@@ -17,7 +17,7 @@ public sealed class SQLiteDependencyCollector : IDependencyCollector
     private readonly int _batchSize;
     private long _totalAdded;
     private readonly object _batchLock = new();
-    
+
     /// <summary>
     /// Creates a new SQLite-backed dependency collector.
     /// </summary>
@@ -34,17 +34,17 @@ public sealed class SQLiteDependencyCollector : IDependencyCollector
         _batch = new List<DependencyEdge>(batchSize);
         _isTemporary = dbPath == null;
         _dbPath = dbPath ?? Path.Combine(Path.GetTempPath(), $"structuralens_{Guid.NewGuid()}.db");
-        
+
         _connection = new SqliteConnection($"Data Source={_dbPath}");
         _connection.Open();
-        
+
         InitializeDatabase();
     }
-    
+
     private void InitializeDatabase()
     {
         using var cmd = _connection.CreateCommand();
-        
+
         // Enable optimizations for temporary database
         cmd.CommandText = @"
             PRAGMA journal_mode=WAL;
@@ -53,7 +53,7 @@ public sealed class SQLiteDependencyCollector : IDependencyCollector
             PRAGMA temp_store=MEMORY;
         ";
         cmd.ExecuteNonQuery();
-        
+
         // Create tables and indexes if they don't exist
         cmd.CommandText = @"
             CREATE TABLE IF NOT EXISTS dependencies (
@@ -69,7 +69,7 @@ public sealed class SQLiteDependencyCollector : IDependencyCollector
         ";
         cmd.ExecuteNonQuery();
     }
-    
+
     /// <inheritdoc />
     public void AddDependency(DependencyEdge edge)
     {
@@ -77,28 +77,28 @@ public sealed class SQLiteDependencyCollector : IDependencyCollector
         {
             _batch.Add(edge);
             Interlocked.Increment(ref _totalAdded);
-            
+
             if (_batch.Count >= _batchSize)
                 FlushBatch();
         }
     }
-    
+
     /// <inheritdoc />
     public void AddDependencies(IEnumerable<DependencyEdge> edges)
     {
         lock (_batchLock)
         {
             _batch.AddRange(edges);
-            
+
             // Update counter
             var count = _batch.Count - (_totalAdded > 0 ? 0 : _batch.Count);
             Interlocked.Add(ref _totalAdded, count);
-            
+
             if (_batch.Count >= _batchSize)
                 FlushBatch();
         }
     }
-    
+
     /// <summary>
     /// Flushes the current batch to the database using bulk INSERT statements.
     /// Automatically chunks large batches to respect SQLite parameter limits.
@@ -106,7 +106,7 @@ public sealed class SQLiteDependencyCollector : IDependencyCollector
     private void FlushBatch()
     {
         if (_batch.Count == 0) return;
-        
+
         // SQLite has a parameter limit of 32,766 (SQLITE_MAX_VARIABLE_NUMBER).
         // Each row requires 4 parameters (from_entity, to_entity, type, reference_count).
         // To stay well under the limit, we use a conservative threshold of 32,000 parameters,
@@ -118,9 +118,9 @@ public sealed class SQLiteDependencyCollector : IDependencyCollector
         const int MaxParamsPerInsert = 32_000;  // Conservative margin below SQLite's 32,766 limit
         const int ParamsPerRow = 4;
         const int MaxRowsPerInsert = MaxParamsPerInsert / ParamsPerRow;  // 8,000 rows
-        
+
         using var transaction = _connection.BeginTransaction();
-        
+
         try
         {
             // Process batch in chunks if needed (unlikely with default batch size of 1000)
@@ -130,7 +130,7 @@ public sealed class SQLiteDependencyCollector : IDependencyCollector
                 var chunk = _batch.Skip(offset).Take(chunkSize).ToList();
                 FlushChunk(chunk, transaction);
             }
-            
+
             transaction.Commit();
         }
         catch
@@ -143,42 +143,42 @@ public sealed class SQLiteDependencyCollector : IDependencyCollector
             _batch.Clear();
         }
     }
-    
+
     /// <summary>
     /// Flushes a single chunk of edges using a multi-row VALUES INSERT statement.
     /// </summary>
     private void FlushChunk(List<DependencyEdge> edges, SqliteTransaction transaction)
     {
         if (edges.Count == 0) return;
-        
+
         // Build multi-row VALUES clause with parameterized values
         var valuesClauses = new List<string>(edges.Count);
         var parameters = new List<SqliteParameter>(edges.Count * 4);
-        
+
         for (int i = 0; i < edges.Count; i++)
         {
             valuesClauses.Add($"(@from{i}, @to{i}, @type{i}, @count{i})");
-            
-            parameters.Add(new SqliteParameter($"@from{i}", SqliteType.Text) 
-                { Value = edges[i].FromEntity });
-            parameters.Add(new SqliteParameter($"@to{i}", SqliteType.Text) 
-                { Value = edges[i].ToEntity });
-            parameters.Add(new SqliteParameter($"@type{i}", SqliteType.Integer) 
-                { Value = (int)edges[i].Type });
-            parameters.Add(new SqliteParameter($"@count{i}", SqliteType.Integer) 
-                { Value = edges[i].ReferenceCount });
+
+            parameters.Add(new SqliteParameter($"@from{i}", SqliteType.Text)
+            { Value = edges[i].FromEntity });
+            parameters.Add(new SqliteParameter($"@to{i}", SqliteType.Text)
+            { Value = edges[i].ToEntity });
+            parameters.Add(new SqliteParameter($"@type{i}", SqliteType.Integer)
+            { Value = (int)edges[i].Type });
+            parameters.Add(new SqliteParameter($"@count{i}", SqliteType.Integer)
+            { Value = edges[i].ReferenceCount });
         }
-        
+
         using var cmd = _connection.CreateCommand();
         cmd.Transaction = transaction;
         cmd.CommandText = $@"
             INSERT INTO dependencies (from_entity, to_entity, type, reference_count)
             VALUES {string.Join(",\n                   ", valuesClauses)}";
-        
+
         cmd.Parameters.AddRange(parameters.ToArray());
         cmd.ExecuteNonQuery();
     }
-    
+
     /// <inheritdoc />
     public IReadOnlyList<DependencyEdge> GetAggregatedDependencies()
     {
@@ -186,14 +186,14 @@ public sealed class SQLiteDependencyCollector : IDependencyCollector
         {
             FlushBatch();
         }
-        
+
         using var cmd = _connection.CreateCommand();
         cmd.CommandText = @"
             SELECT from_entity, to_entity, type, SUM(reference_count) as total_count
             FROM dependencies
             GROUP BY from_entity, to_entity, type
         ";
-        
+
         var result = new List<DependencyEdge>();
         using var reader = cmd.ExecuteReader();
         while (reader.Read())
@@ -204,10 +204,10 @@ public sealed class SQLiteDependencyCollector : IDependencyCollector
                 Type: (DependencyType)reader.GetInt32(2),
                 ReferenceCount: reader.GetInt32(3)));
         }
-        
+
         return result;
     }
-    
+
     /// <inheritdoc />
     public IReadOnlyList<DependencyEdge> GetAggregatedDependencies(DependencyType type)
     {
@@ -215,7 +215,7 @@ public sealed class SQLiteDependencyCollector : IDependencyCollector
         {
             FlushBatch();
         }
-        
+
         using var cmd = _connection.CreateCommand();
         cmd.CommandText = @"
             SELECT from_entity, to_entity, type, SUM(reference_count) as total_count
@@ -224,7 +224,7 @@ public sealed class SQLiteDependencyCollector : IDependencyCollector
             GROUP BY from_entity, to_entity, type
         ";
         cmd.Parameters.AddWithValue("@type", (int)type);
-        
+
         var result = new List<DependencyEdge>();
         using var reader = cmd.ExecuteReader();
         while (reader.Read())
@@ -235,10 +235,10 @@ public sealed class SQLiteDependencyCollector : IDependencyCollector
                 Type: (DependencyType)reader.GetInt32(2),
                 ReferenceCount: reader.GetInt32(3)));
         }
-        
+
         return result;
     }
-    
+
     /// <inheritdoc />
     public DependencyCollectorStats GetStats()
     {
@@ -246,9 +246,9 @@ public sealed class SQLiteDependencyCollector : IDependencyCollector
         {
             FlushBatch();
         }
-        
+
         using var cmd = _connection.CreateCommand();
-        
+
         // Get accurate unique count using GROUP BY
         cmd.CommandText = @"
             SELECT COUNT(*) FROM (
@@ -258,9 +258,9 @@ public sealed class SQLiteDependencyCollector : IDependencyCollector
             )
         ";
         var uniqueCount = Convert.ToInt64(cmd.ExecuteScalar());
-        
+
         var fileInfo = new FileInfo(_dbPath);
-        
+
         return new DependencyCollectorStats(
             TotalEdgesAdded: _totalAdded,
             UniqueEdgesCount: uniqueCount,
@@ -268,7 +268,7 @@ public sealed class SQLiteDependencyCollector : IDependencyCollector
             Strategy: "SQLite",
             DatabasePath: _dbPath);
     }
-    
+
     /// <inheritdoc />
     public void Reset()
     {
@@ -277,12 +277,12 @@ public sealed class SQLiteDependencyCollector : IDependencyCollector
             _batch.Clear();
             _totalAdded = 0;
         }
-        
+
         using var cmd = _connection.CreateCommand();
         cmd.CommandText = "DELETE FROM dependencies";
         cmd.ExecuteNonQuery();
     }
-    
+
     /// <inheritdoc />
     public void Dispose()
     {
@@ -290,7 +290,7 @@ public sealed class SQLiteDependencyCollector : IDependencyCollector
         {
             FlushBatch();
         }
-        
+
         // Close connection properly to release file locks
         if (_connection != null)
         {
@@ -299,7 +299,7 @@ public sealed class SQLiteDependencyCollector : IDependencyCollector
             _connection.Close();
             _connection.Dispose();
         }
-        
+
         // Only delete temp databases
         if (_isTemporary && !string.IsNullOrEmpty(_dbPath))
         {
@@ -307,15 +307,15 @@ public sealed class SQLiteDependencyCollector : IDependencyCollector
             {
                 // Give a moment for file handles to be released
                 System.Threading.Thread.Sleep(100);
-                
+
                 // Delete main database and WAL files
                 if (File.Exists(_dbPath))
                     File.Delete(_dbPath);
-                    
+
                 var walPath = _dbPath + "-wal";
                 if (File.Exists(walPath))
                     File.Delete(walPath);
-                    
+
                 var shmPath = _dbPath + "-shm";
                 if (File.Exists(shmPath))
                     File.Delete(shmPath);

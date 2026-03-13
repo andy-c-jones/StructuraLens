@@ -19,12 +19,12 @@ public sealed class HtmlReportGenerator : IReportGenerator
     /// Must match the exact HTML emitted by the Astro production build.
     /// </summary>
     private const string DiffTabButton = """<div class="tab active" data-tab="diff">Diff</div>""";
-    
+
     /// <summary>
     /// The diff tab content div to remove when no diff data is present.
     /// </summary>
     private const string DiffTabContent = """<div id="diff" class="tab-content active"></div>""";
-    
+
     /// <summary>
     /// Class attribute to update when diff tab is removed (make summary active).
     /// </summary>
