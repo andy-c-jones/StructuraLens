@@ -115,6 +115,12 @@ StructuraLens/
 
 4. **Open pull request** against `main` branch
 
+## License
+
+StructuraLens is licensed under the **MIT License** (`MIT`).
+
+Repository policy relies on root-level licensing (`LICENSE.md`) and distribution metadata rather than mandatory per-file source headers.
+
 ### Commit Message Format
 
 Use **Conventional Commits** for all commit messages:
