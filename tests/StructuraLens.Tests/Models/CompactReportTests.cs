@@ -13,7 +13,7 @@ public class CompactReportTests
         {
             new() { Name = "TestClass", CyclomaticComplexity = 5, LinesOfCode = 100, AvgMaintainabilityIndex = 75.0, DepthOfInheritance = 1 }
         };
-        
+
         var compactNamespace = new CompactNamespace
         {
             Name = "TestNamespace",
@@ -41,7 +41,7 @@ public class CompactReportTests
         await Assert.That(json).Contains("\"dit\":");
         await Assert.That(json).Contains("\"mi\":");
         await Assert.That(json).Contains("\"types\":");
-        
+
         // Verify long names are not used
         await Assert.That(json).DoesNotContain("\"name\":");
         await Assert.That(json).DoesNotContain("\"typeCount\":");
@@ -195,12 +195,12 @@ public class CompactReportTests
         {
             new() { Name = "Method1", CyclomaticComplexity = 2, LinesOfCode = 10, HalsteadVolume = 50.0, MaintainabilityIndex = 85.0, StartLine = 1, EndLine = 10 }
         };
-        
+
         var types = new List<CompactType>
         {
             new() { Name = "Class1", FullName = "NS.Class1", CyclomaticComplexity = 5, LinesOfCode = 100, AvgMaintainabilityIndex = 80.0, DepthOfInheritance = 1, Methods = methods }
         };
-        
+
         var compactNamespace = new CompactNamespace
         {
             Name = "NS",
@@ -219,7 +219,7 @@ public class CompactReportTests
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
             WriteIndented = false
         });
-        
+
         var deserialized = JsonSerializer.Deserialize<CompactNamespace>(json, new JsonSerializerOptions
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase

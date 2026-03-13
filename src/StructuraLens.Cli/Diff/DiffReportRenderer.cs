@@ -28,19 +28,19 @@ public sealed class DiffReportRenderer
         sb.AppendLine();
         sb.AppendLine("| Metric | Base | Head | Delta |");
         sb.AppendLine("| --- | ---: | ---: | ---: |");
-        sb.AppendLine(BuildRow("Errors", 
-            diff.Totals.BaseErrors, 
-            diff.Totals.HeadErrors, 
+        sb.AppendLine(BuildRow("Errors",
+            diff.Totals.BaseErrors,
+            diff.Totals.HeadErrors,
             diff.Totals.ErrorsDelta,
-            diff.Totals.ErrorsDelta > 0 ? DeltaSemantic.CriticalIncrease 
-                : diff.Totals.ErrorsDelta < 0 ? DeltaSemantic.GoodDecrease 
+            diff.Totals.ErrorsDelta > 0 ? DeltaSemantic.CriticalIncrease
+                : diff.Totals.ErrorsDelta < 0 ? DeltaSemantic.GoodDecrease
                 : DeltaSemantic.Neutral));
-        sb.AppendLine(BuildRow("Warnings", 
-            diff.Totals.BaseWarnings, 
-            diff.Totals.HeadWarnings, 
+        sb.AppendLine(BuildRow("Warnings",
+            diff.Totals.BaseWarnings,
+            diff.Totals.HeadWarnings,
             diff.Totals.WarningsDelta,
-            diff.Totals.WarningsDelta > 0 ? DeltaSemantic.BadIncrease 
-                : diff.Totals.WarningsDelta < 0 ? DeltaSemantic.GoodDecrease 
+            diff.Totals.WarningsDelta > 0 ? DeltaSemantic.BadIncrease
+                : diff.Totals.WarningsDelta < 0 ? DeltaSemantic.GoodDecrease
                 : DeltaSemantic.Neutral));
         sb.AppendLine(BuildRow("Info", diff.Totals.BaseInfo, diff.Totals.HeadInfo, diff.Totals.InfoDelta));
         sb.AppendLine(BuildRow("Hidden", diff.Totals.BaseHidden, diff.Totals.HeadHidden, diff.Totals.HiddenDelta));
@@ -63,31 +63,31 @@ public sealed class DiffReportRenderer
         sb.AppendLine(BuildRow("Projects", diff.Totals.BaseProjects, diff.Totals.HeadProjects, diff.Totals.ProjectsDelta));
         sb.AppendLine(BuildRow("Types", diff.Totals.BaseTypes, diff.Totals.HeadTypes, diff.Totals.TypesDelta));
         sb.AppendLine(BuildRow("Methods", diff.Totals.BaseMethods, diff.Totals.HeadMethods, diff.Totals.MethodsDelta));
-        
+
         // Highlight significant complexity increases
         var complexityDelta = diff.Totals.CyclomaticComplexityDelta;
-        var complexityPercent = diff.Totals.BaseCyclomaticComplexity > 0 
-            ? (double)complexityDelta / diff.Totals.BaseCyclomaticComplexity 
+        var complexityPercent = diff.Totals.BaseCyclomaticComplexity > 0
+            ? (double)complexityDelta / diff.Totals.BaseCyclomaticComplexity
             : 0;
-        var isSignificantComplexity = complexityDelta > SignificantComplexityAbsolute 
+        var isSignificantComplexity = complexityDelta > SignificantComplexityAbsolute
             || complexityPercent > SignificantComplexityPercent;
-        sb.AppendLine(BuildRow("Cyclomatic Complexity", 
-            diff.Totals.BaseCyclomaticComplexity, 
-            diff.Totals.HeadCyclomaticComplexity, 
+        sb.AppendLine(BuildRow("Cyclomatic Complexity",
+            diff.Totals.BaseCyclomaticComplexity,
+            diff.Totals.HeadCyclomaticComplexity,
             diff.Totals.CyclomaticComplexityDelta,
             isSignificantComplexity ? DeltaSemantic.BadIncrease : DeltaSemantic.Neutral));
-        
+
         sb.AppendLine(BuildRow("Lines of Code", diff.Totals.BaseLinesOfCode, diff.Totals.HeadLinesOfCode, diff.Totals.LinesOfCodeDelta));
-        
+
         // Highlight significant maintainability drops
         var miDelta = diff.Totals.AvgMaintainabilityDelta;
         var miSemantic = miDelta <= SevereMaintainabilityDrop ? DeltaSemantic.SevereDecrease
             : miDelta <= ModerateMaintainabilityDrop ? DeltaSemantic.ModerateDecrease
             : miDelta > 0 ? DeltaSemantic.GoodIncrease
             : DeltaSemantic.Neutral;
-        sb.AppendLine(BuildRow("Avg Maintainability", 
-            diff.Totals.BaseAvgMaintainabilityIndex, 
-            diff.Totals.HeadAvgMaintainabilityIndex, 
+        sb.AppendLine(BuildRow("Avg Maintainability",
+            diff.Totals.BaseAvgMaintainabilityIndex,
+            diff.Totals.HeadAvgMaintainabilityIndex,
             diff.Totals.AvgMaintainabilityDelta,
             miSemantic));
         sb.AppendLine();
@@ -99,15 +99,15 @@ public sealed class DiffReportRenderer
     {
         // Gather all new diagnostics (errors, warnings, info, hidden) with priority weighting
         var allNewDiagnostics = new List<(DiagnosticDiffItem Item, int Priority)>();
-        
+
         // Priority: Error=4, Warning=3, Info=2, Hidden=1
         foreach (var error in diff.Diagnostics.TopNewErrors)
             allNewDiagnostics.Add((error, 4));
         foreach (var warning in diff.Diagnostics.TopNewWarnings)
             allNewDiagnostics.Add((warning, 3));
-        
+
         var totalDiagnosticsCount = allNewDiagnostics.Count;
-        
+
         // Take top 20 by priority, then by project name for stability
         var topDiagnostics = allNewDiagnostics
             .OrderByDescending(x => x.Priority)
@@ -118,13 +118,13 @@ public sealed class DiffReportRenderer
         if (topDiagnostics.Count > 0)
         {
             // Add alarming emoji if more than 20 diagnostics exist
-            var title = totalDiagnosticsCount > 20 
-                ? "### 🚨 New Diagnostics" 
+            var title = totalDiagnosticsCount > 20
+                ? "### 🚨 New Diagnostics"
                 : "### New Diagnostics";
-            
+
             sb.AppendLine(title);
             sb.AppendLine();
-            
+
             foreach (var (item, priority) in topDiagnostics)
             {
                 var icon = priority switch
@@ -140,7 +140,7 @@ public sealed class DiffReportRenderer
                 sb.AppendLine($"  - Location: `{item.File}:{item.Line}:{item.Column}`");
                 sb.AppendLine();
             }
-            
+
             // Add warning if there are more than 20 diagnostics
             if (totalDiagnosticsCount > 20)
             {
@@ -155,9 +155,9 @@ public sealed class DiffReportRenderer
         // Filter projects to only those with actual changes
         var projectsWithChanges = diff.Projects
             .Where(p => !p.IsAdded && !p.IsRemoved)
-            .Where(p => p.MaintainabilityDelta != 0 
-                || p.CyclomaticComplexityDelta != 0 
-                || p.LinesOfCodeDelta != 0 
+            .Where(p => p.MaintainabilityDelta != 0
+                || p.CyclomaticComplexityDelta != 0
+                || p.LinesOfCodeDelta != 0
                 || p.WarningsDelta != 0)
             .OrderByDescending(p => Math.Abs(p.MaintainabilityDelta))
             .ToList();
@@ -172,19 +172,19 @@ public sealed class DiffReportRenderer
             foreach (var project in projectsWithChanges)
             {
                 // Determine MI delta severity
-                var miDeltaSemantic = project.MaintainabilityDelta <= SevereMaintainabilityDrop 
+                var miDeltaSemantic = project.MaintainabilityDelta <= SevereMaintainabilityDrop
                     ? DeltaSemantic.SevereDecrease
-                    : project.MaintainabilityDelta <= ModerateMaintainabilityDrop 
+                    : project.MaintainabilityDelta <= ModerateMaintainabilityDrop
                     ? DeltaSemantic.ModerateDecrease
-                    : project.MaintainabilityDelta > 0 
+                    : project.MaintainabilityDelta > 0
                     ? DeltaSemantic.GoodIncrease
                     : DeltaSemantic.Neutral;
 
                 // Determine warnings delta semantic
-                var warningsSemantic = project.WarningsDelta > 0 
-                    ? DeltaSemantic.BadIncrease 
-                    : project.WarningsDelta < 0 
-                    ? DeltaSemantic.GoodDecrease 
+                var warningsSemantic = project.WarningsDelta > 0
+                    ? DeltaSemantic.BadIncrease
+                    : project.WarningsDelta < 0
+                    ? DeltaSemantic.GoodDecrease
                     : DeltaSemantic.Neutral;
 
                 sb.AppendLine(
@@ -331,7 +331,7 @@ public sealed class DiffReportRenderer
     private static string FormatDelta(int value, DeltaSemantic semantic = DeltaSemantic.Neutral)
     {
         if (value == 0) return "0";
-        
+
         var sign = value > 0 ? "+" : "";
         var formatted = $"{sign}{value}";
 
@@ -341,7 +341,7 @@ public sealed class DiffReportRenderer
     private static string FormatDelta(double value, DeltaSemantic semantic = DeltaSemantic.Neutral)
     {
         if (Math.Abs(value) < 0.0001) return "0";
-        
+
         var sign = value > 0 ? "+" : "";
         var formatted = $"{sign}{value:0.0}";
 

@@ -11,7 +11,7 @@ public interface IGitRepositoryService
     /// <param name="path">The file or directory path to check.</param>
     /// <returns>True if the path is within a git repository; otherwise false.</returns>
     bool IsGitRepository(string path);
-    
+
     /// <summary>
     /// Gets git metadata for the repository containing the given path.
     /// </summary>

@@ -25,7 +25,7 @@ public sealed class CouplingAnalyzer : ICouplingAnalyzer
         Solution solution,
         IReadOnlyDictionary<string, Compilation>? compilationCache = null,
         CancellationToken cancellationToken = default)
-    {     
+    {
         var projectNames = solution.Projects.Select(p => p.Name).ToList();
 
         // Analyze project-to-project dependencies
@@ -45,10 +45,10 @@ public sealed class CouplingAnalyzer : ICouplingAnalyzer
         {
             var currentIndex = Interlocked.Increment(ref completedCount);
             CouplingAnalyzerLog.AnalyzingCouplingInProject(_logger, currentIndex, totalProjects, project.Name);
-            
+
             var projectCoupling = await AnalyzeProjectInternalCouplingAsync(project, compilationCache, ct);
             dependenciesBag.Add(projectCoupling.dependencies);
-            
+
             CouplingAnalyzerLog.ProjectDependenciesFound(_logger, project.Name, projectCoupling.dependencies.Count);
         });
 
@@ -66,7 +66,7 @@ public sealed class CouplingAnalyzer : ICouplingAnalyzer
     public CouplingAnalysis BuildCouplingAnalysisFromDependencies(
         Solution solution,
         IReadOnlyList<DependencyEdge> allDependencies)
-    {     
+    {
         var projectNames = solution.Projects.Select(p => p.Name).ToList();
 
         // Add project-to-project dependencies if not already included
@@ -106,7 +106,7 @@ public sealed class CouplingAnalyzer : ICouplingAnalyzer
     {
         // Get already-aggregated dependencies from collector
         var aggregatedDependencies = collector.GetAggregatedDependencies();
-        
+
         // Use existing method to build analysis from these edges
         return BuildCouplingAnalysisFromDependencies(solution, aggregatedDependencies);
     }
@@ -115,7 +115,7 @@ public sealed class CouplingAnalyzer : ICouplingAnalyzer
     public async Task<CouplingAnalysis> AnalyzeProjectCouplingAsync(
         Project project,
         CancellationToken cancellationToken = default)
-    {     
+    {
         var allDependencies = new List<DependencyEdge>();
         var projectNames = new List<string> { project.Name };
 
@@ -211,7 +211,7 @@ public sealed class CouplingAnalyzer : ICouplingAnalyzer
 
         var documents = project.Documents.Where(d => d.SourceCodeKind == SourceCodeKind.Regular).ToList();
         var documentCount = documents.Count;
-        
+
         CouplingAnalyzerLog.AnalyzingDocumentsForCoupling(_logger, documentCount, project.Name);
 
         // Analyze documents in parallel for performance
@@ -295,10 +295,10 @@ public sealed class CouplingAnalyzer : ICouplingAnalyzer
     private List<CouplingMetrics> BuildNamespaceCouplingMetrics(List<DependencyEdge> allDependencies)
     {
         var namespaceDeps = allDependencies.Where(d => d.Type == DependencyType.NamespaceReference).ToList();
-        
+
         // Determine which namespaces are "internal" (appear as FromEntity, meaning they're in our codebase)
         var internalNamespaces = namespaceDeps.Select(d => d.FromEntity).Distinct().ToHashSet();
-        
+
         // Pre-group by FromEntity and ToEntity for O(1) lookups
         var outboundByEntity = namespaceDeps
             .GroupBy(d => d.FromEntity)
@@ -309,16 +309,16 @@ public sealed class CouplingAnalyzer : ICouplingAnalyzer
 
         var namespaces = outboundByEntity.Keys.Union(inboundByEntity.Keys).ToList();
 
-        return namespaces.Select(ns => 
+        return namespaces.Select(ns =>
         {
             var outbound = outboundByEntity.GetValueOrDefault(ns, []);
             var inbound = inboundByEntity.GetValueOrDefault(ns, []);
-            
+
             // Split into internal and external
             var internalOut = outbound.Where(d => internalNamespaces.Contains(d.ToEntity)).ToList();
             var externalOut = outbound.Where(d => !internalNamespaces.Contains(d.ToEntity)).ToList();
             var internalIn = inbound.Where(d => internalNamespaces.Contains(d.FromEntity)).ToList();
-            
+
             return new CouplingMetrics(ns, DependencyType.NamespaceReference)
             {
                 InternalOutbound = internalOut,
@@ -331,10 +331,10 @@ public sealed class CouplingAnalyzer : ICouplingAnalyzer
     private List<CouplingMetrics> BuildTypeCouplingMetrics(List<DependencyEdge> allDependencies)
     {
         var typeDeps = allDependencies.Where(d => d.Type == DependencyType.TypeReference).ToList();
-        
+
         // Determine which types are "internal" (appear as FromEntity, meaning they're in our codebase)
         var internalTypes = typeDeps.Select(d => d.FromEntity).Distinct().ToHashSet();
-        
+
         // Pre-group by FromEntity and ToEntity for O(1) lookups
         var outboundByEntity = typeDeps
             .GroupBy(d => d.FromEntity)
@@ -345,16 +345,16 @@ public sealed class CouplingAnalyzer : ICouplingAnalyzer
 
         var types = outboundByEntity.Keys.Union(inboundByEntity.Keys).ToList();
 
-        return types.Select(type => 
+        return types.Select(type =>
         {
             var outbound = outboundByEntity.GetValueOrDefault(type, []);
             var inbound = inboundByEntity.GetValueOrDefault(type, []);
-            
+
             // Split into internal and external
             var internalOut = outbound.Where(d => internalTypes.Contains(d.ToEntity)).ToList();
             var externalOut = outbound.Where(d => !internalTypes.Contains(d.ToEntity)).ToList();
             var internalIn = inbound.Where(d => internalTypes.Contains(d.FromEntity)).ToList();
-            
+
             return new CouplingMetrics(type, DependencyType.TypeReference)
             {
                 InternalOutbound = internalOut,
@@ -389,12 +389,12 @@ public sealed class CouplingAnalyzer : ICouplingAnalyzer
 
     private CouplingSummary BuildCouplingSummary(
         List<CouplingMetrics> projectCoupling,
-        List<CouplingMetrics> namespaceCoupling, 
+        List<CouplingMetrics> namespaceCoupling,
         List<CouplingMetrics> typeCoupling,
         List<DependencyEdge> allDependencies)
-    {     
+    {
         var allMetrics = projectCoupling.Concat(namespaceCoupling).Concat(typeCoupling).ToList();
-        
+
         return new CouplingSummary
         {
             TotalDependencies = allDependencies.Count,
@@ -447,7 +447,7 @@ internal sealed class DocumentCouplingAnalyzer : CSharpSyntaxWalker
     private readonly List<DependencyEdge>? _dependencies;
     private readonly IDependencyCollector? _collector;
     private readonly string? _primaryNamespace;
-    
+
     // Cache for ToDisplayString() results to avoid repeated expensive calls
     private readonly Dictionary<ISymbol, string> _symbolDisplayCache = new(SymbolEqualityComparer.Default);
     // Cache containing type per TypeDeclarationSyntax to avoid repeated lookups
@@ -478,13 +478,13 @@ internal sealed class DocumentCouplingAnalyzer : CSharpSyntaxWalker
         _semanticModel = semanticModel;
         _filePath = filePath;
         _collector = collector;
-        
+
         // Only create list if not using collector
         if (collector == null)
         {
             _dependencies = [];
         }
-        
+
         // Pre-scan for file-level namespace (file-scoped or first traditional namespace)
         _primaryNamespace = root.DescendantNodes()
             .OfType<FileScopedNamespaceDeclarationSyntax>()
@@ -516,7 +516,7 @@ internal sealed class DocumentCouplingAnalyzer : CSharpSyntaxWalker
     {
         if (_symbolDisplayCache.TryGetValue(symbol, out var cached))
             return cached;
-        
+
         var displayString = symbol.ToDisplayString();
         _symbolDisplayCache[symbol] = displayString;
         return displayString;
@@ -531,16 +531,16 @@ internal sealed class DocumentCouplingAnalyzer : CSharpSyntaxWalker
 
             if (!string.IsNullOrEmpty(containingNamespace) && containingNamespace != namespaceName)
             {
-            AddDependencyEdge(new DependencyEdge(
-                FromEntity: containingNamespace,
-                ToEntity: namespaceName,
-                Type: DependencyType.NamespaceReference,
-                ReferenceCount: 1)
-            {
-                SourceLocation = DependencyEdge.EnableDetails
-                    ? $"{_filePath}:{node.GetLocation().GetLineSpan().StartLinePosition.Line + 1}"
-                    : null
-            });
+                AddDependencyEdge(new DependencyEdge(
+                    FromEntity: containingNamespace,
+                    ToEntity: namespaceName,
+                    Type: DependencyType.NamespaceReference,
+                    ReferenceCount: 1)
+                {
+                    SourceLocation = DependencyEdge.EnableDetails
+                        ? $"{_filePath}:{node.GetLocation().GetLineSpan().StartLinePosition.Line + 1}"
+                        : null
+                });
             }
         }
 
@@ -600,10 +600,10 @@ internal sealed class DocumentCouplingAnalyzer : CSharpSyntaxWalker
             });
 
             var fromNamespace = GetNamespace(fromType);
-            var toNamespace = typeSymbol.ContainingNamespace != null 
-                ? GetDisplayString(typeSymbol.ContainingNamespace) 
+            var toNamespace = typeSymbol.ContainingNamespace != null
+                ? GetDisplayString(typeSymbol.ContainingNamespace)
                 : "";
-            
+
             if (fromNamespace != toNamespace && !string.IsNullOrEmpty(toNamespace))
             {
                 AddDependencyEdge(new DependencyEdge(
@@ -629,7 +629,7 @@ internal sealed class DocumentCouplingAnalyzer : CSharpSyntaxWalker
         {
             return namespaceDecl.Name.ToString();
         }
-        
+
         // Fall back to file's primary namespace
         return _primaryNamespace ?? "";
     }

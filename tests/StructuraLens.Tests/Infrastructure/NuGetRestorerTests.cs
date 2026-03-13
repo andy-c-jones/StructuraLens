@@ -13,16 +13,16 @@ public class NuGetRestorerTests
         var logger = A.Fake<ILogger<NuGetRestorer>>();
         // Configure the fake to enable Error level logging
         A.CallTo(() => logger.IsEnabled(LogLevel.Error)).Returns(true);
-        
+
         var restorer = new NuGetRestorer(logger);
         var invalidPath = "nonexistent/solution.sln";
 
         // Act & Assert - Should not throw, but will log errors
         await restorer.RestorePackagesAsync(invalidPath);
-        
+
         // Verify error was logged - source-generated logging calls Log with LogLevel.Error
         A.CallTo(logger)
-            .Where(call => call.Method.Name == "Log" && 
+            .Where(call => call.Method.Name == "Log" &&
                           call.Arguments.Get<LogLevel>(0) == LogLevel.Error)
             .MustHaveHappened();
     }
@@ -50,7 +50,7 @@ public class NuGetRestorerTests
         var logger = A.Fake<ILogger<NuGetRestorer>>();
         // Configure the fake to enable Debug level logging
         A.CallTo(() => logger.IsEnabled(LogLevel.Debug)).Returns(true);
-        
+
         var restorer = new NuGetRestorer(logger);
         var somePath = "test/path.sln";
 
@@ -59,7 +59,7 @@ public class NuGetRestorerTests
 
         // Assert - Verify debug logging occurred - source-generated logging calls Log with LogLevel.Debug
         A.CallTo(logger)
-            .Where(call => call.Method.Name == "Log" && 
+            .Where(call => call.Method.Name == "Log" &&
                           call.Arguments.Get<LogLevel>(0) == LogLevel.Debug)
             .MustHaveHappened();
     }

@@ -34,15 +34,15 @@ public static class HalsteadCalculator
     {
         public int Vocabulary => DistinctOperators + DistinctOperands;
         public int Length => TotalOperators + TotalOperands;
-        
-        public double Volume => Length > 0 && Vocabulary > 1 
-            ? Length * Math.Log2(Vocabulary) 
+
+        public double Volume => Length > 0 && Vocabulary > 1
+            ? Length * Math.Log2(Vocabulary)
             : 0;
-        
-        public double Difficulty => DistinctOperands > 0 
-            ? (DistinctOperators / 2.0) * ((double)TotalOperands / DistinctOperands) 
+
+        public double Difficulty => DistinctOperands > 0
+            ? (DistinctOperators / 2.0) * ((double)TotalOperands / DistinctOperands)
             : 0;
-        
+
         public double Effort => Difficulty * Volume;
     }
 

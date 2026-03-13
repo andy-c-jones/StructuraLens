@@ -122,7 +122,7 @@ public class SolutionAnalyzerIntegrationTests
         {
             dir = dir.Parent;
         }
-        return dir != null ? Path.Combine(dir.FullName, "StructuraLens.slnx") : 
+        return dir != null ? Path.Combine(dir.FullName, "StructuraLens.slnx") :
             throw new InvalidOperationException("Could not find StructuraLens.slnx");
     }
 
@@ -147,7 +147,7 @@ public class SolutionAnalyzerIntegrationTests
 
         // Should find at least Cli, Core, and Tests projects
         await Assert.That(report.TotalProjects).IsGreaterThanOrEqualTo(3);
-        
+
         var projectNames = report.Projects.Select(p => p.Name).ToList();
         await Assert.That(projectNames).Contains("StructuraLens.Core");
         await Assert.That(projectNames).Contains("StructuraLens.Tests");
@@ -197,10 +197,10 @@ public class SolutionAnalyzerIntegrationTests
 
         // CLI project uses top-level statements
         var cliProject = report.Projects.FirstOrDefault(p => p.Name == "StructuraLens.Cli");
-        
+
         await Assert.That(cliProject).IsNotNull();
         await Assert.That(cliProject!.Types.Count).IsGreaterThan(0);
-        
+
         // Should have a synthetic <Program>$ type
         var programType = cliProject.Types.FirstOrDefault(t => t.FullName.Contains("Program"));
         await Assert.That(programType).IsNotNull();
@@ -243,7 +243,7 @@ public class SolutionAnalyzerIntegrationTests
     {
         var solutionPath = GetSolutionPath();
         var beforeAnalysis = DateTime.UtcNow.AddSeconds(-1);
-        
+
         var analyzer = CreateAnalyzer();
         var report = await analyzer.AnalyzeSolutionAsync(solutionPath);
 
@@ -308,7 +308,7 @@ public class SolutionAnalyzerIntegrationTests
 
         // Should have more than just Main - should include PrintSummary
         await Assert.That(programType!.Methods.Count).IsGreaterThanOrEqualTo(2);
-        
+
         var printSummary = programType.Methods.FirstOrDefault(m => m.FullName.Contains("PrintSummary"));
         await Assert.That(printSummary).IsNotNull();
     }

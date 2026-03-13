@@ -12,7 +12,7 @@ public sealed class InMemoryDependencyCollector : IDependencyCollector
 {
     private readonly ConcurrentDictionary<EdgeKey, int> _aggregatedEdges = new();
     private long _totalAdded;
-    
+
     /// <summary>
     /// Composite key for aggregating dependency edges.
     /// </summary>
@@ -21,43 +21,43 @@ public sealed class InMemoryDependencyCollector : IDependencyCollector
         public readonly string From;
         public readonly string To;
         public readonly DependencyType Type;
-        
+
         public EdgeKey(string from, string to, DependencyType type)
         {
             From = from;
             To = to;
             Type = type;
         }
-        
+
         public bool Equals(EdgeKey other) =>
             From == other.From && To == other.To && Type == other.Type;
-            
+
         public override bool Equals(object? obj) =>
             obj is EdgeKey other && Equals(other);
-            
+
         public override int GetHashCode() =>
             HashCode.Combine(From, To, Type);
     }
-    
+
     /// <inheritdoc />
     public void AddDependency(DependencyEdge edge)
     {
         Interlocked.Increment(ref _totalAdded);
-        
+
         var key = new EdgeKey(edge.FromEntity, edge.ToEntity, edge.Type);
         _aggregatedEdges.AddOrUpdate(
             key,
             _ => edge.ReferenceCount,
             (_, existing) => existing + edge.ReferenceCount);
     }
-    
+
     /// <inheritdoc />
     public void AddDependencies(IEnumerable<DependencyEdge> edges)
     {
         foreach (var edge in edges)
             AddDependency(edge);
     }
-    
+
     /// <inheritdoc />
     public IReadOnlyList<DependencyEdge> GetAggregatedDependencies()
     {
@@ -72,7 +72,7 @@ public sealed class InMemoryDependencyCollector : IDependencyCollector
         }
         return result;
     }
-    
+
     /// <inheritdoc />
     public IReadOnlyList<DependencyEdge> GetAggregatedDependencies(DependencyType type)
     {
@@ -90,7 +90,7 @@ public sealed class InMemoryDependencyCollector : IDependencyCollector
         }
         return result;
     }
-    
+
     /// <inheritdoc />
     public DependencyCollectorStats GetStats()
     {
@@ -100,7 +100,7 @@ public sealed class InMemoryDependencyCollector : IDependencyCollector
             MemoryUsageBytes: EstimateMemoryUsage(),
             Strategy: "InMemory");
     }
-    
+
     /// <summary>
     /// Estimates memory usage based on dictionary size and average string lengths.
     /// </summary>
@@ -113,17 +113,17 @@ public sealed class InMemoryDependencyCollector : IDependencyCollector
         const int enumBytes = 4;
         const int intBytes = 4;
         const int dictOverhead = 32;
-        
+
         return _aggregatedEdges.Count * (avgStringBytes * 2 + enumBytes + intBytes + dictOverhead);
     }
-    
+
     /// <inheritdoc />
     public void Reset()
     {
         _aggregatedEdges.Clear();
         _totalAdded = 0;
     }
-    
+
     /// <inheritdoc />
     public void Dispose()
     {

@@ -21,7 +21,7 @@ public sealed class NuGetRestorer : INuGetRestorer
     public async Task RestorePackagesAsync(string projectOrSolutionPath, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        
+
         NuGetRestorerLog.StartingPackageRestore(_logger, projectOrSolutionPath);
 
         var startInfo = new ProcessStartInfo

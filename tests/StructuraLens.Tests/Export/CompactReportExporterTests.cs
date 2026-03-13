@@ -105,7 +105,7 @@ public class CompactReportExporterTests
         await Assert.That(compactReport.Projects[0].Types).IsNotNull();
         await Assert.That(compactReport.Projects[0].Types![0].Methods).IsNotNull();
         await Assert.That(compactReport.Projects[0].Types![0].Methods!.Count).IsEqualTo(1);
-        
+
         var method = compactReport.Projects[0].Types![0].Methods![0];
         await Assert.That(method.Name).IsEqualTo("TestMethod()");
         await Assert.That(method.CyclomaticComplexity).IsEqualTo(2);
@@ -278,7 +278,7 @@ public class CompactReportExporterTests
         var compactProject = compactReport.Projects[0];
         await Assert.That(compactProject.Errors).IsEqualTo(2);
         await Assert.That(compactProject.Warnings).IsEqualTo(5);
-        
+
         await Assert.That(compactReport.Diagnostics).IsNotNull();
         await Assert.That(compactReport.Diagnostics!.Errors).IsEqualTo(2);
         await Assert.That(compactReport.Diagnostics!.Warnings).IsEqualTo(5);
@@ -515,7 +515,7 @@ public class CompactReportExporterTests
         await Assert.That(ns.Types).IsNotNull();
         await Assert.That(ns.Types![0].Methods).IsNotNull();
         await Assert.That(ns.Types![0].Methods!.Count).IsEqualTo(1);
-        
+
         var method = ns.Types![0].Methods![0];
         await Assert.That(method.Name).IsEqualTo("TestMethod()");
         await Assert.That(method.CyclomaticComplexity).IsEqualTo(2);
@@ -586,7 +586,7 @@ public class CompactReportExporterTests
         // Assert
         await Assert.That(compactReport.Projects[0].Namespaces).IsNotNull();
         await Assert.That(compactReport.Projects[0].Namespaces!.Count).IsEqualTo(2);
-        
+
         // Global namespace should be first alphabetically (starts with '(')
         var globalNs = compactReport.Projects[0].Namespaces!.FirstOrDefault(n => n.Name == "(global)");
         await Assert.That(globalNs).IsNotNull();
@@ -631,7 +631,7 @@ public class CompactReportExporterTests
         };
 
         var project = new ProjectMetrics("TestProject", "/project.csproj", types);
-        
+
         // Create coupling with namespace dependencies
         var dependencies = new List<DependencyEdge>
         {
@@ -669,7 +669,7 @@ public class CompactReportExporterTests
         var ns1Node = compactReport.Graph.Namespaces.Nodes.FirstOrDefault(n => (string)n[1] == "NS1");
         await Assert.That(ns1Node).IsNotNull();
         await Assert.That(ns1Node!.Length).IsEqualTo(11); // All 11 fields present
-        
+
         // Verify metrics for NS1
         await Assert.That((int)ns1Node[2]).IsEqualTo(25); // LOC: 10 + 15
         await Assert.That((int)ns1Node[3]).IsEqualTo(8);  // CC: 3 + 5
@@ -702,7 +702,7 @@ public class CompactReportExporterTests
         };
 
         var project = new ProjectMetrics("TestProject", "/project.csproj", types);
-        
+
         // Stable: Ca=2, Ce=0, Instability=0 (many things depend on it, it depends on nothing)
         // Unstable: Ca=0, Ce=2, Instability=1 (depends on many, nothing depends on it)
         // Middle: Ca=1, Ce=1, Instability=0.5 (balanced)
@@ -735,11 +735,11 @@ public class CompactReportExporterTests
 
         // Assert
         var nodes = compactReport.Graph.Namespaces.Nodes;
-        
+
         // Verify all three namespaces are present with correct format (11 fields each)
         await Assert.That(nodes.Count).IsEqualTo(3);
         await Assert.That(nodes.All(n => ((object[])n).Length == 11)).IsTrue();
-        
+
         // Verify namespace names are present
         var namespaceNames = nodes.Select(n => (string)n[1]).ToHashSet();
         await Assert.That(namespaceNames).Contains("Stable");
@@ -759,7 +759,7 @@ public class CompactReportExporterTests
         };
 
         var project = new ProjectMetrics("TestProject", "/project.csproj", types);
-        
+
         // Self-referencing dependency (within same namespace)
         var dependencies = new List<DependencyEdge>
         {
@@ -822,7 +822,7 @@ public class CompactReportExporterTests
 
         // Assert
         await Assert.That(compactReport.Graph.Namespaces.Edges.Count).IsEqualTo(0); // Self-loop excluded
-        
+
         var ns1Node = compactReport.Graph.Namespaces.Nodes.First(n => (string)n[1] == "NS1");
         await Assert.That((int)ns1Node[7]).IsEqualTo(0); // Ce: no external deps
         await Assert.That((int)ns1Node[8]).IsEqualTo(0); // Ca: no external dependents
@@ -840,7 +840,7 @@ public class CompactReportExporterTests
         };
 
         var project = new ProjectMetrics("TestProject", "/project.csproj", types);
-        
+
         // Dependencies to external namespaces should be excluded from graph
         var dependencies = new List<DependencyEdge>
         {

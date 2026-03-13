@@ -33,15 +33,15 @@ public static class UnifiedMetricsCalculator
     {
         public int Vocabulary => DistinctOperators + DistinctOperands;
         public int Length => TotalOperators + TotalOperands;
-        
-        public double HalsteadVolume => Length > 0 && Vocabulary > 1 
-            ? Length * Math.Log2(Vocabulary) 
+
+        public double HalsteadVolume => Length > 0 && Vocabulary > 1
+            ? Length * Math.Log2(Vocabulary)
             : 0;
-        
-        public double HalsteadDifficulty => DistinctOperands > 0 
-            ? (DistinctOperators / 2.0) * ((double)TotalOperands / DistinctOperands) 
+
+        public double HalsteadDifficulty => DistinctOperands > 0
+            ? (DistinctOperators / 2.0) * ((double)TotalOperands / DistinctOperands)
             : 0;
-        
+
         public double HalsteadEffort => HalsteadDifficulty * HalsteadVolume;
 
         public double MaintainabilityIndex => CalculateMaintainabilityIndex();

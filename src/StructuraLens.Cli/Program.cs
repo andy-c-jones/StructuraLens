@@ -122,7 +122,7 @@ analyzeCommand.SetAction(async (parseResult, cancellationToken) =>
     };
 
     // Adjust logging level based on verbose flag
-    var executionServiceProvider = verbose 
+    var executionServiceProvider = verbose
         ? ConfigureServices(LogLevel.Debug)
         : serviceProvider;
 
@@ -158,13 +158,13 @@ static async Task<int> ExecuteAnalysisAsync(
     CancellationToken cancellationToken)
 {
     var logger = serviceProvider.GetRequiredService<ILogger<Program>>();
-    
+
     try
     {
         ProgramLog.ApplicationStartup(logger, GetVersion());
         ProgramLog.AnalyzingPath(logger, path);
         ProgramLog.CouplingModeEnabled(logger, "All");
-        
+
         // Log aggregation strategy
         ProgramLog.AggregationStrategy(logger, analysisOptions.AggregationStrategy.ToString());
         if (analysisOptions.AggregationStrategy == DependencyAggregationStrategy.Adaptive)
@@ -182,7 +182,7 @@ static async Task<int> ExecuteAnalysisAsync(
             serviceProvider.GetRequiredService<IFileSystemService>(),
             serviceProvider.GetRequiredService<IGitRepositoryService>(),
             analysisOptions);
-            
+
         var report = path.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)
             ? await analyzer.AnalyzeProjectAsync(path, cancellationToken)
             : await analyzer.AnalyzeSolutionAsync(path, cancellationToken);
@@ -220,7 +220,7 @@ static async Task<int> ExecuteAnalysisAsync(
                     "json" => "json",
                     _ => "json"
                 };
-                
+
                 effectiveOutput = $"{report.GitInfo.CommitSha[..7]}-{sanitizedBranch}.{extension}";
                 ProgramLog.GitRepositoryDetected(logger, report.GitInfo.BranchName, report.GitInfo.CommitSha[..7]);
                 ProgramLog.GeneratedDefaultFilename(logger, effectiveOutput);
@@ -236,7 +236,7 @@ static async Task<int> ExecuteAnalysisAsync(
                     "json" => "json",
                     _ => "json"
                 };
-                
+
                 effectiveOutput = $"report-{timestamp}.{extension}";
                 ProgramLog.NotInGitRepository(logger);
                 ProgramLog.GeneratedDefaultFilename(logger, effectiveOutput);
@@ -443,7 +443,7 @@ rootCommand.SetAction((parseResult) =>
         Console.WriteLine($"StructuraLens v{GetVersion()}");
         return 0;
     }
-    
+
     Console.WriteLine($"StructuraLens v{GetVersion()}");
     Console.WriteLine("Usage: structuralens <command> [options]");
     Console.WriteLine();
@@ -470,7 +470,7 @@ static void PrintSummary(AnalysisReport report, ILogger logger)
     Console.WriteLine($"Methods: {report.TotalMethods}");
     Console.WriteLine($"Total Cyclomatic Complexity: {report.TotalCyclomaticComplexity}");
     Console.WriteLine($"Total Lines of Executable Code: {report.TotalLinesOfExecutableCode}");
-    
+
     if (report.CouplingAnalysis != null)
     {
         Console.WriteLine();
@@ -484,7 +484,7 @@ static void PrintSummary(AnalysisReport report, ILogger logger)
         Console.WriteLine($"Average External Dependencies: {coupling.AverageExternalDependencies:F1}");
         Console.WriteLine($"  - BCL (System/Microsoft): {coupling.AverageExternalBclDependencies:F1}");
         Console.WriteLine($"  - Third-party Packages: {coupling.AverageExternalPackageDependencies:F1}");
-        
+
         if (!string.IsNullOrEmpty(coupling.MostCoupledEntity))
             Console.WriteLine($"Most Coupled Entity: {coupling.MostCoupledEntity}");
         if (!string.IsNullOrEmpty(coupling.MostDependentEntity))
@@ -556,7 +556,7 @@ static void PrintSummary(AnalysisReport report, ILogger logger)
         {
             var projectCoupling = report.CouplingAnalysis.ProjectCoupling
                 .FirstOrDefault(pc => pc.EntityName == project.Name);
-            
+
             if (projectCoupling != null)
             {
                 Console.WriteLine($"  Internal Dependencies: {projectCoupling.InternalDependencies}");
@@ -628,13 +628,13 @@ static string SanitizeBranchName(string branchName)
         .Concat(Enumerable.Range(1, 31).Select(i => (char)i))
         .Distinct()
         .ToArray();
-    
+
     var result = branchName;
     foreach (char c in invalidChars)
     {
         result = result.Replace(c, '_');
     }
-    
+
     return result;
 }
 
@@ -654,7 +654,7 @@ static IServiceProvider ConfigureServices(LogLevel logLevel)
     });
 
     // CLI logging (for Program class)
-    services.AddSingleton<ILogger<Program>>(sp => 
+    services.AddSingleton<ILogger<Program>>(sp =>
         sp.GetRequiredService<ILoggerFactory>().CreateLogger<Program>());
 
     // Core services
@@ -684,13 +684,13 @@ static class JsonOptions
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
-    
+
     public static readonly JsonSerializerOptions CompactOutput = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
-    
+
     public static readonly JsonSerializerOptions Input = new()
     {
         PropertyNameCaseInsensitive = true

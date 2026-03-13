@@ -64,7 +64,7 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
 
     /// <inheritdoc />
     public async Task<AnalysisReport> AnalyzeSolutionAsync(string solutionPath, CancellationToken cancellationToken = default)
-    {     
+    {
         SolutionAnalyzerLog.StartingSolutionAnalysis(_logger, solutionPath);
 
         var fullPath = _fileSystem.GetFullPath(solutionPath);
@@ -95,7 +95,7 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
         // Pre-fetch all compilations in parallel and cache them for reuse
         SolutionAnalyzerLog.PreFetchingCompilations(_logger);
         var compilationCache = new System.Collections.Concurrent.ConcurrentDictionary<string, Compilation>();
-        
+
         await Parallel.ForEachAsync(csharpProjects, new ParallelOptions
         {
             MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount),
@@ -131,10 +131,10 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
         {
             var currentIndex = Interlocked.Increment(ref completedCount);
             SolutionAnalyzerLog.AnalyzingProject(_logger, currentIndex, totalProjects, project.Name);
-            
+
             var metrics = await AnalyzeProjectWithCouplingAsync(project, compilationCache, dependencyCollector, ct);
             projectMetricsList.Add(metrics);
-            
+
             SolutionAnalyzerLog.CompletedProject(_logger, project.Name, metrics.Types.Count, metrics.TotalMethods);
         });
 
@@ -198,7 +198,7 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
 
         var project = await workspace.OpenProjectAsync(fullPath, cancellationToken: cancellationToken);
         SolutionAnalyzerLog.AnalyzingProjectSingle(_logger, project.Name);
-        
+
         // For single project, create an empty cache (compilation will be fetched on demand)
         var compilationCache = new System.Collections.Concurrent.ConcurrentDictionary<string, Compilation>();
         var projectMetrics = await AnalyzeProjectAsync(project, compilationCache, cancellationToken);
@@ -231,7 +231,7 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
     }
 
     private async Task<ProjectMetrics> AnalyzeProjectWithCouplingAsync(
-        Project project, 
+        Project project,
         System.Collections.Concurrent.ConcurrentDictionary<string, Compilation> compilationCache,
         IDependencyCollector dependencyCollector,
         CancellationToken cancellationToken)
@@ -281,10 +281,10 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
 
             var root = await syntaxTree.GetRootAsync(ct);
             var filePath = document.FilePath ?? "";
-            
+
             // Analyze coupling dependencies - stream directly to shared collector
             CouplingAnalyzer.AnalyzeDocumentCouplingStreaming(semanticModel, filePath, root, dependencyCollector);
-            
+
             // Analyze traditional type declarations
             var typeDeclarations = root.DescendantNodes()
                 .OfType<TypeDeclarationSyntax>();

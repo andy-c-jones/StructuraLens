@@ -225,13 +225,13 @@ public class PackageReferenceReaderTests
         // Assert - Each project should independently have 1 package
         await Assert.That(packages1.Count).IsEqualTo(1);
         await Assert.That(packages1).Contains("SharedPackage");
-        
+
         await Assert.That(packages2.Count).IsEqualTo(1);
         await Assert.That(packages2).Contains("SharedPackage");
-        
+
         await Assert.That(packages3.Count).IsEqualTo(1);
         await Assert.That(packages3).Contains("SharedPackage");
-        
+
         // Total count across all projects: 3 (1 per project)
         var totalCount = packages1.Count + packages2.Count + packages3.Count;
         await Assert.That(totalCount).IsEqualTo(3);

@@ -21,7 +21,7 @@ public sealed class AdaptiveDependencyCollector : IDependencyCollector
     private bool _disposed;
     private readonly ReaderWriterLockSlim _lock = new();
     private const int CheckInterval = 10000; // Check memory every 10K edges
-    
+
     /// <summary>
     /// Creates a new adaptive dependency collector.
     /// </summary>
@@ -43,7 +43,7 @@ public sealed class AdaptiveDependencyCollector : IDependencyCollector
         _hasMigrated = false;
         _totalEdgesAdded = 0;
     }
-    
+
     /// <inheritdoc />
     public void AddDependency(DependencyEdge edge)
     {
@@ -54,9 +54,9 @@ public sealed class AdaptiveDependencyCollector : IDependencyCollector
         try
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
-            
+
             Interlocked.Increment(ref _totalEdgesAdded);
-            
+
             // Periodically check memory pressure
             if (!_hasMigrated)
             {
@@ -73,12 +73,12 @@ public sealed class AdaptiveDependencyCollector : IDependencyCollector
                     {
                         _lock.EnterReadLock();
                     }
-                    
+
                     // Re-check disposed after reacquiring (Reset/Dispose could have run)
                     ObjectDisposedException.ThrowIf(_disposed, this);
                 }
             }
-            
+
             _current!.AddDependency(edge);
         }
         finally
@@ -86,14 +86,14 @@ public sealed class AdaptiveDependencyCollector : IDependencyCollector
             _lock.ExitReadLock();
         }
     }
-    
+
     /// <inheritdoc />
     public void AddDependencies(IEnumerable<DependencyEdge> edges)
     {
         foreach (var edge in edges)
             AddDependency(edge);
     }
-    
+
     /// <summary>
     /// Acquires write lock, checks memory pressure, and migrates if needed.
     /// Called when the edge counter hits the check interval.
@@ -102,44 +102,44 @@ public sealed class AdaptiveDependencyCollector : IDependencyCollector
     {
         long currentMemory;
         int edgeCount;
-        
+
         _lock.EnterWriteLock();
         try
         {
             // Reset counter under write lock so only one thread triggers the next check
             _edgesSinceLastCheck = 0;
-            
+
             if (_hasMigrated || _disposed)
                 return;
-            
+
             currentMemory = _memoryProvider();
-            
+
             if (currentMemory <= _memoryThresholdBytes)
                 return;
-            
+
             if (_current is not InMemoryDependencyCollector inMemory)
                 return;
-            
+
             edgeCount = MigrateToSQLite(inMemory);
         }
         finally
         {
             _lock.ExitWriteLock();
         }
-        
+
         // Log and GC outside the write lock to avoid blocking concurrent operations
         Console.WriteLine($"[StructuraLens] Memory threshold exceeded ({currentMemory / 1024 / 1024} MB / {_memoryThresholdBytes / 1024 / 1024} MB). Migrating to SQLite...");
         Console.WriteLine($"[StructuraLens] Migrated {edgeCount} unique edges to disk.");
-        
+
         GC.Collect(2, GCCollectionMode.Aggressive, blocking: true, compacting: true);
         GC.WaitForPendingFinalizers();
         GC.Collect(2, GCCollectionMode.Aggressive, blocking: true, compacting: true);
-        
+
         var afterMemory = GC.GetTotalMemory(false);
         var reclaimed = currentMemory - afterMemory;
         Console.WriteLine($"[StructuraLens] Migration complete. Memory: {afterMemory / 1024 / 1024} MB (reclaimed {reclaimed / 1024 / 1024} MB)");
     }
-    
+
     /// <summary>
     /// Migrates from in-memory collector to SQLite collector.
     /// Must be called while holding the write lock.
@@ -149,23 +149,23 @@ public sealed class AdaptiveDependencyCollector : IDependencyCollector
     {
         // Create SQLite collector
         var sqlite = new SQLiteDependencyCollector(null, _sqliteBatchSize);
-        
+
         // Snapshot existing edges while we hold the write lock - no concurrent writes possible
         var existingEdges = inMemory.GetAggregatedDependencies();
-        
+
         // Migrate data to SQLite
         sqlite.AddDependencies(existingEdges);
-        
+
         // Switch to new collector - all subsequent AddDependency calls will use SQLite
         _current = sqlite;
         _hasMigrated = true;
-        
+
         // Safe to dispose old collector since no threads can be writing to it (we hold the write lock)
         inMemory.Dispose();
-        
+
         return existingEdges.Count;
     }
-    
+
     /// <inheritdoc />
     public IReadOnlyList<DependencyEdge> GetAggregatedDependencies()
     {
@@ -180,7 +180,7 @@ public sealed class AdaptiveDependencyCollector : IDependencyCollector
             _lock.ExitReadLock();
         }
     }
-    
+
     /// <inheritdoc />
     public IReadOnlyList<DependencyEdge> GetAggregatedDependencies(DependencyType type)
     {
@@ -195,7 +195,7 @@ public sealed class AdaptiveDependencyCollector : IDependencyCollector
             _lock.ExitReadLock();
         }
     }
-    
+
     /// <inheritdoc />
     public DependencyCollectorStats GetStats()
     {
@@ -203,7 +203,7 @@ public sealed class AdaptiveDependencyCollector : IDependencyCollector
         try
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
-            
+
             var stats = _current!.GetStats();
             // Override with our own total count, but keep the unique count from the current collector
             return new DependencyCollectorStats(
@@ -219,7 +219,7 @@ public sealed class AdaptiveDependencyCollector : IDependencyCollector
             _lock.ExitReadLock();
         }
     }
-    
+
     /// <inheritdoc />
     public void Reset()
     {
@@ -227,7 +227,7 @@ public sealed class AdaptiveDependencyCollector : IDependencyCollector
         try
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
-            
+
             // If currently using SQLite, dispose and reset to InMemory
             if (_hasMigrated)
             {
@@ -239,7 +239,7 @@ public sealed class AdaptiveDependencyCollector : IDependencyCollector
             {
                 _current!.Reset();
             }
-            
+
             _edgesSinceLastCheck = 0;
             Interlocked.Exchange(ref _totalEdgesAdded, 0);
         }
@@ -248,7 +248,7 @@ public sealed class AdaptiveDependencyCollector : IDependencyCollector
             _lock.ExitWriteLock();
         }
     }
-    
+
     /// <inheritdoc />
     public void Dispose()
     {
@@ -257,7 +257,7 @@ public sealed class AdaptiveDependencyCollector : IDependencyCollector
         {
             if (_disposed)
                 return;
-            
+
             _current?.Dispose();
             _current = null;
             _disposed = true;
@@ -266,10 +266,10 @@ public sealed class AdaptiveDependencyCollector : IDependencyCollector
         {
             _lock.ExitWriteLock();
         }
-        
+
         _lock.Dispose();
     }
-    
+
     /// <summary>
     /// Gets whether this collector has migrated to SQLite.
     /// </summary>
@@ -289,7 +289,7 @@ public sealed class AdaptiveDependencyCollector : IDependencyCollector
             }
         }
     }
-    
+
     /// <summary>
     /// Gets the current strategy being used (InMemory or SQLite).
     /// </summary>

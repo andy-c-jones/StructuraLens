@@ -35,7 +35,7 @@ internal sealed partial class PackageReferenceReader
         {
             // Use isolated ProjectCollection to avoid cross-project contamination
             using var projectCollection = new ProjectCollection();
-            
+
             // Set default global properties for evaluation
             var props = globalProperties ?? new Dictionary<string, string>
             {

@@ -47,7 +47,7 @@ public class MSBuildWorkspaceFactoryTests
 
         // Assert - Should be disposable
         await Assert.That(workspace is IDisposable).IsTrue();
-        
+
         // Cleanup
         workspace.Dispose();
     }

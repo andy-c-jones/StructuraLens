@@ -43,7 +43,7 @@ public sealed class GitRepositoryService : IGitRepositoryService
             }
 
             using var repo = new Repository(repoPath);
-            
+
             var head = repo.Head;
             if (head?.Tip == null)
             {
@@ -53,7 +53,7 @@ public sealed class GitRepositoryService : IGitRepositoryService
 
             var commitSha = head.Tip.Sha;
             var shortCommitSha = commitSha.Substring(0, Math.Min(7, commitSha.Length));
-            
+
             // Get branch name - handle detached HEAD state
             var branchName = head.FriendlyName;
             if (string.IsNullOrEmpty(branchName) || branchName == "(no branch)")
@@ -74,7 +74,7 @@ public sealed class GitRepositoryService : IGitRepositoryService
             var isDirty = status.IsDirty;
 
             _logger.LogDebug(
-                "Git metadata retrieved: Commit={Commit}, Branch={Branch}, Dirty={Dirty}", 
+                "Git metadata retrieved: Commit={Commit}, Branch={Branch}, Dirty={Dirty}",
                 shortCommitSha, branchName, isDirty);
 
             return new GitMetadata(

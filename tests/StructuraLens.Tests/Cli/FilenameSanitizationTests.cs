@@ -12,13 +12,13 @@ public class FilenameSanitizationTests
             .Concat(Enumerable.Range(1, 31).Select(i => (char)i))
             .Distinct()
             .ToArray();
-        
+
         var result = branchName;
         foreach (char c in invalidChars)
         {
             result = result.Replace(c, '_');
         }
-        
+
         return result;
     }
 

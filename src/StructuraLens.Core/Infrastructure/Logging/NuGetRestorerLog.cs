@@ -8,7 +8,7 @@ namespace StructuraLens.Core.Infrastructure.Logging;
 internal static partial class NuGetRestorerLog
 {
     // Operation events (3000-3099)
-    
+
     [LoggerMessage(
         EventId = 3000,
         Level = LogLevel.Debug,
@@ -22,7 +22,7 @@ internal static partial class NuGetRestorerLog
     public static partial void PackageRestoreCompleted(ILogger logger, string path);
 
     // Error events (3100-3199)
-    
+
     [LoggerMessage(
         EventId = 3100,
         Level = LogLevel.Error,
