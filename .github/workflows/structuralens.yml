@@ -23,17 +23,8 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-      - name: Generate Token
-        id: generate-token
-        uses: actions/create-github-app-token@v2
-        with:
-          app-id: ${{ secrets.MY_APP_ID }}
-          private-key: ${{ secrets.MY_APP_PRIVATE_KEY }}
-          owner: "andy-c-jones"
-          repositories: "StructuraLens"
       - uses: andy-c-jones/StructuraLensAction@v1
         with:
           solution: StructuraLens.slnx
-          github-token: ${{ steps.generate-token.outputs.token }}
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
+          github-token: ${{ github.token }}
+
