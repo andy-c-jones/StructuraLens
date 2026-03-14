@@ -20,10 +20,10 @@ A high-performance .NET 10 CLI tool for analyzing C# codebases. StructuraLens pr
 
 ### Installation
 
-Download the latest release from the [Releases](https://github.com/your-org/structuralens/releases) page or build from source:
+Download the latest release from the [Releases](https://github.com/andy-c-jones/StructuraLens/releases) page or build from source:
 
 ```bash
-git clone https://github.com/your-org/structuralens.git
+git clone https://github.com/andy-c-jones/StructuraLens.git
 cd structuralens
 dotnet build -c Release
 ```
@@ -141,9 +141,15 @@ See [Usage Guide](docs/usage.md) for detailed documentation.
 
 | Metric | Description | Interpretation |
 |--------|-------------|----------------|
-| **Efferent Coupling (Ce)** | Outgoing dependencies | High Ce = depends on many others |
-| **Afferent Coupling (Ca)** | Incoming dependencies | High Ca = many others depend on this |
-| **Instability (I)** | Ce / (Ca + Ce) | 0.0 = stable, 1.0 = unstable |
+| **Internal Dependencies (ID)** | Number of internal entities this entity depends on | High ID = broader internal coupling surface |
+| **Internal Dependents (IDX)** | Number of internal entities that depend on this | High IDX = heavily reused / high change impact |
+| **Dependency Ratio (DR)** | `ID / (ID + IDX)` | `0.0` = provider-oriented, `1.0` = consumer-oriented |
+| **External Dependencies (ED)** | External namespaces/packages referenced | Tracked separately from internal coupling |
+
+StructuraLens also reports external dependency breakdown:
+
+- **EDB**: External BCL dependencies (`System.*`, `Microsoft.*`)
+- **EDP**: External package dependencies (third-party)
 
 ## Memory-Efficient Analysis
 
@@ -170,7 +176,7 @@ structuralens analyze LargeSolution.sln --aggregation-strategy SQLite --verbose
 ### Build Steps
 
 ```bash
-git clone https://github.com/your-org/structuralens.git
+git clone https://github.com/andy-c-jones/StructuraLens.git
 cd structuralens
 dotnet restore
 dotnet build -c Release

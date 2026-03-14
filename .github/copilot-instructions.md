@@ -1,6 +1,6 @@
 # Copilot / Contribution Guidelines
 
-StructuraLens is a .NET 10 CLI tool for analyzing C# codebases. This document provides quick reference for contributors.
+StructuraLens is a .NET CLI tool for analyzing C# codebases. This document provides quick reference for contributors.
 
 ## Branch and PR Workflow
 
@@ -34,7 +34,7 @@ Use the following format for commit messages and PR titles:
 ```
 feat: add depth of inheritance calculator
 fix: handle null reference in coupling analyzer
-chore: update Microsoft.CodeAnalysis to 10.0.0
+chore: update Microsoft.CodeAnalysis dependency
 docs: clarify architecture guide with DI patterns
 test: add thread-safety tests for SQLite collector
 refactor: extract method in metrics calculator
@@ -94,7 +94,7 @@ public SolutionAnalyzer(
 
 ## Testing with TUnit
 
-**Framework:** TUnit v1.9.45
+**Framework:** TUnit
 
 **Naming conventions:**
 - Test classes: `{ClassName}Tests`
@@ -156,7 +156,7 @@ A.CallTo(() => service.Method()).MustHaveHappenedOnceExactly();
 ## Code Style
 
 **Language features:**
-- C# 13 / .NET 10
+- C# / .NET (follow repository target/framework settings)
 - Nullable reference types enabled
 - File-scoped namespaces preferred
 - Implicit usings enabled
@@ -262,9 +262,9 @@ dotnet format --verify-no-changes
 
 StructuraLens uses semantic-release for automated versioning:
 
-- `feat:` commits → minor version bump (e.g., 1.0.0 → 1.1.0)
-- `fix:` commits → patch version bump (e.g., 1.0.0 → 1.0.1)
-- `BREAKING CHANGE:` in commit body → major version bump (e.g., 1.0.0 → 2.0.0)
+- `feat:` commits → minor version bump
+- `fix:` commits → patch version bump
+- `BREAKING CHANGE:` in commit body → major version bump
 - Other types → no version bump (chore, docs, test, refactor)
 
 **Ensure PR title is accurate** - it becomes the release note entry!
