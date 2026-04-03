@@ -58,6 +58,10 @@ public record CompactReport
     [JsonPropertyName("toolVer")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? ToolVersion { get; init; }
+
+    /// <summary>Whether complexity/maintainability metrics are populated.</summary>
+    [JsonPropertyName("hasCm")]
+    public bool HasComplexityMetrics { get; init; } = true;
 }
 
 /// <summary>Compact project metrics.</summary>

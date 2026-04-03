@@ -31,7 +31,8 @@ public sealed class CompactReportExporter : IReportExporter
             GitBranch = report.GitInfo?.BranchName,
             GitRemoteUrl = report.GitInfo?.RemoteUrl,
             GitIsDirty = report.GitInfo?.IsDirty ?? false,
-            ToolVersion = report.ToolVersion
+            ToolVersion = report.ToolVersion,
+            HasComplexityMetrics = report.AnalysisMode == AnalysisMode.Full
         };
     }
 
@@ -59,7 +60,8 @@ public sealed class CompactReportExporter : IReportExporter
             GitBranch = report.GitInfo?.BranchName,
             GitRemoteUrl = report.GitInfo?.RemoteUrl,
             GitIsDirty = report.GitInfo?.IsDirty ?? false,
-            ToolVersion = report.ToolVersion
+            ToolVersion = report.ToolVersion,
+            HasComplexityMetrics = report.AnalysisMode == AnalysisMode.Full
         };
     }
 

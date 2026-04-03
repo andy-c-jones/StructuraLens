@@ -20,14 +20,17 @@ export function renderDiffTab(diffData: DiffReport | null): void {
   const totals = diffData.totals;
   const projects = diffData.projects || [];
   const diagnostics = diffData.diagnostics || {};
+  const hasComplexityMetrics = diffData.hasComplexityMetrics !== false;
 
-  const topMiChanges = projects
-    .filter((p) => !p.isAdded && !p.isRemoved)
-    .sort(
-      (a, b) =>
-        Math.abs(b.maintainabilityDelta) - Math.abs(a.maintainabilityDelta),
-    )
-    .slice(0, 10);
+  const topMiChanges = hasComplexityMetrics
+    ? projects
+      .filter((p) => !p.isAdded && !p.isRemoved)
+      .sort(
+        (a, b) =>
+          Math.abs(b.maintainabilityDelta) - Math.abs(a.maintainabilityDelta),
+      )
+      .slice(0, 10)
+    : [];
 
   const summaryCards: CardProps[] = [
     { 
@@ -43,18 +46,6 @@ export function renderDiffTab(diffData: DiffReport | null): void {
       label: `Methods ${renderDeltaIndicator({ value: totals.methodsDelta })}` 
     },
     { 
-      value: totals.headCyclomaticComplexity, 
-      label: `Total Complexity ${renderDeltaIndicator({ value: totals.cyclomaticComplexityDelta })}` 
-    },
-    { 
-      value: totals.headLinesOfCode.toLocaleString(), 
-      label: `Lines of Code ${renderDeltaIndicator({ value: totals.linesOfCodeDelta })}` 
-    },
-    { 
-      value: totals.headAvgMaintainabilityIndex, 
-      label: `Avg Maintainability ${renderDeltaIndicator({ value: totals.avgMaintainabilityDelta, inverseGood: true })}` 
-    },
-    { 
       value: totals.headErrors, 
       label: `Errors ${renderDeltaIndicator({ value: totals.errorsDelta, inverseGood: true })}`,
       valueColor: totals.headErrors > 0 ? 'var(--error)' : 'var(--success)'
@@ -65,6 +56,25 @@ export function renderDiffTab(diffData: DiffReport | null): void {
       valueColor: totals.headWarnings > 0 ? 'var(--warning)' : 'var(--success)'
     }
   ];
+
+  if (hasComplexityMetrics) {
+    summaryCards.splice(
+      3,
+      0,
+      {
+        value: totals.headCyclomaticComplexity,
+        label: `Total Complexity ${renderDeltaIndicator({ value: totals.cyclomaticComplexityDelta })}`,
+      },
+      {
+        value: totals.headLinesOfCode.toLocaleString(),
+        label: `Lines of Code ${renderDeltaIndicator({ value: totals.linesOfCodeDelta })}`,
+      },
+      {
+        value: totals.headAvgMaintainabilityIndex,
+        label: `Avg Maintainability ${renderDeltaIndicator({ value: totals.avgMaintainabilityDelta, inverseGood: true })}`,
+      },
+    );
+  }
 
   const miChangesTable = topMiChanges.length > 0
     ? `<table>
@@ -95,7 +105,7 @@ export function renderDiffTab(diffData: DiffReport | null): void {
 
   el.innerHTML = `
     ${renderSection('Summary Deltas', renderCardsGrid(summaryCards))}
-    ${renderSection('Projects with Biggest Maintainability Changes', miChangesTable)}
+    ${hasComplexityMetrics ? renderSection('Projects with Biggest Maintainability Changes', miChangesTable) : ''}
     ${renderSection('Diagnostics Changes', renderCardsGrid(diagnosticsCards))}
   `;
   

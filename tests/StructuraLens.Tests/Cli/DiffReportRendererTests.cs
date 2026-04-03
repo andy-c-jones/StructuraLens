@@ -221,6 +221,28 @@ public sealed class DiffReportRendererTests
     }
 
     [Test]
+    public async Task RenderMarkdown_LightweightMode_HidesComplexityAndMaintainabilitySections()
+    {
+        // Arrange
+        var renderer = new DiffReportRenderer();
+        var diff = CreateDiffReport(
+            baseMaintainability: 80.0,
+            headMaintainability: 70.0,
+            baseComplexity: 100,
+            headComplexity: 180)
+            with { HasComplexityMetrics = false };
+
+        // Act
+        var markdown = renderer.RenderMarkdown(diff);
+
+        // Assert
+        await Assert.That(markdown).DoesNotContain("### Maintainability Changes");
+        await Assert.That(markdown).DoesNotContain("| Cyclomatic Complexity |");
+        await Assert.That(markdown).DoesNotContain("| Lines of Code |");
+        await Assert.That(markdown).DoesNotContain("| Avg Maintainability |");
+    }
+
+    [Test]
     public async Task RenderMarkdown_IncludesAllSections_InCorrectOrder()
     {
         // Arrange

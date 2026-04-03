@@ -10,6 +10,7 @@ export interface CompactReport {
 	gitBranch?: string;
 	gitRemote?: string;
 	gitDirty?: boolean;
+	hasCm?: boolean;
 	/** Linting summary (optional). */
 	l?: LintSummary;
 }
@@ -104,6 +105,7 @@ export interface DiagnosticItem {
 export interface DiffReport {
 	base: DiffMetadata;
 	head: DiffMetadata;
+	hasComplexityMetrics: boolean;
 	totals: DiffTotals;
 	projects: ProjectDiff[];
 	diagnostics: DiagnosticDiffSummary;

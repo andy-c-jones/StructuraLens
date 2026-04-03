@@ -81,7 +81,8 @@ public record AnalysisReport(
     DateTime AnalyzedAt,
     IReadOnlyList<ProjectMetrics> Projects,
     IReadOnlyList<string> Warnings,
-    string ToolVersion)
+    string ToolVersion,
+    AnalysisMode AnalysisMode = AnalysisMode.Full)
 {
     public int TotalProjects => Projects.Count;
     public int TotalTypes => Projects.Sum(p => p.Types.Count);

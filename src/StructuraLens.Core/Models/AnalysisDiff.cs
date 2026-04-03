@@ -7,6 +7,7 @@ public record AnalysisDiffReport
 {
     public DiffMetadata Base { get; init; } = new();
     public DiffMetadata Head { get; init; } = new();
+    public bool HasComplexityMetrics { get; init; } = true;
     public DiffTotals Totals { get; init; } = new();
     public IReadOnlyList<ProjectDiff> Projects { get; init; } = [];
     public DiagnosticDiffSummary Diagnostics { get; init; } = new();

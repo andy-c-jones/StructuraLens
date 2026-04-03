@@ -13,6 +13,7 @@ export function renderSummary(reportData: CompactReport): void {
   if (!el) return;
 
   const d = reportData;
+  const hasComplexityMetrics = d.hasCm !== false;
   const totalErrors = d.prj.reduce((s, p) => s + (p.err || 0), 0);
   const totalWarnings = d.prj.reduce((s, p) => s + (p.warn || 0), 0);
   const totalCC = d.prj.reduce((s, p) => s + p.cc, 0);
@@ -26,9 +27,6 @@ export function renderSummary(reportData: CompactReport): void {
     { value: d.prj.length, label: 'Projects' },
     { value: d.prj.reduce((s, p) => s + p.tc, 0), label: 'Types' },
     { value: d.prj.reduce((s, p) => s + p.mc, 0), label: 'Methods' },
-    { value: totalCC, label: 'Total Complexity' },
-    { value: totalLOC.toLocaleString(), label: 'Lines of Code' },
-    { value: avgMI, label: 'Avg Maintainability' },
     { 
       value: totalErrors, 
       label: 'Compiler Errors',
@@ -41,6 +39,16 @@ export function renderSummary(reportData: CompactReport): void {
     }
   ];
 
+  if (hasComplexityMetrics) {
+    summaryCards.splice(
+      3,
+      0,
+      { value: totalCC, label: 'Total Complexity' },
+      { value: totalLOC.toLocaleString(), label: 'Lines of Code' },
+      { value: avgMI, label: 'Avg Maintainability' },
+    );
+  }
+
   const lintingSection = d.l
     ? `<div class="section">
       <h2>Architecture Linting</h2>
@@ -49,7 +57,7 @@ export function renderSummary(reportData: CompactReport): void {
     : "";
 
   const projectsTable = `<table>
-        <thead><tr><th>Project</th><th>Types</th><th>Methods</th><th>Cyclomatic Complexity</th><th>Lines of Code</th><th>Maintainability Index</th><th>Dependency Ratio</th><th>Issues</th></tr></thead>
+        <thead><tr><th>Project</th><th>Types</th><th>Methods</th>${hasComplexityMetrics ? '<th>Cyclomatic Complexity</th><th>Lines of Code</th><th>Maintainability Index</th>' : ''}<th>Dependency Ratio</th><th>Issues</th></tr></thead>
         <tbody>${d.prj
           .map(
             (p) => `
@@ -57,12 +65,13 @@ export function renderSummary(reportData: CompactReport): void {
             <td>${p.n}</td>
             <td>${p.tc}</td>
             <td>${p.mc}</td>
+            ${hasComplexityMetrics ? `
             <td>${p.cc}</td>
             <td>${p.loc}</td>
             <td>
               <span>${p.mi}</span>
               ${renderMetricBar({ value: p.mi })}
-            </td>
+            </td>` : ''}
             <td>${p.dr.toFixed(2)}</td>
             <td>${(p.err || 0) > 0 ? renderBadge({ type: 'error', text: `${p.err} errors` }) + ' ' : ''}${(p.warn || 0) > 0 ? renderBadge({ type: 'warning', text: `${p.warn} warnings` }) : (p.err || 0) === 0 ? renderBadge({ type: 'success', text: 'Clean' }) : ''}</td>
           </tr>`,

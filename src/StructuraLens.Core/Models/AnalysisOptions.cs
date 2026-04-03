@@ -32,10 +32,33 @@ public enum DependencyAggregationStrategy
 }
 
 /// <summary>
+/// Specifies the analysis depth/profile used when generating reports.
+/// </summary>
+public enum AnalysisMode
+{
+    /// <summary>
+    /// Full analysis including complexity and maintainability metrics.
+    /// </summary>
+    Full,
+
+    /// <summary>
+    /// Lightweight analysis focused on diagnostics and dependency/reference changes.
+    /// Complexity and maintainability metrics are skipped.
+    /// </summary>
+    DiagnosticsAndReferences
+}
+
+/// <summary>
 /// Configuration options for solution analysis behavior.
 /// </summary>
 public class AnalysisOptions
 {
+    /// <summary>
+    /// Gets or sets the analysis mode.
+    /// Default: Full.
+    /// </summary>
+    public AnalysisMode AnalysisMode { get; set; } = AnalysisMode.Full;
+
     /// <summary>
     /// Gets or sets the strategy for aggregating dependency edges.
     /// Default: InMemory.

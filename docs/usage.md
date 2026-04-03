@@ -51,6 +51,7 @@ structuralens analyze <path> [options]
 | `--out` | `-o` | string | stdout | Output file path for the report |
 | `--format` | `-f` | string | `json` | Output format: `json`, `compact`, `html`, or `summary` |
 | `--verbose` | `-v` | flag | false | Enable verbose logging (sets log level to Debug) |
+| `--analysis-mode` | | string | `Full` | Analysis mode: `Full` or `DiagnosticsAndReferences` |
 | `--aggregation-strategy` | | string | `Adaptive` | Strategy for aggregating dependencies: `InMemory`, `SQLite`, or `Adaptive` |
 | `--memory-threshold` | | long | 1024 | Memory threshold in MB for adaptive strategy to migrate from InMemory to SQLite |
 | `--sqlite-batch-size` | | int | 1000 | Batch size for SQLite collector operations |
@@ -120,6 +121,14 @@ structuralens analyze src/MyLibrary/MyLibrary.csproj --format html --out mylibra
 ```
 
 You can analyze individual projects instead of entire solutions.
+
+#### Lightweight Diagnostics + References Mode
+
+```bash
+structuralens analyze MyProject.sln --analysis-mode DiagnosticsAndReferences --format json --out report.json
+```
+
+Runs a lightweight profile that skips complexity/maintainability calculations while keeping diagnostics and dependency/reference analysis.
 
 ## Output Formats
 

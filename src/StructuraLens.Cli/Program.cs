@@ -62,6 +62,12 @@ var sqliteBatchSizeOption = new Option<int>("--sqlite-batch-size")
     DefaultValueFactory = _ => 1000
 };
 
+var analysisModeOption = new Option<string>("--analysis-mode")
+{
+    Description = "Analysis mode: Full or DiagnosticsAndReferences (default: Full)",
+    DefaultValueFactory = _ => AnalysisMode.Full.ToString()
+};
+
 // Diff options
 var baseReportOption = new Option<string>("--base")
 {
@@ -101,6 +107,7 @@ analyzeCommand.Options.Add(verboseOption);
 analyzeCommand.Options.Add(aggregationStrategyOption);
 analyzeCommand.Options.Add(memoryThresholdOption);
 analyzeCommand.Options.Add(sqliteBatchSizeOption);
+analyzeCommand.Options.Add(analysisModeOption);
 
 analyzeCommand.SetAction(async (parseResult, cancellationToken) =>
 {
@@ -111,10 +118,12 @@ analyzeCommand.SetAction(async (parseResult, cancellationToken) =>
     var aggregationStrategy = parseResult.GetValue(aggregationStrategyOption) ?? "Adaptive";
     var memoryThreshold = parseResult.GetValue(memoryThresholdOption);
     var sqliteBatchSize = parseResult.GetValue(sqliteBatchSizeOption);
+    var analysisMode = parseResult.GetValue(analysisModeOption) ?? AnalysisMode.Full.ToString();
 
     // Parse analysis options
     var analysisOptions = new AnalysisOptions
     {
+        AnalysisMode = Enum.Parse<AnalysisMode>(analysisMode, ignoreCase: true),
         AggregationStrategy = Enum.Parse<DependencyAggregationStrategy>(aggregationStrategy, ignoreCase: true),
         MemoryThresholdMB = memoryThreshold,
         SQLiteBatchSize = sqliteBatchSize,
@@ -462,14 +471,18 @@ static void PrintSummary(AnalysisReport report, ILogger logger)
 {
     Console.WriteLine("=== Analysis Summary ===");
     Console.WriteLine($"Tool Version: v{report.ToolVersion}");
+    Console.WriteLine($"Analysis Mode: {report.AnalysisMode}");
     Console.WriteLine($"Solution: {report.SolutionPath}");
     Console.WriteLine($"Analyzed at: {report.AnalyzedAt:O}");
     Console.WriteLine();
     Console.WriteLine($"Projects: {report.TotalProjects}");
     Console.WriteLine($"Types: {report.TotalTypes}");
     Console.WriteLine($"Methods: {report.TotalMethods}");
-    Console.WriteLine($"Total Cyclomatic Complexity: {report.TotalCyclomaticComplexity}");
-    Console.WriteLine($"Total Lines of Executable Code: {report.TotalLinesOfExecutableCode}");
+    if (report.AnalysisMode == AnalysisMode.Full)
+    {
+        Console.WriteLine($"Total Cyclomatic Complexity: {report.TotalCyclomaticComplexity}");
+        Console.WriteLine($"Total Lines of Executable Code: {report.TotalLinesOfExecutableCode}");
+    }
 
     if (report.CouplingAnalysis != null)
     {
@@ -515,13 +528,16 @@ static void PrintSummary(AnalysisReport report, ILogger logger)
     {
         Console.WriteLine($"Project: {project.Name}");
         Console.WriteLine($"  Types: {project.Types.Count}");
-        Console.WriteLine($"  Total CC: {project.TotalCyclomaticComplexity}");
-        Console.WriteLine($"  Total LOC: {project.TotalLinesOfExecutableCode}");
+        if (report.AnalysisMode == AnalysisMode.Full)
+        {
+            Console.WriteLine($"  Total CC: {project.TotalCyclomaticComplexity}");
+            Console.WriteLine($"  Total LOC: {project.TotalLinesOfExecutableCode}");
+        }
         Console.WriteLine($"  Max DIT: {project.MaxDepthOfInheritance}");
 
         var allMethods = project.Types.GetAllMethods();
 
-        if (allMethods.Count > 0)
+        if (allMethods.Count > 0 && report.AnalysisMode == AnalysisMode.Full)
         {
             var avgMI = allMethods.CalculateAverageMaintainabilityIndex();
             Console.WriteLine($"  Avg Maintainability Index: {avgMI:F1}");
@@ -568,33 +584,36 @@ static void PrintSummary(AnalysisReport report, ILogger logger)
             }
         }
 
-        var highComplexityMethods = allMethods
-            .Where(m => m.CyclomaticComplexity > 10)
-            .OrderByDescending(m => m.CyclomaticComplexity)
-            .Take(5)
-            .ToList();
-
-        if (highComplexityMethods.Count > 0)
+        if (report.AnalysisMode == AnalysisMode.Full)
         {
-            Console.WriteLine("  High complexity methods (CC > 10):");
-            foreach (var method in highComplexityMethods)
+            var highComplexityMethods = allMethods
+                .Where(m => m.CyclomaticComplexity > 10)
+                .OrderByDescending(m => m.CyclomaticComplexity)
+                .Take(5)
+                .ToList();
+
+            if (highComplexityMethods.Count > 0)
             {
-                Console.WriteLine($"    - {method.FullName}: CC={method.CyclomaticComplexity}");
+                Console.WriteLine("  High complexity methods (CC > 10):");
+                foreach (var method in highComplexityMethods)
+                {
+                    Console.WriteLine($"    - {method.FullName}: CC={method.CyclomaticComplexity}");
+                }
             }
-        }
 
-        var lowMIMethods = allMethods
-            .Where(m => m.MaintainabilityIndex < 40)
-            .OrderBy(m => m.MaintainabilityIndex)
-            .Take(5)
-            .ToList();
+            var lowMIMethods = allMethods
+                .Where(m => m.MaintainabilityIndex < 40)
+                .OrderBy(m => m.MaintainabilityIndex)
+                .Take(5)
+                .ToList();
 
-        if (lowMIMethods.Count > 0)
-        {
-            Console.WriteLine("  Low maintainability methods (MI < 40):");
-            foreach (var method in lowMIMethods)
+            if (lowMIMethods.Count > 0)
             {
-                Console.WriteLine($"    - {method.FullName}: MI={method.MaintainabilityIndex:F1}");
+                Console.WriteLine("  Low maintainability methods (MI < 40):");
+                foreach (var method in lowMIMethods)
+                {
+                    Console.WriteLine($"    - {method.FullName}: MI={method.MaintainabilityIndex:F1}");
+                }
             }
         }
         Console.WriteLine();
@@ -610,9 +629,12 @@ static void PrintDiffSummary(AnalysisDiffReport diff)
     Console.WriteLine($"Projects: {diff.Totals.HeadProjects} (Δ {diff.Totals.ProjectsDelta:+#;-#;0})");
     Console.WriteLine($"Types: {diff.Totals.HeadTypes} (Δ {diff.Totals.TypesDelta:+#;-#;0})");
     Console.WriteLine($"Methods: {diff.Totals.HeadMethods} (Δ {diff.Totals.MethodsDelta:+#;-#;0})");
-    Console.WriteLine($"Cyclomatic Complexity: {diff.Totals.HeadCyclomaticComplexity} (Δ {diff.Totals.CyclomaticComplexityDelta:+#;-#;0})");
-    Console.WriteLine($"Lines of Code: {diff.Totals.HeadLinesOfCode} (Δ {diff.Totals.LinesOfCodeDelta:+#;-#;0})");
-    Console.WriteLine($"Avg Maintainability: {diff.Totals.HeadAvgMaintainabilityIndex:0.0} (Δ {diff.Totals.AvgMaintainabilityDelta:+0.0;-0.0;0.0})");
+    if (diff.HasComplexityMetrics)
+    {
+        Console.WriteLine($"Cyclomatic Complexity: {diff.Totals.HeadCyclomaticComplexity} (Δ {diff.Totals.CyclomaticComplexityDelta:+#;-#;0})");
+        Console.WriteLine($"Lines of Code: {diff.Totals.HeadLinesOfCode} (Δ {diff.Totals.LinesOfCodeDelta:+#;-#;0})");
+        Console.WriteLine($"Avg Maintainability: {diff.Totals.HeadAvgMaintainabilityIndex:0.0} (Δ {diff.Totals.AvgMaintainabilityDelta:+0.0;-0.0;0.0})");
+    }
     Console.WriteLine();
     Console.WriteLine($"Errors: {diff.Totals.HeadErrors} (Δ {diff.Totals.ErrorsDelta:+#;-#;0})");
     Console.WriteLine($"Warnings: {diff.Totals.HeadWarnings} (Δ {diff.Totals.WarningsDelta:+#;-#;0})");

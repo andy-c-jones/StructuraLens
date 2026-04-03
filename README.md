@@ -95,6 +95,7 @@ structuralens analyze <path> [options]
 | `--out` | `-o` | Output file path for the report | stdout |
 | `--format` | `-f` | Output format: `json`, `compact`, `html`, `summary` | `json` |
 | `--verbose` | `-v` | Enable verbose logging (Debug level) | `false` |
+| `--analysis-mode` | | Analysis mode: `Full`, `DiagnosticsAndReferences` | `Full` |
 | `--aggregation-strategy` | | Memory strategy: `InMemory`, `SQLite`, `Adaptive` | `Adaptive` |
 | `--memory-threshold` | | Memory threshold in MB for adaptive strategy | `1024` |
 | `--sqlite-batch-size` | | Batch size for SQLite operations | `1000` |
