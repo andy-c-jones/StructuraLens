@@ -75,14 +75,16 @@ public sealed class DiffCalculator
                 SolutionPath = baseReport.SolutionPath,
                 AnalyzedAt = baseReport.AnalyzedAt,
                 CommitSha = baseReport.GitInfo?.CommitSha,
-                BranchName = baseReport.GitInfo?.BranchName
+                BranchName = baseReport.GitInfo?.BranchName,
+                AnalysisMode = baseReport.AnalysisMode
             },
             Head = new DiffMetadata
             {
                 SolutionPath = headReport.SolutionPath,
                 AnalyzedAt = headReport.AnalyzedAt,
                 CommitSha = headReport.GitInfo?.CommitSha,
-                BranchName = headReport.GitInfo?.BranchName
+                BranchName = headReport.GitInfo?.BranchName,
+                AnalysisMode = headReport.AnalysisMode
             },
             HasComplexityMetrics = hasComplexityMetrics,
             Totals = new DiffTotals

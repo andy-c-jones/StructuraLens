@@ -25,8 +25,6 @@ export function renderSummary(reportData: CompactReport): void {
 
   const summaryCards: CardProps[] = [
     { value: d.prj.length, label: 'Projects' },
-    { value: d.prj.reduce((s, p) => s + p.tc, 0), label: 'Types' },
-    { value: d.prj.reduce((s, p) => s + p.mc, 0), label: 'Methods' },
     { 
       value: totalErrors, 
       label: 'Compiler Errors',
@@ -38,6 +36,15 @@ export function renderSummary(reportData: CompactReport): void {
       valueColor: totalWarnings > 0 ? 'var(--warning)' : 'var(--success)'
     }
   ];
+
+  if (hasComplexityMetrics) {
+    summaryCards.splice(
+      1,
+      0,
+      { value: d.prj.reduce((s, p) => s + p.tc, 0), label: 'Types' },
+      { value: d.prj.reduce((s, p) => s + p.mc, 0), label: 'Methods' },
+    );
+  }
 
   if (hasComplexityMetrics) {
     summaryCards.splice(
@@ -57,15 +64,15 @@ export function renderSummary(reportData: CompactReport): void {
     : "";
 
   const projectsTable = `<table>
-        <thead><tr><th>Project</th><th>Types</th><th>Methods</th>${hasComplexityMetrics ? '<th>Cyclomatic Complexity</th><th>Lines of Code</th><th>Maintainability Index</th>' : ''}<th>Dependency Ratio</th><th>Issues</th></tr></thead>
+        <thead><tr><th>Project</th>${hasComplexityMetrics ? '<th>Types</th><th>Methods</th><th>Cyclomatic Complexity</th><th>Lines of Code</th><th>Maintainability Index</th>' : ''}<th>Dependency Ratio</th><th>Issues</th></tr></thead>
         <tbody>${d.prj
           .map(
             (p) => `
           <tr>
             <td>${p.n}</td>
+            ${hasComplexityMetrics ? `
             <td>${p.tc}</td>
             <td>${p.mc}</td>
-            ${hasComplexityMetrics ? `
             <td>${p.cc}</td>
             <td>${p.loc}</td>
             <td>

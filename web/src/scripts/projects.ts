@@ -134,7 +134,11 @@ function renderProjectNode(project: CompactProject): string {
   });
 }
 
-function renderTree(projects: CompactProject[]): string {
+function renderTree(projects: CompactProject[], hasComplexityMetrics: boolean): string {
+  if (!hasComplexityMetrics) {
+    return '<p style="color:var(--text-muted)">Tree view is unavailable in diagnostics and references mode.</p>';
+  }
+
   return `<ul class="tree">${projects.map((p) => renderProjectNode(p)).join("")}</ul>`;
 }
 
@@ -203,8 +207,11 @@ function updateProjectsTree(reportData: CompactReport): void {
   const projects = getFilteredProjects(reportData);
   const treeEl = document.getElementById("projectsTree");
   if (treeEl) {
-    treeEl.innerHTML = renderTree(projects);
-    attachTreeHandlers();
+    const hasComplexityMetrics = reportData.hasCm !== false;
+    treeEl.innerHTML = renderTree(projects, hasComplexityMetrics);
+    if (hasComplexityMetrics) {
+      attachTreeHandlers();
+    }
   }
 }
 
@@ -216,15 +223,13 @@ function updateProjectsTable(reportData: CompactReport): void {
 
   tableEl.innerHTML = `
     <table>
-      <thead><tr><th>Project</th><th>Types</th><th>Methods</th>${hasComplexityMetrics ? '<th>Cyclomatic Complexity</th><th>Lines of Code</th>' : ''}<th>Max Depth of Inheritance</th>${hasComplexityMetrics ? '<th>Maintainability Index</th>' : ''}<th>Internal Deps</th><th>Internal Dependents</th><th>Dependency Ratio</th></tr></thead>
+      <thead><tr><th>Project</th>${hasComplexityMetrics ? '<th>Types</th><th>Methods</th><th>Cyclomatic Complexity</th><th>Lines of Code</th>' : ''}<th>Max Depth of Inheritance</th>${hasComplexityMetrics ? '<th>Maintainability Index</th>' : ''}<th>Internal Deps</th><th>Internal Dependents</th><th>Dependency Ratio</th></tr></thead>
       <tbody>${projects
         .map(
           (p) => `
         <tr>
           <td><strong>${p.n}</strong></td>
-          <td>${p.tc}</td>
-          <td>${p.mc}</td>
-          ${hasComplexityMetrics ? `<td>${p.cc}</td><td>${p.loc.toLocaleString()}</td>` : ''}
+          ${hasComplexityMetrics ? `<td>${p.tc}</td><td>${p.mc}</td><td>${p.cc}</td><td>${p.loc.toLocaleString()}</td>` : ''}
           <td>${p.dit}</td>
           ${hasComplexityMetrics ? `<td>${p.mi}</td>` : ''}
           <td>${p.id}</td>
@@ -251,8 +256,8 @@ function updateProjectsView(reportData: CompactReport): void {
   if (viewMode === "tree") {
     if (treeContainer) treeContainer.style.display = "block";
     if (tableContainer) tableContainer.style.display = "none";
-    if (expandBtn) expandBtn.style.display = "inline-block";
-    if (collapseBtn) collapseBtn.style.display = "inline-block";
+    if (expandBtn) expandBtn.style.display = reportData.hasCm !== false ? "inline-block" : "none";
+    if (collapseBtn) collapseBtn.style.display = reportData.hasCm !== false ? "inline-block" : "none";
     updateProjectsTree(reportData);
   } else {
     if (treeContainer) treeContainer.style.display = "none";
@@ -271,6 +276,8 @@ export function renderProjects(reportData: CompactReport): void {
 
   const d = reportData;
 
+  const hasComplexityMetrics = d.hasCm !== false;
+
   el.innerHTML = `
     <div class="filter-bar">
       <label>Filter by project:</label>
@@ -280,8 +287,8 @@ export function renderProjects(reportData: CompactReport): void {
       </select>
       <label style="margin-left: 20px;">View:</label>
       <select id="viewMode">
-        <option value="tree">Tree View (Recommended)</option>
-        <option value="table">Table View</option>
+        <option value="tree"${hasComplexityMetrics ? ' selected' : ''}${hasComplexityMetrics ? '' : ' disabled'}>Tree View (Recommended)</option>
+        <option value="table"${hasComplexityMetrics ? '' : ' selected'}>Table View</option>
       </select>
       <button id="expandAll" style="margin-left: 10px; padding: 6px 12px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 4px; color: var(--text); cursor: pointer;">Expand All</button>
       <button id="collapseAll" style="margin-left: 5px; padding: 6px 12px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 4px; color: var(--text); cursor: pointer;">Collapse All</button>

@@ -18,6 +18,7 @@ public sealed class DiffReportRenderer
         sb.AppendLine();
         sb.AppendLine($"Base: `{ShortSha(diff.Base.CommitSha)}` {diff.Base.BranchName}");
         sb.AppendLine($"Head: `{ShortSha(diff.Head.CommitSha)}` {diff.Head.BranchName}");
+        sb.AppendLine($"Analysis mode: `{diff.Head.AnalysisMode}`");
         sb.AppendLine();
 
         // Section 1: New Diagnostics (up to 20 most important, with warning if more)
@@ -64,8 +65,11 @@ public sealed class DiffReportRenderer
         sb.AppendLine("| Metric | Base | Head | Delta |");
         sb.AppendLine("| --- | ---: | ---: | ---: |");
         sb.AppendLine(BuildRow("Projects", diff.Totals.BaseProjects, diff.Totals.HeadProjects, diff.Totals.ProjectsDelta));
-        sb.AppendLine(BuildRow("Types", diff.Totals.BaseTypes, diff.Totals.HeadTypes, diff.Totals.TypesDelta));
-        sb.AppendLine(BuildRow("Methods", diff.Totals.BaseMethods, diff.Totals.HeadMethods, diff.Totals.MethodsDelta));
+        if (diff.HasComplexityMetrics)
+        {
+            sb.AppendLine(BuildRow("Types", diff.Totals.BaseTypes, diff.Totals.HeadTypes, diff.Totals.TypesDelta));
+            sb.AppendLine(BuildRow("Methods", diff.Totals.BaseMethods, diff.Totals.HeadMethods, diff.Totals.MethodsDelta));
+        }
 
         if (diff.HasComplexityMetrics)
         {

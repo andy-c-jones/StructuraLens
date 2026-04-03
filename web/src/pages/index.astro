@@ -25,6 +25,10 @@ let analyzedAt: string;
 let gitInfoHtml: string;
 let toolVersion: string;
 let showDiffTab: boolean;
+let couplingTabHtml: string;
+let graphTabHtml: string;
+let couplingContentHtml: string;
+let graphContentHtml: string;
 
 if (isDev) {
   const reportModule = await import("../test-data/report.json");
@@ -43,6 +47,10 @@ if (isDev) {
   </div>`;
   toolVersion     = "0.0.0-dev";
   showDiffTab     = true;
+  couplingTabHtml = '<div class="tab" data-tab="coupling">Coupling</div>';
+  graphTabHtml = '<div class="tab" data-tab="graph">Graph</div>';
+  couplingContentHtml = '<div id="coupling" class="tab-content"></div>';
+  graphContentHtml = '<div id="graph" class="tab-content"></div>';
 } else {
   reportJson      = "{{REPORT_DATA}}";
   diagnosticsJson = "{{DIAGNOSTICS_DATA}}";
@@ -54,6 +62,10 @@ if (isDev) {
   gitInfoHtml     = "{{GIT_INFO_HTML}}";
   toolVersion     = "{{TOOL_VERSION}}";
   showDiffTab     = true; // Always include; C# removes the tab when no diff
+  couplingTabHtml = "{{COUPLING_TAB}}";
+  graphTabHtml = "{{GRAPH_TAB}}";
+  couplingContentHtml = "{{COUPLING_CONTENT}}";
+  graphContentHtml = "{{GRAPH_CONTENT}}";
 }
 ---
 
@@ -78,16 +90,16 @@ if (isDev) {
       {showDiffTab && <div class="tab active" data-tab="diff">Diff</div>}
       <div class={showDiffTab ? "tab" : "tab active"} data-tab="summary">Summary</div>
       <div class="tab" data-tab="projects">Projects</div>
-      <div class="tab" data-tab="coupling">Coupling</div>
-      <div class="tab" data-tab="graph">Graph</div>
+      <Fragment set:html={couplingTabHtml} />
+      <Fragment set:html={graphTabHtml} />
       <div class="tab" data-tab="diagnostics">Diagnostics</div>
     </div>
 
     <div id="diff" class={showDiffTab ? "tab-content active" : "tab-content"}></div>
     <div id="summary" class={showDiffTab ? "tab-content" : "tab-content active"}></div>
     <div id="projects" class="tab-content"></div>
-    <div id="coupling" class="tab-content"></div>
-    <div id="graph" class="tab-content"></div>
+    <Fragment set:html={couplingContentHtml} />
+    <Fragment set:html={graphContentHtml} />
     <div id="diagnostics" class="tab-content"></div>
   </div>
 
@@ -134,15 +146,20 @@ if (isDev) {
     const diffData        = parseData<DiffReport>(window.__STRUCTURALENS_DIFF__);
 
     if (reportData) {
+      const hasComplexityMetrics = reportData.hasCm !== false;
       renderSummary(reportData);
       renderProjects(reportData);
-      renderCoupling(reportData);
-      initGraphTab(reportData);
+      if (hasComplexityMetrics) {
+        renderCoupling(reportData);
+        initGraphTab(reportData);
+      }
       renderDiagnostics(diagnosticsData ?? []);
       renderDiffTab(diffData);
 
       initTabs((tabId) => {
-        tryRenderGraph(tabId, reportData);
+        if (hasComplexityMetrics) {
+          tryRenderGraph(tabId, reportData);
+        }
       });
 
       enableSorting();

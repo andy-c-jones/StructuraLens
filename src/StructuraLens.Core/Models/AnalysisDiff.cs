@@ -26,6 +26,7 @@ public record DiffMetadata
     public DateTime AnalyzedAt { get; init; }
     public string? CommitSha { get; init; }
     public string? BranchName { get; init; }
+    public AnalysisMode AnalysisMode { get; init; } = AnalysisMode.Full;
 }
 
 /// <summary>Totals comparison for the full solution.</summary>

@@ -138,7 +138,14 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
                 : await AnalyzeProjectWithCouplingAsync(project, compilationCache, dependencyCollector!, ct);
             projectMetricsList.Add(metrics);
 
-            SolutionAnalyzerLog.CompletedProject(_logger, project.Name, metrics.Types.Count, metrics.TotalMethods);
+            if (IsDiagnosticsAndReferencesMode)
+            {
+                SolutionAnalyzerLog.CompletedProjectLightweight(_logger, project.Name);
+            }
+            else
+            {
+                SolutionAnalyzerLog.CompletedProject(_logger, project.Name, metrics.Types.Count, metrics.TotalMethods);
+            }
         });
 
         CouplingAnalysis? couplingAnalysis = null;
@@ -151,7 +158,14 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
             couplingAnalysis = _couplingAnalyzer.BuildCouplingAnalysisFromCollector(solution, dependencyCollector);
         }
 
-        SolutionAnalyzerLog.AnalysisComplete(_logger, projectMetricsList.Count, projectMetricsList.Sum(p => p.Types.Count), projectMetricsList.Sum(p => p.TotalMethods));
+        if (IsDiagnosticsAndReferencesMode)
+        {
+            SolutionAnalyzerLog.AnalysisCompleteLightweight(_logger, projectMetricsList.Count);
+        }
+        else
+        {
+            SolutionAnalyzerLog.AnalysisComplete(_logger, projectMetricsList.Count, projectMetricsList.Sum(p => p.Types.Count), projectMetricsList.Sum(p => p.TotalMethods));
+        }
 
         // Collect git metadata for the analyzed solution
         var gitMetadata = _gitService.GetGitMetadata(fullPath);
