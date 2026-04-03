@@ -38,11 +38,11 @@ public sealed class DiffCalculator
             var addedPackages = headPackageSet.Except(basePackageSet).OrderBy(x => x).ToList();
             var removedPackages = basePackageSet.Except(headPackageSet).OrderBy(x => x).ToList();
 
-            // Compute added/removed internal dependencies
-            var baseInternalDeps = GetInternalDependencyNames(name, baseReport);
-            var headInternalDeps = GetInternalDependencyNames(name, headReport);
-            var addedInternalDeps = headInternalDeps.Except(baseInternalDeps).OrderBy(x => x).ToList();
-            var removedInternalDeps = baseInternalDeps.Except(headInternalDeps).OrderBy(x => x).ToList();
+            // Compute added/removed declared project references
+            var baseProjectRefs = baseMetrics.ProjectReferenceNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var headProjectRefs = headMetrics.ProjectReferenceNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var addedProjectRefs = headProjectRefs.Except(baseProjectRefs).OrderBy(x => x).ToList();
+            var removedProjectRefs = baseProjectRefs.Except(headProjectRefs).OrderBy(x => x).ToList();
 
             projectDiffs.Add(new ProjectDiff
             {
@@ -55,8 +55,8 @@ public sealed class DiffCalculator
                 RemovedBclDependencies = removedBcl,
                 AddedPackageDependencies = addedPackages,
                 RemovedPackageDependencies = removedPackages,
-                AddedInternalDependencies = addedInternalDeps,
-                RemovedInternalDependencies = removedInternalDeps
+                AddedProjectReferences = addedProjectRefs,
+                RemovedProjectReferences = removedProjectRefs
             });
         }
 
@@ -115,23 +115,6 @@ public sealed class DiffCalculator
         };
     }
 
-    private static HashSet<string> GetInternalDependencyNames(string projectName, AnalysisReport report)
-    {
-        var projectCoupling = report.CouplingAnalysis?.ProjectCoupling
-            .FirstOrDefault(pc => string.Equals(pc.EntityName, projectName, StringComparison.OrdinalIgnoreCase));
-
-        if (projectCoupling == null)
-            return [];
-
-        var dependencyNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var edge in projectCoupling.InternalOutbound)
-        {
-            dependencyNames.Add(edge.ToEntity);
-        }
-
-        return dependencyNames;
-    }
-
     private static (IReadOnlySet<string> NewToSolution, IReadOnlySet<string> RemovedFromSolution) ComputeSolutionLevelPresence(
         List<ProjectDiff> projectDiffs,
         AnalysisReport baseReport,
@@ -143,15 +126,14 @@ public sealed class DiffCalculator
 
         foreach (var project in baseReport.Projects)
         {
-            // External dependencies
-            foreach (var dep in project.PackageReferences)
+            // Declared project references
+            foreach (var dep in project.ProjectReferences)
             {
                 baseDependencies.Add(dep);
             }
 
-            // Internal dependencies
-            var internalDeps = GetInternalDependencyNames(project.Name, baseReport);
-            foreach (var dep in internalDeps)
+            // External dependencies
+            foreach (var dep in project.PackageReferences)
             {
                 baseDependencies.Add(dep);
             }
@@ -159,15 +141,14 @@ public sealed class DiffCalculator
 
         foreach (var project in headReport.Projects)
         {
-            // External dependencies
-            foreach (var dep in project.PackageReferences)
+            // Declared project references
+            foreach (var dep in project.ProjectReferences)
             {
                 headDependencies.Add(dep);
             }
 
-            // Internal dependencies
-            var internalDeps = GetInternalDependencyNames(project.Name, headReport);
-            foreach (var dep in internalDeps)
+            // External dependencies
+            foreach (var dep in project.PackageReferences)
             {
                 headDependencies.Add(dep);
             }
@@ -215,6 +196,7 @@ public sealed class DiffCalculator
             ExternalPackageDependencies = thirdPartyPackages.Count,
             ExternalBclDependencyNames = bclPackages,
             ExternalPackageDependencyNames = thirdPartyPackages,
+            ProjectReferenceNames = project.ProjectReferences,
             Errors = project.Diagnostics?.ErrorCount ?? 0,
             Warnings = project.Diagnostics?.WarningCount ?? 0
         };

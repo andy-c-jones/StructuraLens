@@ -100,8 +100,8 @@ public record ProjectDiff
     public IReadOnlyList<string> RemovedBclDependencies { get; init; } = [];
     public IReadOnlyList<string> AddedPackageDependencies { get; init; } = [];
     public IReadOnlyList<string> RemovedPackageDependencies { get; init; } = [];
-    public IReadOnlyList<string> AddedInternalDependencies { get; init; } = [];
-    public IReadOnlyList<string> RemovedInternalDependencies { get; init; } = [];
+    public IReadOnlyList<string> AddedProjectReferences { get; init; } = [];
+    public IReadOnlyList<string> RemovedProjectReferences { get; init; } = [];
 }
 
 /// <summary>Project metrics used in diff output.</summary>
@@ -121,6 +121,7 @@ public record ProjectDiffMetrics
     public int ExternalPackageDependencies { get; init; }
     public IReadOnlyList<string> ExternalBclDependencyNames { get; init; } = [];
     public IReadOnlyList<string> ExternalPackageDependencyNames { get; init; } = [];
+    public IReadOnlyList<string> ProjectReferenceNames { get; init; } = [];
     public int Errors { get; init; }
     public int Warnings { get; init; }
 }

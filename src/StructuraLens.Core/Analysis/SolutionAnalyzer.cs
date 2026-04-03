@@ -118,8 +118,8 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
         SolutionAnalyzerLog.CachedCompilations(_logger, compilationCache.Count);
 
         // Analyze projects in parallel for performance on large solutions
-        // Use streaming dependency collector to reduce memory usage
-        using var dependencyCollector = CreateDependencyCollector();
+        // Use streaming dependency collector to reduce memory usage in full mode only.
+        using var dependencyCollector = IsDiagnosticsAndReferencesMode ? null : CreateDependencyCollector();
         var projectMetricsList = new System.Collections.Concurrent.ConcurrentBag<ProjectMetrics>();
         var completedCount = 0;
         var totalProjects = csharpProjects.Count;
@@ -133,16 +133,23 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
             var currentIndex = Interlocked.Increment(ref completedCount);
             SolutionAnalyzerLog.AnalyzingProject(_logger, currentIndex, totalProjects, project.Name);
 
-            var metrics = await AnalyzeProjectWithCouplingAsync(project, compilationCache, dependencyCollector, ct);
+            var metrics = IsDiagnosticsAndReferencesMode
+                ? await AnalyzeProjectDiagnosticsAndReferencesAsync(project, compilationCache, ct)
+                : await AnalyzeProjectWithCouplingAsync(project, compilationCache, dependencyCollector!, ct);
             projectMetricsList.Add(metrics);
 
             SolutionAnalyzerLog.CompletedProject(_logger, project.Name, metrics.Types.Count, metrics.TotalMethods);
         });
 
-        // Build coupling analysis from streaming collector (already aggregated)
-        var collectorStats = dependencyCollector.GetStats();
-        SolutionAnalyzerLog.BuildingCouplingAnalysis(_logger, (int)collectorStats.UniqueEdgesCount);
-        var couplingAnalysis = _couplingAnalyzer.BuildCouplingAnalysisFromCollector(solution, dependencyCollector);
+        CouplingAnalysis? couplingAnalysis = null;
+        DependencyCollectorStats? collectorStats = null;
+        if (!IsDiagnosticsAndReferencesMode && dependencyCollector != null)
+        {
+            // Build coupling analysis from streaming collector (already aggregated)
+            collectorStats = dependencyCollector.GetStats();
+            SolutionAnalyzerLog.BuildingCouplingAnalysis(_logger, (int)collectorStats.UniqueEdgesCount);
+            couplingAnalysis = _couplingAnalyzer.BuildCouplingAnalysisFromCollector(solution, dependencyCollector);
+        }
 
         SolutionAnalyzerLog.AnalysisComplete(_logger, projectMetricsList.Count, projectMetricsList.Sum(p => p.Types.Count), projectMetricsList.Sum(p => p.TotalMethods));
 
@@ -203,10 +210,16 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
 
         // For single project, create an empty cache (compilation will be fetched on demand)
         var compilationCache = new System.Collections.Concurrent.ConcurrentDictionary<string, Compilation>();
-        var projectMetrics = await AnalyzeProjectAsync(project, compilationCache, cancellationToken);
+        var projectMetrics = IsDiagnosticsAndReferencesMode
+            ? await AnalyzeProjectDiagnosticsAndReferencesAsync(project, compilationCache, cancellationToken)
+            : await AnalyzeProjectAsync(project, compilationCache, cancellationToken);
 
-        SolutionAnalyzerLog.AnalyzingProjectCoupling(_logger);
-        var couplingAnalysis = await _couplingAnalyzer.AnalyzeProjectCouplingAsync(project, cancellationToken);
+        CouplingAnalysis? couplingAnalysis = null;
+        if (!IsDiagnosticsAndReferencesMode)
+        {
+            SolutionAnalyzerLog.AnalyzingProjectCoupling(_logger);
+            couplingAnalysis = await _couplingAnalyzer.AnalyzeProjectCouplingAsync(project, cancellationToken);
+        }
 
         // Collect git metadata for the analyzed project
         var gitMetadata = _gitService.GetGitMetadata(fullPath);
@@ -315,6 +328,7 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
 
         var typeMetricsList = typeMetricsBag.ToList();
         var packageReferences = ReadPackageReferences(project.FilePath);
+        var projectReferences = GetProjectReferenceNames(project);
 
         var projectMetrics = new ProjectMetrics(
             Name: project.Name,
@@ -322,7 +336,8 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
             Types: typeMetricsList)
         {
             Diagnostics = diagnosticSummary,
-            PackageReferences = packageReferences
+            PackageReferences = packageReferences,
+            ProjectReferences = projectReferences
         };
 
         return projectMetrics;
@@ -333,6 +348,50 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
         // For single project analysis, create a temporary collector that we don't use
         using var tempCollector = new InMemoryDependencyCollector();
         return await AnalyzeProjectWithCouplingAsync(project, compilationCache, tempCollector, cancellationToken);
+    }
+
+    private async Task<ProjectMetrics> AnalyzeProjectDiagnosticsAndReferencesAsync(
+        Project project,
+        System.Collections.Concurrent.ConcurrentDictionary<string, Compilation> compilationCache,
+        CancellationToken cancellationToken)
+    {
+        // Use cached compilation if available
+        if (!compilationCache.TryGetValue(project.Name, out var compilation))
+        {
+            SolutionAnalyzerLog.GettingCompilationForProject(_logger, project.Name);
+            compilation = await project.GetCompilationAsync(cancellationToken);
+            if (compilation == null)
+            {
+                _warnings.Add($"Could not get compilation for project: {project.Name}");
+                SolutionAnalyzerLog.CouldNotGetCompilation(_logger, project.Name);
+                return new ProjectMetrics(project.Name, project.FilePath ?? "", []);
+            }
+        }
+
+        var diagnosticSummary = CollectDiagnostics(compilation);
+        var packageReferences = ReadPackageReferences(project.FilePath);
+        var projectReferences = GetProjectReferenceNames(project);
+
+        return new ProjectMetrics(
+            Name: project.Name,
+            FilePath: project.FilePath ?? "",
+            Types: [])
+        {
+            Diagnostics = diagnosticSummary,
+            PackageReferences = packageReferences,
+            ProjectReferences = projectReferences
+        };
+    }
+
+    private static List<string> GetProjectReferenceNames(Project project)
+    {
+        return project.ProjectReferences
+            .Select(pr => project.Solution.GetProject(pr.ProjectId)?.Name)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Select(name => name!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     /// <summary>

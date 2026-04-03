@@ -128,7 +128,7 @@ You can analyze individual projects instead of entire solutions.
 structuralens analyze MyProject.sln --analysis-mode DiagnosticsAndReferences --format json --out report.json
 ```
 
-Runs a lightweight profile that skips complexity/maintainability calculations while keeping diagnostics and dependency/reference analysis.
+Runs a lightweight profile that skips complexity/maintainability calculations and code-level coupling traversal, while keeping diagnostics plus declared project/NuGet reference change analysis.
 
 ## Output Formats
 

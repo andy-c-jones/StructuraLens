@@ -520,8 +520,8 @@ public sealed class DiffReportRendererTests
                         LinesOfCode = 1000,
                         Warnings = 0
                     },
-                    AddedInternalDependencies = ["ProviderProject"],
-                    RemovedInternalDependencies = []
+                    AddedProjectReferences = ["ProviderProject"],
+                    RemovedProjectReferences = []
                 },
                 new ProjectDiff
                 {
@@ -546,8 +546,8 @@ public sealed class DiffReportRendererTests
                         LinesOfCode = 1000,
                         Warnings = 0
                     },
-                    AddedInternalDependencies = [],
-                    RemovedInternalDependencies = []
+                    AddedProjectReferences = [],
+                    RemovedProjectReferences = []
                 }
             ]
         };
@@ -556,7 +556,7 @@ public sealed class DiffReportRendererTests
         var markdown = renderer.RenderMarkdown(diff);
 
         // Assert
-        await Assert.That(markdown).Contains("### Internal Dependencies Changes");
+        await Assert.That(markdown).Contains("### Project References Changes");
         await Assert.That(markdown).Contains("ConsumerProject");
         await Assert.That(markdown).Contains("ProviderProject");
     }
@@ -626,7 +626,7 @@ public sealed class DiffReportRendererTests
         var markdown = renderer.RenderMarkdown(diff);
 
         // Assert - Should not have the section if no dependency changes
-        await Assert.That(markdown).DoesNotContain("### Internal Dependencies Changes");
+        await Assert.That(markdown).DoesNotContain("### Project References Changes");
     }
 
     [Test]
@@ -702,7 +702,7 @@ public sealed class DiffReportRendererTests
         var markdown = renderer.RenderMarkdown(diff);
 
         // Assert - Should not have the section since added/removed projects are excluded
-        await Assert.That(markdown).DoesNotContain("### Internal Dependencies Changes");
+        await Assert.That(markdown).DoesNotContain("### Project References Changes");
     }
 
     [Test]
@@ -762,8 +762,8 @@ public sealed class DiffReportRendererTests
                         LinesOfCode = 1200,
                         Warnings = 2
                     },
-                    AddedInternalDependencies = ["SharedProject"],
-                    RemovedInternalDependencies = []
+                    AddedProjectReferences = ["SharedProject"],
+                    RemovedProjectReferences = []
                 }
             ],
             Diagnostics = new DiagnosticDiffSummary
@@ -807,11 +807,11 @@ public sealed class DiffReportRendererTests
         // Assert - Verify all sections are present in the correct order
         var diagnosticsIndex = markdown.IndexOf("### Diagnostics");
         var newDiagnosticsIndex = markdown.IndexOf("### New Diagnostics");
-        var internalDependenciesIndex = markdown.IndexOf("### Internal Dependencies Changes");
+        var internalDependenciesIndex = markdown.IndexOf("### Project References Changes");
         var topChangesIndex = markdown.IndexOf("### Maintainability Changes");
         var metricsIndex = markdown.IndexOf("### Overall Metrics");
 
-        // Order should be: New Diagnostics -> Diagnostics -> Internal Dependencies -> Maintainability Changes -> Overall Metrics
+        // Order should be: New Diagnostics -> Diagnostics -> Project References -> Maintainability Changes -> Overall Metrics
         await Assert.That(newDiagnosticsIndex).IsGreaterThan(0);
         await Assert.That(diagnosticsIndex).IsGreaterThan(newDiagnosticsIndex);
         await Assert.That(internalDependenciesIndex).IsGreaterThan(diagnosticsIndex);
@@ -886,14 +886,14 @@ public sealed class DiffReportRendererTests
         var markdown = renderer.RenderMarkdown(diff);
 
         // Assert
-        await Assert.That(markdown).Contains("### External Dependencies Changes");
+        await Assert.That(markdown).Contains("### NuGet Dependencies Changes");
         await Assert.That(markdown).Contains("🔍 Added BCL Dependencies (2)");
         await Assert.That(markdown).Contains("`System.Text.Json`");
         await Assert.That(markdown).Contains("`Microsoft.Extensions.Logging`");
     }
 
     [Test]
-    public async Task RenderMarkdown_ExternalPackageDependenciesDecrease_ShowsSuccess()
+    public async Task RenderMarkdown_ExternalPackageDependenciesDecrease_OmitsNuGetSection()
     {
         // Arrange
         var renderer = new DiffReportRenderer();
@@ -958,12 +958,8 @@ public sealed class DiffReportRendererTests
         // Act
         var markdown = renderer.RenderMarkdown(diff);
 
-        // Assert
-        await Assert.That(markdown).Contains("### External Dependencies Changes");
-        await Assert.That(markdown).Contains("✅ Removed Third-Party Packages (3)");
-        await Assert.That(markdown).Contains("`Newtonsoft.Json`");
-        await Assert.That(markdown).Contains("`Dapper`");
-        await Assert.That(markdown).Contains("`Polly`");
+        // Assert - removal-only changes are intentionally omitted
+        await Assert.That(markdown).DoesNotContain("### NuGet Dependencies Changes");
     }
 
     [Test]
@@ -1033,7 +1029,7 @@ public sealed class DiffReportRendererTests
         var markdown = renderer.RenderMarkdown(diff);
 
         // Assert - Should not have the section if no external dependency changes
-        await Assert.That(markdown).DoesNotContain("### External Dependencies Changes");
+        await Assert.That(markdown).DoesNotContain("### NuGet Dependencies Changes");
     }
 
     [Test]
@@ -1107,8 +1103,8 @@ public sealed class DiffReportRendererTests
                     RemovedBclDependencies = [],
                     AddedPackageDependencies = ["Newtonsoft.Json"],
                     RemovedPackageDependencies = [],
-                    AddedInternalDependencies = ["SharedProject"],
-                    RemovedInternalDependencies = []
+                    AddedProjectReferences = ["SharedProject"],
+                    RemovedProjectReferences = []
                 }
             ]
         };
@@ -1117,8 +1113,8 @@ public sealed class DiffReportRendererTests
         var markdown = renderer.RenderMarkdown(diff);
 
         // Assert - Verify section ordering
-        var internalDepsIndex = markdown.IndexOf("### Internal Dependencies Changes");
-        var externalDepsIndex = markdown.IndexOf("### External Dependencies Changes");
+        var internalDepsIndex = markdown.IndexOf("### Project References Changes");
+        var externalDepsIndex = markdown.IndexOf("### NuGet Dependencies Changes");
         var maintainabilityIndex = markdown.IndexOf("### Maintainability Changes");
 
         await Assert.That(internalDepsIndex).IsGreaterThan(0);
@@ -1278,7 +1274,7 @@ public sealed class DiffReportRendererTests
         var markdown = renderer.RenderMarkdown(diff);
 
         // Assert - Should not have the section since added/removed projects are excluded
-        await Assert.That(markdown).DoesNotContain("### External Dependencies Changes");
+        await Assert.That(markdown).DoesNotContain("### NuGet Dependencies Changes");
     }
 
     private static AnalysisDiffReport CreateDiffReport(
