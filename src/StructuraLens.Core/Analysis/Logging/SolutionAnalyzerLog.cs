@@ -82,6 +82,18 @@ internal static partial class SolutionAnalyzerLog
     public static partial void AnalysisComplete(ILogger logger, int projectCount, int typeCount, int methodCount);
 
     [LoggerMessage(
+        EventId = 1014,
+        Level = LogLevel.Information,
+        Message = "Completed {projectName} (diagnostics-and-references mode)")]
+    public static partial void CompletedProjectLightweight(ILogger logger, string projectName);
+
+    [LoggerMessage(
+        EventId = 1015,
+        Level = LogLevel.Information,
+        Message = "Analysis complete (diagnostics-and-references mode). Total: {projectCount} projects")]
+    public static partial void AnalysisCompleteLightweight(ILogger logger, int projectCount);
+
+    [LoggerMessage(
         EventId = 1012,
         Level = LogLevel.Information,
         Message = "Analyzing project: {projectName}")]

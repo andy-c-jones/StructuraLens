@@ -32,6 +32,14 @@ public sealed class HtmlReportGenerator : IReportGenerator
     private const string SummaryTabActive = """<div class="tab active" data-tab="summary">Summary</div>""";
     private const string SummaryContentInactive = """<div id="summary" class="tab-content"></div>""";
     private const string SummaryContentActive = """<div id="summary" class="tab-content active"></div>""";
+    private const string CouplingTabToken = "{{COUPLING_TAB}}";
+    private const string GraphTabToken = "{{GRAPH_TAB}}";
+    private const string CouplingContentToken = "{{COUPLING_CONTENT}}";
+    private const string GraphContentToken = "{{GRAPH_CONTENT}}";
+    private const string CouplingTab = """<div class="tab" data-tab="coupling">Coupling</div>""";
+    private const string GraphTab = """<div class="tab" data-tab="graph">Graph</div>""";
+    private const string CouplingContent = """<div id="coupling" class="tab-content"></div>""";
+    private const string GraphContent = """<div id="graph" class="tab-content"></div>""";
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -117,6 +125,12 @@ public sealed class HtmlReportGenerator : IReportGenerator
         html = html.Replace("{{REPORT_DATA}}", EscapeForJsString(compactJson));
         html = html.Replace("{{DIAGNOSTICS_DATA}}", EscapeForJsString(diagnosticsJson));
         html = html.Replace("{{DIFF_DATA}}", EscapeForJsString(diffJson ?? "null"));
+
+        var hasComplexityMetrics = report.AnalysisMode == AnalysisMode.Full;
+        html = html.Replace(CouplingTabToken, hasComplexityMetrics ? CouplingTab : string.Empty);
+        html = html.Replace(GraphTabToken, hasComplexityMetrics ? GraphTab : string.Empty);
+        html = html.Replace(CouplingContentToken, hasComplexityMetrics ? CouplingContent : string.Empty);
+        html = html.Replace(GraphContentToken, hasComplexityMetrics ? GraphContent : string.Empty);
 
         // When there is no diff, remove the diff tab button and content,
         // and make the summary tab active instead.

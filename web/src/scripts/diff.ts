@@ -38,14 +38,6 @@ export function renderDiffTab(diffData: DiffReport | null): void {
       label: `Projects ${renderDeltaIndicator({ value: totals.projectsDelta })}` 
     },
     { 
-      value: totals.headTypes, 
-      label: `Types ${renderDeltaIndicator({ value: totals.typesDelta })}` 
-    },
-    { 
-      value: totals.headMethods, 
-      label: `Methods ${renderDeltaIndicator({ value: totals.methodsDelta })}` 
-    },
-    { 
       value: totals.headErrors, 
       label: `Errors ${renderDeltaIndicator({ value: totals.errorsDelta, inverseGood: true })}`,
       valueColor: totals.headErrors > 0 ? 'var(--error)' : 'var(--success)'
@@ -56,6 +48,21 @@ export function renderDiffTab(diffData: DiffReport | null): void {
       valueColor: totals.headWarnings > 0 ? 'var(--warning)' : 'var(--success)'
     }
   ];
+
+  if (hasComplexityMetrics) {
+    summaryCards.splice(
+      1,
+      0,
+      { 
+        value: totals.headTypes, 
+        label: `Types ${renderDeltaIndicator({ value: totals.typesDelta })}` 
+      },
+      { 
+        value: totals.headMethods, 
+        label: `Methods ${renderDeltaIndicator({ value: totals.methodsDelta })}` 
+      },
+    );
+  }
 
   if (hasComplexityMetrics) {
     summaryCards.splice(

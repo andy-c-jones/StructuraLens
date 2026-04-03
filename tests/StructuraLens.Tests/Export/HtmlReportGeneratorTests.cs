@@ -14,7 +14,8 @@ public class HtmlReportGeneratorTests
         string solutionPath = "TestSolution.sln",
         DateTime? analyzedAt = null,
         GitRepositoryInfo? gitInfo = null,
-        DiagnosticSummary? diagnostics = null)
+        DiagnosticSummary? diagnostics = null,
+        AnalysisMode analysisMode = AnalysisMode.Full)
     {
         var method = new MethodMetrics(
             FullName: "TestProject.TestClass.TestMethod()",
@@ -45,7 +46,8 @@ public class HtmlReportGeneratorTests
             AnalyzedAt: analyzedAt ?? new DateTime(2025, 6, 15, 14, 30, 0, DateTimeKind.Utc),
             Projects: [project],
             Warnings: [],
-            ToolVersion: "test")
+            ToolVersion: "test",
+            AnalysisMode: analysisMode)
         {
             GitInfo = gitInfo,
         };
@@ -521,6 +523,23 @@ public class HtmlReportGeneratorTests
         await Assert.That(html).Contains("""data-tab="coupling">Coupling</div>""");
         await Assert.That(html).Contains("""data-tab="graph">Graph</div>""");
         await Assert.That(html).Contains("""data-tab="diagnostics">Diagnostics</div>""");
+    }
+
+    [Test]
+    public async Task GenerateHtml_LightweightMode_HidesCouplingAndGraphTabs()
+    {
+        // Arrange
+        var generator = CreateGenerator();
+        var report = CreateMinimalReport(analysisMode: AnalysisMode.DiagnosticsAndReferences);
+
+        // Act
+        var html = generator.GenerateHtml(report);
+
+        // Assert
+        await Assert.That(html).DoesNotContain("""data-tab="coupling">Coupling</div>""");
+        await Assert.That(html).DoesNotContain("""data-tab="graph">Graph</div>""");
+        await Assert.That(html).DoesNotContain("""id="coupling" class="tab-content" """);
+        await Assert.That(html).DoesNotContain("""id="graph" class="tab-content" """);
     }
 
     // ---------------------------------------------------------------

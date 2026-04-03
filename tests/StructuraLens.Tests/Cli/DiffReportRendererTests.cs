@@ -229,8 +229,12 @@ public sealed class DiffReportRendererTests
             baseMaintainability: 80.0,
             headMaintainability: 70.0,
             baseComplexity: 100,
-            headComplexity: 180)
-            with { HasComplexityMetrics = false };
+            headComplexity: 180);
+        diff = diff with
+        {
+            HasComplexityMetrics = false,
+            Head = diff.Head with { AnalysisMode = AnalysisMode.DiagnosticsAndReferences }
+        };
 
         // Act
         var markdown = renderer.RenderMarkdown(diff);
@@ -240,6 +244,9 @@ public sealed class DiffReportRendererTests
         await Assert.That(markdown).DoesNotContain("| Cyclomatic Complexity |");
         await Assert.That(markdown).DoesNotContain("| Lines of Code |");
         await Assert.That(markdown).DoesNotContain("| Avg Maintainability |");
+        await Assert.That(markdown).DoesNotContain("| Types |");
+        await Assert.That(markdown).DoesNotContain("| Methods |");
+        await Assert.That(markdown).Contains("Analysis mode: `DiagnosticsAndReferences`");
     }
 
     [Test]
