@@ -182,6 +182,11 @@ public class SolutionAnalyzerIntegrationTests
         await Assert.That(report.AnalysisMode).IsEqualTo(AnalysisMode.DiagnosticsAndReferences);
         await Assert.That(report.TotalCyclomaticComplexity).IsEqualTo(0);
         await Assert.That(report.TotalLinesOfExecutableCode).IsEqualTo(0);
+        await Assert.That(report.CouplingAnalysis).IsNull();
+        await Assert.That(report.AggregationStats).IsNull();
+        await Assert.That(report.Projects.All(p => p.Types.Count == 0)).IsTrue();
+        await Assert.That(report.Projects.Any(p => p.PackageReferences.Count > 0)).IsTrue();
+        await Assert.That(report.Projects.Any(p => p.ProjectReferences.Count > 0)).IsTrue();
     }
 
     [Test]
@@ -351,6 +356,23 @@ public class SolutionAnalyzerIntegrationTests
         await Assert.That(testsProject).IsNotNull();
         await Assert.That(testsProject!.PackageReferences).Contains("FakeItEasy");
         await Assert.That(testsProject.PackageReferences).Contains("TUnit");
+    }
+
+    [Test]
+    public async Task AnalyzeSolutionAsync_OwnSolution_PopulatesProjectReferences()
+    {
+        var solutionPath = GetSolutionPath();
+        var analyzer = CreateAnalyzer();
+        var report = await analyzer.AnalyzeSolutionAsync(solutionPath);
+
+        var cliProject = report.Projects.FirstOrDefault(p => p.Name == "StructuraLens.Cli");
+        await Assert.That(cliProject).IsNotNull();
+        await Assert.That(cliProject!.ProjectReferences).Contains("StructuraLens.Core");
+
+        var testsProject = report.Projects.FirstOrDefault(p => p.Name == "StructuraLens.Tests");
+        await Assert.That(testsProject).IsNotNull();
+        await Assert.That(testsProject!.ProjectReferences).Contains("StructuraLens.Core");
+        await Assert.That(testsProject.ProjectReferences).Contains("StructuraLens.Cli");
     }
 
     [Test]

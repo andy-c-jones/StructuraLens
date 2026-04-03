@@ -46,10 +46,10 @@ public sealed class DiffReportRenderer
         sb.AppendLine(BuildRow("Hidden", diff.Totals.BaseHidden, diff.Totals.HeadHidden, diff.Totals.HiddenDelta));
         sb.AppendLine();
 
-        // Section 3: Internal Dependencies Changes
-        RenderInternalDependenciesChanges(diff, sb, maxProjects);
+        // Section 3: Project References Changes
+        RenderProjectReferencesChanges(diff, sb, maxProjects);
 
-        // Section 4: External Dependencies Changes
+        // Section 4: NuGet Dependencies Changes
         RenderExternalDependenciesChanges(diff, sb, maxProjects);
 
         // Section 5: Maintainability Changes (per-project breakdown - only projects with changes)
@@ -200,19 +200,19 @@ public sealed class DiffReportRenderer
         }
     }
 
-    private static void RenderInternalDependenciesChanges(AnalysisDiffReport diff, StringBuilder sb, int maxProjects)
+    private static void RenderProjectReferencesChanges(AnalysisDiffReport diff, StringBuilder sb, int maxProjects)
     {
-        // Find projects with internal dependency changes
+        // Find projects with declared project reference changes
         var projectsWithDependencyChanges = diff.Projects
             .Where(p => !p.IsAdded && !p.IsRemoved)
-            .Where(p => p.AddedInternalDependencies.Count > 0 || p.RemovedInternalDependencies.Count > 0)
-            .OrderByDescending(p => p.AddedInternalDependencies.Count + p.RemovedInternalDependencies.Count)
+            .Where(p => p.AddedProjectReferences.Count > 0)
+            .OrderByDescending(p => p.AddedProjectReferences.Count)
             .Take(maxProjects)
             .ToList();
 
         if (projectsWithDependencyChanges.Count > 0)
         {
-            sb.AppendLine("### Internal Dependencies Changes");
+            sb.AppendLine("### Project References Changes");
             sb.AppendLine();
 
             foreach (var project in projectsWithDependencyChanges)
@@ -220,11 +220,11 @@ public sealed class DiffReportRenderer
                 sb.AppendLine($"#### {Escape(project.Name)}");
                 sb.AppendLine();
 
-                // Show added internal dependencies
-                if (project.AddedInternalDependencies.Count > 0)
+                // Show added project references
+                if (project.AddedProjectReferences.Count > 0)
                 {
-                    sb.AppendLine($"**🔍 Added Internal Dependencies ({project.AddedInternalDependencies.Count}):**");
-                    foreach (var dep in project.AddedInternalDependencies)
+                    sb.AppendLine($"**🔍 Added Project References ({project.AddedProjectReferences.Count}):**");
+                    foreach (var dep in project.AddedProjectReferences)
                     {
                         var isNewToSolution = diff.NewToSolution.Contains(dep);
                         var marker = isNewToSolution ? " 🆕 (new to solution)" : "";
@@ -233,18 +233,6 @@ public sealed class DiffReportRenderer
                     sb.AppendLine();
                 }
 
-                // Show removed internal dependencies
-                if (project.RemovedInternalDependencies.Count > 0)
-                {
-                    sb.AppendLine($"**✅ Removed Internal Dependencies ({project.RemovedInternalDependencies.Count}):**");
-                    foreach (var dep in project.RemovedInternalDependencies)
-                    {
-                        var isRemovedFromSolution = diff.RemovedFromSolution.Contains(dep);
-                        var marker = isRemovedFromSolution ? " 🗑️ (removed from solution)" : "";
-                        sb.AppendLine($"- `{dep}`{marker}");
-                    }
-                    sb.AppendLine();
-                }
             }
         }
     }
@@ -254,14 +242,14 @@ public sealed class DiffReportRenderer
         // Find projects with external dependency changes
         var projectsWithExternalChanges = diff.Projects
             .Where(p => !p.IsAdded && !p.IsRemoved)
-            .Where(p => p.ExternalBclDependenciesDelta != 0 || p.ExternalPackageDependenciesDelta != 0)
+            .Where(p => p.AddedBclDependencies.Count > 0 || p.AddedPackageDependencies.Count > 0)
             .OrderByDescending(p => Math.Abs(p.ExternalDependenciesDelta))
             .Take(maxProjects)
             .ToList();
 
         if (projectsWithExternalChanges.Count > 0)
         {
-            sb.AppendLine("### External Dependencies Changes");
+            sb.AppendLine("### NuGet Dependencies Changes");
             sb.AppendLine();
 
             foreach (var project in projectsWithExternalChanges)
@@ -282,19 +270,6 @@ public sealed class DiffReportRenderer
                     sb.AppendLine();
                 }
 
-                // Show removed BCL dependencies
-                if (project.RemovedBclDependencies.Count > 0)
-                {
-                    sb.AppendLine($"**✅ Removed BCL Dependencies ({project.RemovedBclDependencies.Count}):**");
-                    foreach (var dep in project.RemovedBclDependencies)
-                    {
-                        var isRemovedFromSolution = diff.RemovedFromSolution.Contains(dep);
-                        var marker = isRemovedFromSolution ? " 🗑️ (removed from solution)" : "";
-                        sb.AppendLine($"- `{dep}`{marker}");
-                    }
-                    sb.AppendLine();
-                }
-
                 // Show added packages
                 if (project.AddedPackageDependencies.Count > 0)
                 {
@@ -308,18 +283,6 @@ public sealed class DiffReportRenderer
                     sb.AppendLine();
                 }
 
-                // Show removed packages
-                if (project.RemovedPackageDependencies.Count > 0)
-                {
-                    sb.AppendLine($"**✅ Removed Third-Party Packages ({project.RemovedPackageDependencies.Count}):**");
-                    foreach (var dep in project.RemovedPackageDependencies)
-                    {
-                        var isRemovedFromSolution = diff.RemovedFromSolution.Contains(dep);
-                        var marker = isRemovedFromSolution ? " 🗑️ (removed from solution)" : "";
-                        sb.AppendLine($"- `{dep}`{marker}");
-                    }
-                    sb.AppendLine();
-                }
             }
         }
     }

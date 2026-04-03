@@ -60,6 +60,9 @@ public record ProjectMetrics(
     /// <summary>Top-level NuGet package references declared in the project file.</summary>
     public IReadOnlyList<string> PackageReferences { get; init; } = [];
 
+    /// <summary>Declared project references (by project name) from the project file.</summary>
+    public IReadOnlyList<string> ProjectReferences { get; init; } = [];
+
     /// <summary>
     /// Groups types by namespace for hierarchical reporting.
     /// </summary>
