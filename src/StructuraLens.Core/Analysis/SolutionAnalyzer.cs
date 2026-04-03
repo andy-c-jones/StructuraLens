@@ -23,6 +23,7 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
     private readonly IFileSystemService _fileSystem;
     private readonly IGitRepositoryService _gitService;
     private readonly AnalysisOptions _options;
+    private bool IsDiagnosticsAndReferencesMode => _options.AnalysisMode == AnalysisMode.DiagnosticsAndReferences;
 
     public SolutionAnalyzer(
         ILogger<SolutionAnalyzer> logger,
@@ -162,7 +163,8 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
             AnalyzedAt: DateTime.UtcNow,
             Projects: projectMetricsList.ToList(),
             Warnings: _warnings.ToList(),
-            ToolVersion: _options.ToolVersion)
+            ToolVersion: _options.ToolVersion,
+            AnalysisMode: _options.AnalysisMode)
         {
             CouplingAnalysis = couplingAnalysis,
             AggregationStats = collectorStats,
@@ -223,7 +225,8 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
             AnalyzedAt: DateTime.UtcNow,
             Projects: [projectMetrics],
             Warnings: _warnings.ToList(),
-            ToolVersion: _options.ToolVersion)
+            ToolVersion: _options.ToolVersion,
+            AnalysisMode: _options.AnalysisMode)
         {
             CouplingAnalysis = couplingAnalysis,
             GitInfo = gitInfo
@@ -438,11 +441,10 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
         var firstStatement = topLevelStatements.First();
         var lastStatement = topLevelStatements.Last();
 
-        var metrics = _metricsCalculator.CalculateUnifiedMetrics(root);
-        var cc = metrics.CyclomaticComplexity;
-        var loc = metrics.LinesOfCode;
-        var halsteadVolume = metrics.HalsteadVolume;
-        var mi = metrics.MaintainabilityIndex;
+        var (cc, loc, halsteadVolume, mi) = CalculateCodeMetrics(
+            root,
+            hasBody: topLevelStatements.Count > 0,
+            expressionBodiedFallbackLoc: 1);
 
         var startLine = firstStatement.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
         var endLine = lastStatement.GetLocation().GetLineSpan().EndLinePosition.Line + 1;
@@ -480,24 +482,10 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
         var methodSymbol = semanticModel.GetDeclaredSymbol(method);
         var fullName = methodSymbol?.ToDisplayString() ?? method.Identifier.Text;
 
-        int cc, loc;
-        double halsteadVolume, mi;
-
-        if (method.Body != null || method.ExpressionBody != null)
-        {
-            var metrics = _metricsCalculator.CalculateUnifiedMetrics(method);
-            cc = metrics.CyclomaticComplexity;
-            loc = method.Body != null ? metrics.LinesOfCode : 1;
-            halsteadVolume = metrics.HalsteadVolume;
-            mi = metrics.MaintainabilityIndex;
-        }
-        else
-        {
-            cc = 1;
-            loc = 0;
-            halsteadVolume = 0;
-            mi = 100.0;
-        }
+        var (cc, loc, halsteadVolume, mi) = CalculateCodeMetrics(
+            method,
+            hasBody: method.Body != null || method.ExpressionBody != null,
+            expressionBodiedFallbackLoc: method.Body != null ? 0 : 1);
 
         var lineSpan = method.GetLocation().GetLineSpan();
 
@@ -517,24 +505,10 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
         var ctorSymbol = semanticModel.GetDeclaredSymbol(ctor);
         var fullName = ctorSymbol?.ToDisplayString() ?? $"{typeDecl.Identifier.Text}.ctor";
 
-        int cc, loc;
-        double halsteadVolume, mi;
-
-        if (ctor.Body != null || ctor.ExpressionBody != null)
-        {
-            var metrics = _metricsCalculator.CalculateUnifiedMetrics(ctor);
-            cc = metrics.CyclomaticComplexity;
-            loc = ctor.Body != null ? metrics.LinesOfCode : 1;
-            halsteadVolume = metrics.HalsteadVolume;
-            mi = metrics.MaintainabilityIndex;
-        }
-        else
-        {
-            cc = 1;
-            loc = 0;
-            halsteadVolume = 0;
-            mi = 100.0;
-        }
+        var (cc, loc, halsteadVolume, mi) = CalculateCodeMetrics(
+            ctor,
+            hasBody: ctor.Body != null || ctor.ExpressionBody != null,
+            expressionBodiedFallbackLoc: ctor.Body != null ? 0 : 1);
 
         var lineSpan = ctor.GetLocation().GetLineSpan();
 
@@ -553,24 +527,10 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
     {
         var fullName = $"<Program>$.{localFunc.Identifier.Text}()";
 
-        int cc, loc;
-        double halsteadVolume, mi;
-
-        if (localFunc.Body != null || localFunc.ExpressionBody != null)
-        {
-            var metrics = _metricsCalculator.CalculateUnifiedMetrics(localFunc);
-            cc = metrics.CyclomaticComplexity;
-            loc = localFunc.Body != null ? metrics.LinesOfCode : 1;
-            halsteadVolume = metrics.HalsteadVolume;
-            mi = metrics.MaintainabilityIndex;
-        }
-        else
-        {
-            cc = 1;
-            loc = 0;
-            halsteadVolume = 0;
-            mi = 100.0;
-        }
+        var (cc, loc, halsteadVolume, mi) = CalculateCodeMetrics(
+            localFunc,
+            hasBody: localFunc.Body != null || localFunc.ExpressionBody != null,
+            expressionBodiedFallbackLoc: localFunc.Body != null ? 0 : 1);
 
         var lineSpan = localFunc.GetLocation().GetLineSpan();
 
@@ -583,6 +543,31 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
             LinesOfExecutableCode: loc,
             HalsteadVolume: halsteadVolume,
             MaintainabilityIndex: mi);
+    }
+
+    private (int CyclomaticComplexity, int LinesOfCode, double HalsteadVolume, double MaintainabilityIndex) CalculateCodeMetrics(
+        SyntaxNode node,
+        bool hasBody,
+        int expressionBodiedFallbackLoc)
+    {
+        if (IsDiagnosticsAndReferencesMode)
+        {
+            // Lightweight mode intentionally avoids unified metrics traversal.
+            return (0, 0, 0, 0);
+        }
+
+        if (!hasBody)
+        {
+            return (1, 0, 0, 100.0);
+        }
+
+        var metrics = _metricsCalculator.CalculateUnifiedMetrics(node);
+        var loc = metrics.LinesOfCode > 0 ? metrics.LinesOfCode : expressionBodiedFallbackLoc;
+        return (
+            metrics.CyclomaticComplexity,
+            loc,
+            metrics.HalsteadVolume,
+            metrics.MaintainabilityIndex);
     }
 
 }

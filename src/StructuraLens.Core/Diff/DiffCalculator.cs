@@ -6,6 +6,10 @@ public sealed class DiffCalculator
 {
     public AnalysisDiffReport Compare(AnalysisReport baseReport, AnalysisReport headReport)
     {
+        var hasComplexityMetrics =
+            baseReport.AnalysisMode != AnalysisMode.DiagnosticsAndReferences &&
+            headReport.AnalysisMode != AnalysisMode.DiagnosticsAndReferences;
+
         var baseProjects = baseReport.Projects.ToDictionary(p => p.Name, StringComparer.OrdinalIgnoreCase);
         var headProjects = headReport.Projects.ToDictionary(p => p.Name, StringComparer.OrdinalIgnoreCase);
 
@@ -80,6 +84,7 @@ public sealed class DiffCalculator
                 CommitSha = headReport.GitInfo?.CommitSha,
                 BranchName = headReport.GitInfo?.BranchName
             },
+            HasComplexityMetrics = hasComplexityMetrics,
             Totals = new DiffTotals
             {
                 BaseProjects = baseTotals.Projects,

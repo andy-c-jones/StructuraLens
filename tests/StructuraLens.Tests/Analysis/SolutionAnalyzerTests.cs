@@ -2,12 +2,13 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using StructuraLens.Core.Analysis;
 using StructuraLens.Core.Infrastructure;
+using StructuraLens.Core.Models;
 
 namespace StructuraLens.Tests.Analysis;
 
 public class SolutionAnalyzerTests
 {
-    private static SolutionAnalyzer CreateAnalyzer()
+    private static SolutionAnalyzer CreateAnalyzer(AnalysisOptions? options = null)
     {
         // Create real dependencies for integration tests
         var logger = new NullLogger<SolutionAnalyzer>();
@@ -26,7 +27,8 @@ public class SolutionAnalyzerTests
             couplingAnalyzer,
             metricsCalculator,
             fileSystem,
-            gitService);
+            gitService,
+            options);
     }
 
     [Test]
@@ -92,7 +94,7 @@ public class SolutionAnalyzerTests
 /// </summary>
 public class SolutionAnalyzerIntegrationTests
 {
-    private static SolutionAnalyzer CreateAnalyzer()
+    private static SolutionAnalyzer CreateAnalyzer(AnalysisOptions? options = null)
     {
         // Create real dependencies for integration tests
         var logger = new NullLogger<SolutionAnalyzer>();
@@ -111,7 +113,8 @@ public class SolutionAnalyzerIntegrationTests
             couplingAnalyzer,
             metricsCalculator,
             fileSystem,
-            gitService);
+            gitService,
+            options);
     }
 
     private static string GetSolutionPath()
@@ -164,6 +167,21 @@ public class SolutionAnalyzerIntegrationTests
         await Assert.That(report.TotalMethods).IsGreaterThan(0);
         await Assert.That(report.TotalCyclomaticComplexity).IsGreaterThan(0);
         await Assert.That(report.TotalLinesOfExecutableCode).IsGreaterThan(0);
+    }
+
+    [Test]
+    public async Task AnalyzeSolutionAsync_OwnSolution_DiagnosticsAndReferencesMode_SkipsComplexityMetrics()
+    {
+        var solutionPath = GetSolutionPath();
+        var analyzer = CreateAnalyzer(new AnalysisOptions
+        {
+            AnalysisMode = AnalysisMode.DiagnosticsAndReferences
+        });
+        var report = await analyzer.AnalyzeSolutionAsync(solutionPath);
+
+        await Assert.That(report.AnalysisMode).IsEqualTo(AnalysisMode.DiagnosticsAndReferences);
+        await Assert.That(report.TotalCyclomaticComplexity).IsEqualTo(0);
+        await Assert.That(report.TotalLinesOfExecutableCode).IsEqualTo(0);
     }
 
     [Test]

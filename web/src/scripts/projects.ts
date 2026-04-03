@@ -11,12 +11,15 @@ import { renderTreeNode, type TreeMetric } from "./componentRenderers";
 // ---------- Tree rendering helpers ----------
 
 function renderMethodNode(method: CompactMethod): string {
-  const metrics: TreeMetric[] = [
-    { label: 'Cyclomatic Complexity', value: method.cc },
-    { label: 'Lines of Code', value: method.loc },
-    { label: 'Maintainability Index', value: method.mi },
-    { label: 'Lines', value: `${method.sl}-${method.el}` }
-  ];
+  const metrics: TreeMetric[] = [{ label: 'Lines', value: `${method.sl}-${method.el}` }];
+
+  if (method.cc > 0 || method.loc > 0 || method.mi > 0) {
+    metrics.unshift(
+      { label: 'Cyclomatic Complexity', value: method.cc },
+      { label: 'Lines of Code', value: method.loc },
+      { label: 'Maintainability Index', value: method.mi },
+    );
+  }
 
   return renderTreeNode({
     id: `m-${method.n}`,
@@ -35,11 +38,15 @@ function renderTypeNode(type: CompactType, parentId: string): string {
 
   const metrics: TreeMetric[] = [
     { label: 'Methods', value: hasMethods ? type.m!.length : 0 },
-    { label: 'Cyclomatic Complexity', value: type.cc },
-    { label: 'Lines of Code', value: type.loc.toLocaleString() },
-    { label: 'Maintainability Index', value: type.mi },
-    { label: 'Depth of Inheritance', value: type.dit }
+    { label: 'Depth of Inheritance', value: type.dit },
   ];
+
+  if (type.cc > 0 || type.loc > 0 || type.mi > 0) {
+    metrics.splice(1, 0,
+      { label: 'Cyclomatic Complexity', value: type.cc },
+      { label: 'Lines of Code', value: type.loc.toLocaleString() },
+      { label: 'Maintainability Index', value: type.mi });
+  }
 
   const children = hasMethods
     ? type.m!.map((m) => renderMethodNode(m)).join('')
@@ -66,10 +73,15 @@ function renderNamespaceNode(
   const metrics: TreeMetric[] = [
     { label: 'Types', value: namespace.tc },
     { label: 'Methods', value: namespace.mc },
-    { label: 'Cyclomatic Complexity', value: namespace.cc },
-    { label: 'Lines of Code', value: namespace.loc.toLocaleString() },
-    { label: 'Maintainability Index', value: namespace.mi }
   ];
+
+  if (namespace.cc > 0 || namespace.loc > 0 || namespace.mi > 0) {
+    metrics.push(
+      { label: 'Cyclomatic Complexity', value: namespace.cc },
+      { label: 'Lines of Code', value: namespace.loc.toLocaleString() },
+      { label: 'Maintainability Index', value: namespace.mi },
+    );
+  }
 
   const children = hasTypes
     ? namespace.types!.map((t) => renderTypeNode(t, nodeId)).join('')
@@ -94,10 +106,15 @@ function renderProjectNode(project: CompactProject): string {
   const metrics: TreeMetric[] = [
     { label: 'Types', value: project.tc },
     { label: 'Methods', value: project.mc },
-    { label: 'Cyclomatic Complexity', value: project.cc },
-    { label: 'Lines of Code', value: project.loc.toLocaleString() },
-    { label: 'Maintainability Index', value: project.mi }
   ];
+
+  if (project.cc > 0 || project.loc > 0 || project.mi > 0) {
+    metrics.push(
+      { label: 'Cyclomatic Complexity', value: project.cc },
+      { label: 'Lines of Code', value: project.loc.toLocaleString() },
+      { label: 'Maintainability Index', value: project.mi },
+    );
+  }
 
   const children = hasChildren
     ? [
@@ -193,12 +210,13 @@ function updateProjectsTree(reportData: CompactReport): void {
 
 function updateProjectsTable(reportData: CompactReport): void {
   const projects = getFilteredProjects(reportData);
+  const hasComplexityMetrics = reportData.hasCm !== false;
   const tableEl = document.getElementById("projectsTable");
   if (!tableEl) return;
 
   tableEl.innerHTML = `
     <table>
-      <thead><tr><th>Project</th><th>Types</th><th>Methods</th><th>Cyclomatic Complexity</th><th>Lines of Code</th><th>Max Depth of Inheritance</th><th>Maintainability Index</th><th>Internal Deps</th><th>Internal Dependents</th><th>Dependency Ratio</th></tr></thead>
+      <thead><tr><th>Project</th><th>Types</th><th>Methods</th>${hasComplexityMetrics ? '<th>Cyclomatic Complexity</th><th>Lines of Code</th>' : ''}<th>Max Depth of Inheritance</th>${hasComplexityMetrics ? '<th>Maintainability Index</th>' : ''}<th>Internal Deps</th><th>Internal Dependents</th><th>Dependency Ratio</th></tr></thead>
       <tbody>${projects
         .map(
           (p) => `
@@ -206,10 +224,9 @@ function updateProjectsTable(reportData: CompactReport): void {
           <td><strong>${p.n}</strong></td>
           <td>${p.tc}</td>
           <td>${p.mc}</td>
-          <td>${p.cc}</td>
-          <td>${p.loc.toLocaleString()}</td>
+          ${hasComplexityMetrics ? `<td>${p.cc}</td><td>${p.loc.toLocaleString()}</td>` : ''}
           <td>${p.dit}</td>
-          <td>${p.mi}</td>
+          ${hasComplexityMetrics ? `<td>${p.mi}</td>` : ''}
           <td>${p.id}</td>
           <td>${p.idx}</td>
           <td>${p.dr.toFixed(2)}</td>

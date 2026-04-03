@@ -53,7 +53,10 @@ public sealed class DiffReportRenderer
         RenderExternalDependenciesChanges(diff, sb, maxProjects);
 
         // Section 5: Maintainability Changes (per-project breakdown - only projects with changes)
-        RenderMaintainabilityChanges(diff, sb);
+        if (diff.HasComplexityMetrics)
+        {
+            RenderMaintainabilityChanges(diff, sb);
+        }
 
         // Section 6: Overall Metrics (overall statistics)
         sb.AppendLine("### Overall Metrics");
@@ -64,32 +67,35 @@ public sealed class DiffReportRenderer
         sb.AppendLine(BuildRow("Types", diff.Totals.BaseTypes, diff.Totals.HeadTypes, diff.Totals.TypesDelta));
         sb.AppendLine(BuildRow("Methods", diff.Totals.BaseMethods, diff.Totals.HeadMethods, diff.Totals.MethodsDelta));
 
-        // Highlight significant complexity increases
-        var complexityDelta = diff.Totals.CyclomaticComplexityDelta;
-        var complexityPercent = diff.Totals.BaseCyclomaticComplexity > 0
-            ? (double)complexityDelta / diff.Totals.BaseCyclomaticComplexity
-            : 0;
-        var isSignificantComplexity = complexityDelta > SignificantComplexityAbsolute
-            || complexityPercent > SignificantComplexityPercent;
-        sb.AppendLine(BuildRow("Cyclomatic Complexity",
-            diff.Totals.BaseCyclomaticComplexity,
-            diff.Totals.HeadCyclomaticComplexity,
-            diff.Totals.CyclomaticComplexityDelta,
-            isSignificantComplexity ? DeltaSemantic.BadIncrease : DeltaSemantic.Neutral));
+        if (diff.HasComplexityMetrics)
+        {
+            // Highlight significant complexity increases
+            var complexityDelta = diff.Totals.CyclomaticComplexityDelta;
+            var complexityPercent = diff.Totals.BaseCyclomaticComplexity > 0
+                ? (double)complexityDelta / diff.Totals.BaseCyclomaticComplexity
+                : 0;
+            var isSignificantComplexity = complexityDelta > SignificantComplexityAbsolute
+                || complexityPercent > SignificantComplexityPercent;
+            sb.AppendLine(BuildRow("Cyclomatic Complexity",
+                diff.Totals.BaseCyclomaticComplexity,
+                diff.Totals.HeadCyclomaticComplexity,
+                diff.Totals.CyclomaticComplexityDelta,
+                isSignificantComplexity ? DeltaSemantic.BadIncrease : DeltaSemantic.Neutral));
 
-        sb.AppendLine(BuildRow("Lines of Code", diff.Totals.BaseLinesOfCode, diff.Totals.HeadLinesOfCode, diff.Totals.LinesOfCodeDelta));
+            sb.AppendLine(BuildRow("Lines of Code", diff.Totals.BaseLinesOfCode, diff.Totals.HeadLinesOfCode, diff.Totals.LinesOfCodeDelta));
 
-        // Highlight significant maintainability drops
-        var miDelta = diff.Totals.AvgMaintainabilityDelta;
-        var miSemantic = miDelta <= SevereMaintainabilityDrop ? DeltaSemantic.SevereDecrease
-            : miDelta <= ModerateMaintainabilityDrop ? DeltaSemantic.ModerateDecrease
-            : miDelta > 0 ? DeltaSemantic.GoodIncrease
-            : DeltaSemantic.Neutral;
-        sb.AppendLine(BuildRow("Avg Maintainability",
-            diff.Totals.BaseAvgMaintainabilityIndex,
-            diff.Totals.HeadAvgMaintainabilityIndex,
-            diff.Totals.AvgMaintainabilityDelta,
-            miSemantic));
+            // Highlight significant maintainability drops
+            var miDelta = diff.Totals.AvgMaintainabilityDelta;
+            var miSemantic = miDelta <= SevereMaintainabilityDrop ? DeltaSemantic.SevereDecrease
+                : miDelta <= ModerateMaintainabilityDrop ? DeltaSemantic.ModerateDecrease
+                : miDelta > 0 ? DeltaSemantic.GoodIncrease
+                : DeltaSemantic.Neutral;
+            sb.AppendLine(BuildRow("Avg Maintainability",
+                diff.Totals.BaseAvgMaintainabilityIndex,
+                diff.Totals.HeadAvgMaintainabilityIndex,
+                diff.Totals.AvgMaintainabilityDelta,
+                miSemantic));
+        }
         sb.AppendLine();
 
         return sb.ToString();

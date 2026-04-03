@@ -209,6 +209,19 @@ public class MetricsTests
     }
 
     [Test]
+    public async Task AnalysisReport_AnalysisMode_DefaultsToFull()
+    {
+        var report = new AnalysisReport(
+            SolutionPath: "/solution.sln",
+            AnalyzedAt: DateTime.UtcNow,
+            Projects: [],
+            Warnings: [],
+            ToolVersion: "test");
+
+        await Assert.That(report.AnalysisMode).IsEqualTo(AnalysisMode.Full);
+    }
+
+    [Test]
     public async Task TypeMetrics_Namespace_ExtractsCorrectly_WithFullyQualifiedName()
     {
         var typeMetrics = new TypeMetrics(

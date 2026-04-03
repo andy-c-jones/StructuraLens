@@ -518,6 +518,7 @@ let graphRendered = false;
 export function initGraphTab(reportData: CompactReport): void {
   const el = document.getElementById("graph");
   if (!el) return;
+  const hasComplexityMetrics = reportData.hasCm !== false;
 
   el.innerHTML = `
     <div class="filter-bar">
@@ -534,9 +535,9 @@ export function initGraphTab(reportData: CompactReport): void {
         <option value="external-deps">External Dependencies (Total)</option>
         <option value="bcl-deps" data-project-only="true">BCL Dependencies (System/Microsoft)</option>
         <option value="package-deps" data-project-only="true">Package Dependencies (Third-party)</option>
-        <option value="complexity">Cyclomatic Complexity</option>
-        <option value="loc">Lines of Code</option>
-        <option value="maintainability">Maintainability Index</option>
+        ${hasComplexityMetrics ? '<option value="complexity">Cyclomatic Complexity</option>' : ''}
+        ${hasComplexityMetrics ? '<option value="loc">Lines of Code</option>' : ''}
+        ${hasComplexityMetrics ? '<option value="maintainability">Maintainability Index</option>' : ''}
       </select>
       <label>Size by:</label>
       <select id="sizeMetric">
@@ -546,9 +547,9 @@ export function initGraphTab(reportData: CompactReport): void {
         <option value="external-deps">External Dependencies (Total)</option>
         <option value="bcl-deps" data-project-only="true">BCL Dependencies (System/Microsoft)</option>
         <option value="package-deps" data-project-only="true">Package Dependencies (Third-party)</option>
-        <option value="complexity">Cyclomatic Complexity</option>
-        <option value="loc">Lines of Code</option>
-        <option value="maintainability">Maintainability Index</option>
+        ${hasComplexityMetrics ? '<option value="complexity">Cyclomatic Complexity</option>' : ''}
+        ${hasComplexityMetrics ? '<option value="loc">Lines of Code</option>' : ''}
+        ${hasComplexityMetrics ? '<option value="maintainability">Maintainability Index</option>' : ''}
       </select>
     </div>
     <div id="graphContainer" class="graph-container graph-fullpage"></div>
