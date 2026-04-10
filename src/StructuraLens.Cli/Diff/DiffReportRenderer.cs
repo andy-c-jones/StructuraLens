@@ -21,10 +21,7 @@ public sealed class DiffReportRenderer
         sb.AppendLine($"Analysis mode: `{diff.Head.AnalysisMode}`");
         sb.AppendLine();
 
-        // Section 1: New Diagnostics (up to 20 most important, with warning if more)
-        RenderNewDiagnostics(diff, sb);
-
-        // Section 2: Diagnostics (most critical - errors and warnings)
+        // Section 1: Diagnostics
         var (solvedErrors, addedErrors) = NormalizeSolvedAdded(
             diff.Totals.BaseErrors,
             diff.Totals.HeadErrors,
@@ -64,19 +61,21 @@ public sealed class DiffReportRenderer
             addedInfo));
         sb.AppendLine();
 
-        // Section 3: Project References Changes
+        RenderDiagnosticsChangeTables(diff, sb);
+
+        // Section 2: Project References Changes
         RenderProjectReferencesChanges(diff, sb, maxProjects);
 
-        // Section 4: NuGet Dependencies Changes
+        // Section 3: NuGet Dependencies Changes
         RenderExternalDependenciesChanges(diff, sb, maxProjects);
 
-        // Section 5: Maintainability Changes (per-project breakdown - only projects with changes)
+        // Section 4: Maintainability Changes (per-project breakdown - only projects with changes)
         if (diff.HasComplexityMetrics)
         {
             RenderMaintainabilityChanges(diff, sb);
         }
 
-        // Section 6: Overall Metrics (overall statistics)
+        // Section 5: Overall Metrics (overall statistics)
         sb.AppendLine("### Overall Metrics");
         sb.AppendLine();
         sb.AppendLine("| Metric | Base | Head | Delta |");
@@ -122,59 +121,33 @@ public sealed class DiffReportRenderer
         return sb.ToString();
     }
 
-    private static void RenderNewDiagnostics(AnalysisDiffReport diff, StringBuilder sb)
+    private static void RenderDiagnosticsChangeTables(AnalysisDiffReport diff, StringBuilder sb)
     {
-        // Gather all new diagnostics (errors, warnings, info, hidden) with priority weighting
-        var allNewDiagnostics = new List<(DiagnosticDiffItem Item, int Priority)>();
+        RenderDiagnosticItemsTable(sb, "#### Added Diagnostics", diff.Diagnostics.AddedDiagnostics);
+        RenderDiagnosticItemsTable(sb, "#### Resolved Diagnostics", diff.Diagnostics.ResolvedDiagnostics);
+    }
 
-        // Priority: Error=4, Warning=3, Info=2, Hidden=1
-        foreach (var error in diff.Diagnostics.TopNewErrors)
-            allNewDiagnostics.Add((error, 4));
-        foreach (var warning in diff.Diagnostics.TopNewWarnings)
-            allNewDiagnostics.Add((warning, 3));
+    private static void RenderDiagnosticItemsTable(StringBuilder sb, string heading, IReadOnlyList<DiagnosticDiffItem> items)
+    {
+        sb.AppendLine(heading);
+        sb.AppendLine();
 
-        var totalDiagnosticsCount = allNewDiagnostics.Count;
-
-        // Take top 20 by priority, then by project name for stability
-        var topDiagnostics = allNewDiagnostics
-            .OrderByDescending(x => x.Priority)
-            .ThenBy(x => x.Item.Project)
-            .Take(20)
-            .ToList();
-
-        if (topDiagnostics.Count > 0)
+        if (items.Count == 0)
         {
-            // Add alarming emoji if more than 20 diagnostics exist
-            var title = totalDiagnosticsCount > 20
-                ? "### 🚨 New Diagnostics"
-                : "### New Diagnostics";
-
-            sb.AppendLine(title);
+            sb.AppendLine("None");
             sb.AppendLine();
-
-            foreach (var (item, priority) in topDiagnostics)
-            {
-                var icon = priority switch
-                {
-                    4 => "🚨",  // Error
-                    3 => "⚠️",   // Warning
-                    2 => "ℹ️",   // Info
-                    _ => "💡"   // Hidden
-                };
-
-                sb.AppendLine($"{icon} **{item.Id}** in `{item.Project}`");
-                sb.AppendLine($"  - {Escape(item.Message)}");
-                sb.AppendLine($"  - Location: `{item.File}:{item.Line}:{item.Column}`");
-                sb.AppendLine();
-            }
-
-            // Add warning if there are more than 20 diagnostics
-            if (totalDiagnosticsCount > 20)
-            {
-                sb.AppendLine($"🚨 **Too many diagnostic issues added to show all of them** ({totalDiagnosticsCount} total, showing 20)");
-                sb.AppendLine();
-            }
+            return;
         }
+
+        sb.AppendLine("| Severity | Code | Location | File | Description |");
+        sb.AppendLine("| --- | --- | --- | --- | --- |");
+
+        foreach (var item in items)
+        {
+            sb.AppendLine($"| {Escape(item.Severity)} | {Escape(item.Id)} | {item.Line}:{item.Column} | {Escape(item.File)} | {Escape(item.Message)} |");
+        }
+
+        sb.AppendLine();
     }
 
     private static void RenderMaintainabilityChanges(AnalysisDiffReport diff, StringBuilder sb)
@@ -223,88 +196,79 @@ public sealed class DiffReportRenderer
 
     private static void RenderProjectReferencesChanges(AnalysisDiffReport diff, StringBuilder sb, int maxProjects)
     {
-        // Find projects with declared project reference changes
         var projectsWithDependencyChanges = diff.Projects
             .Where(p => !p.IsAdded && !p.IsRemoved)
             .Where(p => p.AddedProjectReferences.Count > 0)
             .OrderByDescending(p => p.AddedProjectReferences.Count)
-            .Take(maxProjects)
             .ToList();
 
         if (projectsWithDependencyChanges.Count > 0)
         {
+            var totalAdded = projectsWithDependencyChanges.Sum(p => p.AddedProjectReferences.Count);
+            var uniqueAdded = projectsWithDependencyChanges
+                .SelectMany(p => p.AddedProjectReferences)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Count();
+
             sb.AppendLine("### Project References Changes");
             sb.AppendLine();
+            sb.AppendLine($"Added direct project refs in {projectsWithDependencyChanges.Count} project(s), {totalAdded} total change(s), {uniqueAdded} unique.");
+            sb.AppendLine();
 
-            foreach (var project in projectsWithDependencyChanges)
+            foreach (var project in projectsWithDependencyChanges.Take(maxProjects))
             {
-                sb.AppendLine($"#### {Escape(project.Name)}");
-                sb.AppendLine();
-
-                // Show added project references
-                if (project.AddedProjectReferences.Count > 0)
-                {
-                    sb.AppendLine($"**🔍 Added Project References ({project.AddedProjectReferences.Count}):**");
-                    foreach (var dep in project.AddedProjectReferences)
-                    {
-                        var isNewToSolution = diff.NewToSolution.Contains(dep);
-                        var marker = isNewToSolution ? " 🆕 (new to solution)" : "";
-                        sb.AppendLine($"- `{dep}`{marker}");
-                    }
-                    sb.AppendLine();
-                }
-
+                sb.AppendLine($"- `{Escape(project.Name)}` → {FormatDependencySummary(project.AddedProjectReferences, diff.NewToSolution)}");
             }
+
+            if (projectsWithDependencyChanges.Count > maxProjects)
+            {
+                sb.AppendLine($"- ...and {projectsWithDependencyChanges.Count - maxProjects} more project(s)");
+            }
+
+            sb.AppendLine();
         }
     }
 
     private static void RenderExternalDependenciesChanges(AnalysisDiffReport diff, StringBuilder sb, int maxProjects)
     {
-        // Find projects with external dependency changes
         var projectsWithExternalChanges = diff.Projects
             .Where(p => !p.IsAdded && !p.IsRemoved)
             .Where(p => p.AddedBclDependencies.Count > 0 || p.AddedPackageDependencies.Count > 0)
             .OrderByDescending(p => Math.Abs(p.ExternalDependenciesDelta))
-            .Take(maxProjects)
             .ToList();
 
         if (projectsWithExternalChanges.Count > 0)
         {
+            var totalBclAdded = projectsWithExternalChanges.Sum(p => p.AddedBclDependencies.Count);
+            var totalPackagesAdded = projectsWithExternalChanges.Sum(p => p.AddedPackageDependencies.Count);
+
             sb.AppendLine("### NuGet Dependencies Changes");
             sb.AppendLine();
+            sb.AppendLine($"Added direct dependencies in {projectsWithExternalChanges.Count} project(s): {totalBclAdded} BCL, {totalPackagesAdded} package.");
+            sb.AppendLine();
 
-            foreach (var project in projectsWithExternalChanges)
+            foreach (var project in projectsWithExternalChanges.Take(maxProjects))
             {
-                sb.AppendLine($"#### {Escape(project.Name)}");
-                sb.AppendLine();
-
-                // Show added BCL dependencies
+                var parts = new List<string>();
                 if (project.AddedBclDependencies.Count > 0)
                 {
-                    sb.AppendLine($"**🔍 Added BCL Dependencies ({project.AddedBclDependencies.Count}):**");
-                    foreach (var dep in project.AddedBclDependencies)
-                    {
-                        var isNewToSolution = diff.NewToSolution.Contains(dep);
-                        var marker = isNewToSolution ? " 🆕 (new to solution)" : "";
-                        sb.AppendLine($"- `{dep}`{marker}");
-                    }
-                    sb.AppendLine();
+                    parts.Add($"BCL: {FormatDependencySummary(project.AddedBclDependencies, diff.NewToSolution)}");
                 }
 
-                // Show added packages
                 if (project.AddedPackageDependencies.Count > 0)
                 {
-                    sb.AppendLine($"**🔍 Added Third-Party Packages ({project.AddedPackageDependencies.Count}):**");
-                    foreach (var dep in project.AddedPackageDependencies)
-                    {
-                        var isNewToSolution = diff.NewToSolution.Contains(dep);
-                        var marker = isNewToSolution ? " 🆕 (new to solution)" : "";
-                        sb.AppendLine($"- `{dep}`{marker}");
-                    }
-                    sb.AppendLine();
+                    parts.Add($"Packages: {FormatDependencySummary(project.AddedPackageDependencies, diff.NewToSolution)}");
                 }
 
+                sb.AppendLine($"- `{Escape(project.Name)}` → {string.Join("; ", parts)}");
             }
+
+            if (projectsWithExternalChanges.Count > maxProjects)
+            {
+                sb.AppendLine($"- ...and {projectsWithExternalChanges.Count - maxProjects} more project(s)");
+            }
+
+            sb.AppendLine();
         }
     }
 
@@ -321,7 +285,7 @@ public sealed class DiffReportRenderer
         int added,
         DeltaSemantic addedSemantic = DeltaSemantic.Neutral)
     {
-        return $"| {label} | {baseValue} | {headValue} | {FormatCount(solved, DeltaSemantic.GoodDecrease)} | {FormatCount(added, addedSemantic)} |";
+        return $"| {label} | {baseValue} | {headValue} | {FormatCount(solved)} | {FormatCount(added, addedSemantic)} |";
     }
 
     private static string BuildRow(string label, double baseValue, double headValue, double delta, DeltaSemantic semantic = DeltaSemantic.Neutral)
@@ -392,6 +356,32 @@ public sealed class DiffReportRenderer
     private static string Escape(string value)
     {
         return value.Replace("|", "\\|");
+    }
+
+    private static string FormatDependencySummary(
+        IReadOnlyList<string> dependencies,
+        IReadOnlySet<string> newToSolution,
+        int maxItems = 3)
+    {
+        if (dependencies.Count == 0)
+        {
+            return "none";
+        }
+
+        var displayed = dependencies.Take(maxItems)
+            .Select(dep =>
+            {
+                var marker = newToSolution.Contains(dep) ? " 🆕" : "";
+                return $"`{Escape(dep)}`{marker}";
+            })
+            .ToList();
+
+        if (dependencies.Count > maxItems)
+        {
+            displayed.Add($"+{dependencies.Count - maxItems} more");
+        }
+
+        return string.Join(", ", displayed);
     }
 }
 

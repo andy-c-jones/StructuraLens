@@ -155,10 +155,8 @@ public record DiagnosticDiffSummary
     public int NewHidden { get; init; }
     public int ResolvedHidden { get; init; }
 
-    public IReadOnlyList<DiagnosticDiffItem> TopNewErrors { get; init; } = [];
-    public IReadOnlyList<DiagnosticDiffItem> TopNewWarnings { get; init; } = [];
-    public IReadOnlyList<DiagnosticDiffItem> TopResolvedErrors { get; init; } = [];
-    public IReadOnlyList<DiagnosticDiffItem> TopResolvedWarnings { get; init; } = [];
+    public IReadOnlyList<DiagnosticDiffItem> AddedDiagnostics { get; init; } = [];
+    public IReadOnlyList<DiagnosticDiffItem> ResolvedDiagnostics { get; init; } = [];
 }
 
 /// <summary>Diagnostic entry for diff lists.</summary>

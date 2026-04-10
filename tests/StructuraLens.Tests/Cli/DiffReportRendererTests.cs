@@ -30,7 +30,7 @@ public sealed class DiffReportRendererTests
         var markdown = renderer.RenderMarkdown(diff);
 
         // Assert
-        await Assert.That(markdown).Contains("✅ 7");
+        await Assert.That(markdown).Contains("| Errors | 10 | 3 | 7 | 0 |");
     }
 
     [Test]
@@ -58,7 +58,7 @@ public sealed class DiffReportRendererTests
         var markdown = renderer.RenderMarkdown(diff);
 
         // Assert
-        await Assert.That(markdown).Contains("✅ 15");
+        await Assert.That(markdown).Contains("| Warnings | 20 | 5 | 15 | 0 |");
     }
 
     [Test]
@@ -280,7 +280,7 @@ public sealed class DiffReportRendererTests
     }
 
     [Test]
-    public async Task RenderMarkdown_WithNewDiagnostics_ShowsTopNewDiagnosticsSection()
+    public async Task RenderMarkdown_WithNewDiagnostics_ShowsAddedAndResolvedDiagnosticTables()
     {
         // Arrange
         var renderer = new DiffReportRenderer();
@@ -318,7 +318,9 @@ public sealed class DiffReportRendererTests
                 HeadErrors = 2,
                 BaseWarnings = 0,
                 HeadWarnings = 3,
-                TopNewErrors =
+                NewErrors = 2,
+                NewWarnings = 3,
+                AddedDiagnostics =
                 [
                     new DiagnosticDiffItem
                     {
@@ -339,10 +341,7 @@ public sealed class DiffReportRendererTests
                         File = "Helper.cs",
                         Line = 15,
                         Column = 5
-                    }
-                ],
-                TopNewWarnings =
-                [
+                    },
                     new DiagnosticDiffItem
                     {
                         Project = "TestProject",
@@ -361,17 +360,16 @@ public sealed class DiffReportRendererTests
         var markdown = renderer.RenderMarkdown(diff);
 
         // Assert
-        await Assert.That(markdown).Contains("### New Diagnostics");
-        await Assert.That(markdown).Contains("🚨 **CS0103** in `TestProject`");
-        await Assert.That(markdown).Contains("The name 'foo' does not exist");
-        await Assert.That(markdown).Contains("Location: `Program.cs:42:10`");
-        await Assert.That(markdown).Contains("🚨 **CS0246** in `TestProject`");
-        await Assert.That(markdown).Contains("⚠️ **CS8602** in `TestProject`");
-        await Assert.That(markdown).Contains("Dereference of a possibly null reference");
+        await Assert.That(markdown).Contains("#### Added Diagnostics");
+        await Assert.That(markdown).Contains("| Error | CS0103 |");
+        await Assert.That(markdown).Contains("| Error | CS0246 |");
+        await Assert.That(markdown).Contains("| Warning | CS8602 |");
+        await Assert.That(markdown).Contains("#### Resolved Diagnostics");
+        await Assert.That(markdown).Contains("None");
     }
 
     [Test]
-    public async Task RenderMarkdown_WithNoNewDiagnostics_OmitsTopNewDiagnosticsSection()
+    public async Task RenderMarkdown_AlwaysShowsDiagnosticsChangeTables()
     {
         // Arrange
         var renderer = new DiffReportRenderer();
@@ -380,17 +378,16 @@ public sealed class DiffReportRendererTests
         // Act
         var markdown = renderer.RenderMarkdown(diff);
 
-        // Assert - Should not have the section if no new diagnostics
-        await Assert.That(markdown).DoesNotContain("### New Diagnostics");
+        await Assert.That(markdown).Contains("#### Added Diagnostics");
+        await Assert.That(markdown).Contains("#### Resolved Diagnostics");
     }
 
     [Test]
-    public async Task RenderMarkdown_WithMoreThan20NewDiagnostics_ShowsTop20ByPriorityWithWarning()
+    public async Task RenderMarkdown_WithManyNewDiagnostics_ShowsAllRowsInTable()
     {
         // Arrange
         var renderer = new DiffReportRenderer();
-        // Create 10 errors (1-10)
-        var topNewErrors = Enumerable.Range(1, 10).Select(i => new DiagnosticDiffItem
+        var addedDiagnostics = Enumerable.Range(1, 10).Select(i => new DiagnosticDiffItem
         {
             Project = $"Project{i}",
             Id = $"CS{i:D4}",
@@ -399,10 +396,7 @@ public sealed class DiffReportRendererTests
             File = $"File{i}.cs",
             Line = i,
             Column = 1
-        }).ToList();
-
-        // Create 15 warnings (11-25)
-        var topNewWarnings = Enumerable.Range(11, 15).Select(i => new DiagnosticDiffItem
+        }).Concat(Enumerable.Range(11, 15).Select(i => new DiagnosticDiffItem
         {
             Project = $"Project{i}",
             Id = $"CS{i:D4}",
@@ -411,7 +405,7 @@ public sealed class DiffReportRendererTests
             File = $"File{i}.cs",
             Line = i,
             Column = 1
-        }).ToList();
+        })).ToList();
 
         var diff = new AnalysisDiffReport
         {
@@ -447,28 +441,20 @@ public sealed class DiffReportRendererTests
                 HeadErrors = 10,
                 BaseWarnings = 0,
                 HeadWarnings = 15,
-                TopNewErrors = topNewErrors,
-                TopNewWarnings = topNewWarnings
+                NewErrors = 10,
+                NewWarnings = 15,
+                AddedDiagnostics = addedDiagnostics
             }
         };
 
         // Act
         var markdown = renderer.RenderMarkdown(diff);
 
-        // Assert - Should show all 10 errors (priority 4) and only 10 warnings (priority 3) to reach the 20 item limit
-        await Assert.That(markdown).Contains("### 🚨 New Diagnostics"); // Alarming emoji when >20
-        await Assert.That(markdown).Contains("🚨 **CS0001**"); // Error 1
-        await Assert.That(markdown).Contains("🚨 **CS0010**"); // Error 10
-        await Assert.That(markdown).Contains("⚠️ **CS0011**"); // Warning 11 (first warning)
-        await Assert.That(markdown).Contains("⚠️ **CS0020**"); // Warning 20 (10th warning)
-
-        // Should not show warning 21 and beyond (the 21st+ items)
-        await Assert.That(markdown).DoesNotContain("**CS0021**");
-        await Assert.That(markdown).DoesNotContain("**CS0025**");
-
-        // Should show the warning message about too many diagnostics
-        await Assert.That(markdown).Contains("Too many diagnostic issues added to show all of them");
-        await Assert.That(markdown).Contains("(25 total, showing 20)");
+        await Assert.That(markdown).Contains("#### Added Diagnostics");
+        await Assert.That(markdown).Contains("| Error | CS0001 |");
+        await Assert.That(markdown).Contains("| Error | CS0010 |");
+        await Assert.That(markdown).Contains("| Warning | CS0011 |");
+        await Assert.That(markdown).Contains("| Warning | CS0025 |");
     }
 
     [Test]
@@ -565,8 +551,8 @@ public sealed class DiffReportRendererTests
 
         // Assert
         await Assert.That(markdown).Contains("### Project References Changes");
-        await Assert.That(markdown).Contains("ConsumerProject");
-        await Assert.That(markdown).Contains("ProviderProject");
+        await Assert.That(markdown).Contains("`ConsumerProject` → `ProviderProject`");
+        await Assert.That(markdown).DoesNotContain("#### ProviderProject");
     }
 
     [Test]
@@ -780,7 +766,7 @@ public sealed class DiffReportRendererTests
                 HeadErrors = 1,
                 BaseWarnings = 0,
                 HeadWarnings = 2,
-                TopNewErrors =
+                AddedDiagnostics =
                 [
                     new DiagnosticDiffItem
                     {
@@ -791,10 +777,7 @@ public sealed class DiffReportRendererTests
                         File = "File.cs",
                         Line = 1,
                         Column = 1
-                    }
-                ],
-                TopNewWarnings =
-                [
+                    },
                     new DiagnosticDiffItem
                     {
                         Project = "TestProject",
@@ -814,14 +797,12 @@ public sealed class DiffReportRendererTests
 
         // Assert - Verify all sections are present in the correct order
         var diagnosticsIndex = markdown.IndexOf("### Diagnostics");
-        var newDiagnosticsIndex = markdown.IndexOf("### New Diagnostics");
         var internalDependenciesIndex = markdown.IndexOf("### Project References Changes");
         var topChangesIndex = markdown.IndexOf("### Maintainability Changes");
         var metricsIndex = markdown.IndexOf("### Overall Metrics");
 
-        // Order should be: New Diagnostics -> Diagnostics -> Project References -> Maintainability Changes -> Overall Metrics
-        await Assert.That(newDiagnosticsIndex).IsGreaterThan(0);
-        await Assert.That(diagnosticsIndex).IsGreaterThan(newDiagnosticsIndex);
+        // Order should be: Diagnostics -> Project References -> Maintainability Changes -> Overall Metrics
+        await Assert.That(diagnosticsIndex).IsGreaterThan(0);
         await Assert.That(internalDependenciesIndex).IsGreaterThan(diagnosticsIndex);
         await Assert.That(topChangesIndex).IsGreaterThan(internalDependenciesIndex);
         await Assert.That(metricsIndex).IsGreaterThan(topChangesIndex);
@@ -895,7 +876,7 @@ public sealed class DiffReportRendererTests
 
         // Assert
         await Assert.That(markdown).Contains("### NuGet Dependencies Changes");
-        await Assert.That(markdown).Contains("🔍 Added BCL Dependencies (2)");
+        await Assert.That(markdown).Contains("`TestProject` → BCL: `Microsoft.Extensions.Logging`, `System.Text.Json`");
         await Assert.That(markdown).Contains("`System.Text.Json`");
         await Assert.That(markdown).Contains("`Microsoft.Extensions.Logging`");
     }
@@ -1197,8 +1178,7 @@ public sealed class DiffReportRendererTests
         var markdown = renderer.RenderMarkdown(diff);
 
         // Assert - Both BCL and Packages should be shown separately with package names
-        await Assert.That(markdown).Contains("🔍 Added BCL Dependencies (2)");
-        await Assert.That(markdown).Contains("🔍 Added Third-Party Packages (3)");
+        await Assert.That(markdown).Contains("`TestProject` → BCL: `Microsoft.Extensions.Logging`, `System.Text.Json`; Packages: `AutoMapper`, `Newtonsoft.Json`, `Serilog`");
         await Assert.That(markdown).Contains("`System.Text.Json`");
         await Assert.That(markdown).Contains("`Newtonsoft.Json`");
     }

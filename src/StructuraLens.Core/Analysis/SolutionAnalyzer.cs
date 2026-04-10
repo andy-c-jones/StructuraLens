@@ -1,3 +1,4 @@
+using System.Xml.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.Extensions.Logging;
@@ -401,19 +402,34 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
 
     private static List<string> GetProjectReferenceNames(Project project)
     {
-        return project.ProjectReferences
-            .Select(pr => project.Solution.GetProject(pr.ProjectId)?.Name)
+        var projectFilePath = project.FilePath;
+        if (string.IsNullOrWhiteSpace(projectFilePath) || !File.Exists(projectFilePath))
+        {
+            return [];
+        }
+
+        var solutionProjectsByPath = project.Solution.Projects
+            .Where(p => !string.IsNullOrWhiteSpace(p.FilePath))
+            .ToDictionary(
+                p => Path.GetFullPath(p.FilePath!),
+                p => p.Name,
+                StringComparer.OrdinalIgnoreCase);
+
+        var projectDirectory = Path.GetDirectoryName(projectFilePath)!;
+
+        return GetDirectReferenceIncludes(projectFilePath, "ProjectReference")
+            .Select(include => Path.GetFullPath(Path.Combine(projectDirectory, include.Replace('\\', '/'))))
+            .Select(path => solutionProjectsByPath.TryGetValue(path, out var name)
+                ? name
+                : Path.GetFileNameWithoutExtension(path))
             .Where(name => !string.IsNullOrWhiteSpace(name))
-            .Select(name => name!)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
 
     /// <summary>
-    /// Reads top-level PackageReference items from a .csproj file.
-    /// Uses MSBuild APIs to support Directory.Build.props, Directory.Packages.props,
-    /// and Central Package Management (CPM).
+    /// Reads direct PackageReference items from a .csproj file.
     /// </summary>
     private List<string> ReadPackageReferences(string? projectFilePath)
     {
@@ -424,16 +440,27 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
 
         try
         {
-            // Use MSBuild-based reader to support hierarchical imports and CPM
-            var reader = new PackageReferenceReader(_logger);
-            var packages = reader.ReadPackageReferences(projectFilePath);
-            return packages;
+            return GetDirectReferenceIncludes(projectFilePath, "PackageReference");
         }
         catch (Exception ex)
         {
             _warnings.Add($"Could not read package references from {projectFilePath}: {ex.Message}");
             return [];
         }
+    }
+
+    private static List<string> GetDirectReferenceIncludes(string projectFilePath, string itemName)
+    {
+        var document = XDocument.Load(projectFilePath);
+
+        return document.Descendants()
+            .Where(e => string.Equals(e.Name.LocalName, itemName, StringComparison.Ordinal))
+            .Select(e => e.Attribute("Include")?.Value)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value!.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     private TypeMetrics AnalyzeTypeDeclaration(TypeDeclarationSyntax typeDecl, SemanticModel semanticModel, string filePath)
