@@ -9,9 +9,13 @@ namespace StructuraLens.Core.Analysis;
 
 internal static class DiagnosticCollector
 {
-    public static async Task<DiagnosticSummary> CollectAsync(Project project, Compilation compilation, CancellationToken cancellationToken)
+    public static async Task<DiagnosticSummary> CollectAsync(
+        Project project,
+        Compilation compilation,
+        CancellationToken cancellationToken,
+        bool concurrentAnalyzerExecution)
     {
-        var diagnostics = await GetDiagnosticsAsync(project, compilation, cancellationToken);
+        var diagnostics = await GetDiagnosticsAsync(project, compilation, cancellationToken, concurrentAnalyzerExecution);
 
         var filteredDiagnostics = diagnostics
             .Where(ShouldIncludeDiagnostic)
@@ -38,7 +42,11 @@ internal static class DiagnosticCollector
         };
     }
 
-    private static async Task<IReadOnlyList<Diagnostic>> GetDiagnosticsAsync(Project project, Compilation compilation, CancellationToken cancellationToken)
+    private static async Task<IReadOnlyList<Diagnostic>> GetDiagnosticsAsync(
+        Project project,
+        Compilation compilation,
+        CancellationToken cancellationToken,
+        bool concurrentAnalyzerExecution)
     {
         var analyzers = project.AnalyzerReferences
             .SelectMany(reference => reference.GetAnalyzers(project.Language))
@@ -53,7 +61,7 @@ internal static class DiagnosticCollector
         var options = new CompilationWithAnalyzersOptions(
             project.AnalyzerOptions,
             onAnalyzerException: null,
-            concurrentAnalysis: true,
+            concurrentAnalysis: concurrentAnalyzerExecution,
             logAnalyzerExecutionTime: false,
             reportSuppressedDiagnostics: false);
 

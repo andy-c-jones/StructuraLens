@@ -134,8 +134,8 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
             SolutionAnalyzerLog.AnalyzingProject(_logger, currentIndex, totalProjects, project.Name);
 
             var metrics = IsDiagnosticsAndReferencesMode
-                ? await AnalyzeProjectDiagnosticsAndReferencesAsync(project, compilationCache, ct)
-                : await AnalyzeProjectWithCouplingAsync(project, compilationCache, dependencyCollector!, ct);
+                ? await AnalyzeProjectDiagnosticsAndReferencesAsync(project, compilationCache, ct, concurrentAnalyzerExecution: false)
+                : await AnalyzeProjectWithCouplingAsync(project, compilationCache, dependencyCollector!, ct, concurrentAnalyzerExecution: false);
             projectMetricsList.Add(metrics);
 
             if (IsDiagnosticsAndReferencesMode)
@@ -225,7 +225,7 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
         // For single project, create an empty cache (compilation will be fetched on demand)
         var compilationCache = new System.Collections.Concurrent.ConcurrentDictionary<string, Compilation>();
         var projectMetrics = IsDiagnosticsAndReferencesMode
-            ? await AnalyzeProjectDiagnosticsAndReferencesAsync(project, compilationCache, cancellationToken)
+            ? await AnalyzeProjectDiagnosticsAndReferencesAsync(project, compilationCache, cancellationToken, concurrentAnalyzerExecution: true)
             : await AnalyzeProjectAsync(project, compilationCache, cancellationToken);
 
         CouplingAnalysis? couplingAnalysis = null;
@@ -264,7 +264,8 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
         Project project,
         System.Collections.Concurrent.ConcurrentDictionary<string, Compilation> compilationCache,
         IDependencyCollector dependencyCollector,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool concurrentAnalyzerExecution)
     {
         // Use cached compilation if available
         if (!compilationCache.TryGetValue(project.Name, out var compilation))
@@ -280,7 +281,7 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
         }
 
         // Collect diagnostics from compilation
-        var diagnosticSummary = await DiagnosticCollector.CollectAsync(project, compilation, cancellationToken);
+        var diagnosticSummary = await DiagnosticCollector.CollectAsync(project, compilation, cancellationToken, concurrentAnalyzerExecution);
 
         var documents = project.Documents.Where(d => d.SourceCodeKind == SourceCodeKind.Regular).ToList();
         var documentCount = documents.Count;
@@ -361,13 +362,14 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
     {
         // For single project analysis, create a temporary collector that we don't use
         using var tempCollector = new InMemoryDependencyCollector();
-        return await AnalyzeProjectWithCouplingAsync(project, compilationCache, tempCollector, cancellationToken);
+        return await AnalyzeProjectWithCouplingAsync(project, compilationCache, tempCollector, cancellationToken, concurrentAnalyzerExecution: true);
     }
 
     private async Task<ProjectMetrics> AnalyzeProjectDiagnosticsAndReferencesAsync(
         Project project,
         System.Collections.Concurrent.ConcurrentDictionary<string, Compilation> compilationCache,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool concurrentAnalyzerExecution)
     {
         // Use cached compilation if available
         if (!compilationCache.TryGetValue(project.Name, out var compilation))
@@ -382,7 +384,7 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
             }
         }
 
-        var diagnosticSummary = await DiagnosticCollector.CollectAsync(project, compilation, cancellationToken);
+        var diagnosticSummary = await DiagnosticCollector.CollectAsync(project, compilation, cancellationToken, concurrentAnalyzerExecution);
         var packageReferences = ReadPackageReferences(project.FilePath);
         var projectReferences = GetProjectReferenceNames(project);
 
