@@ -53,7 +53,7 @@ internal static class DiagnosticCollector
             .Distinct()
             .ToImmutableArray();
 
-        if (analyzers.Length == 0)
+        if (analyzers.Length == 0 || !ShouldRunAnalyzers(project))
         {
             return compilation.GetDiagnostics(cancellationToken);
         }
@@ -67,6 +67,30 @@ internal static class DiagnosticCollector
 
         var compilationWithAnalyzers = compilation.WithAnalyzers(analyzers, options);
         return await compilationWithAnalyzers.GetAllDiagnosticsAsync(cancellationToken);
+    }
+
+    private static bool ShouldRunAnalyzers(Project project)
+    {
+        var globalOptions = project.AnalyzerOptions.AnalyzerConfigOptionsProvider.GlobalOptions;
+
+        var runAnalyzers = TryGetBooleanBuildProperty(globalOptions, "RunAnalyzers");
+        if (runAnalyzers == false)
+        {
+            return false;
+        }
+
+        var runAnalyzersDuringBuild = TryGetBooleanBuildProperty(globalOptions, "RunAnalyzersDuringBuild");
+        return runAnalyzersDuringBuild != false;
+    }
+
+    private static bool? TryGetBooleanBuildProperty(AnalyzerConfigOptions options, string propertyName)
+    {
+        if (!options.TryGetValue($"build_property.{propertyName}", out var value))
+        {
+            return null;
+        }
+
+        return bool.TryParse(value, out var result) ? result : null;
     }
 
     private static bool ShouldIncludeDiagnostic(Diagnostic diagnostic)
