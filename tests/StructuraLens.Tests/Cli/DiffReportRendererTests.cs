@@ -320,7 +320,7 @@ public sealed class DiffReportRendererTests
                 HeadWarnings = 3,
                 NewErrors = 2,
                 NewWarnings = 3,
-                TopNewErrors =
+                AddedDiagnostics =
                 [
                     new DiagnosticDiffItem
                     {
@@ -341,10 +341,7 @@ public sealed class DiffReportRendererTests
                         File = "Helper.cs",
                         Line = 15,
                         Column = 5
-                    }
-                ],
-                TopNewWarnings =
-                [
+                    },
                     new DiagnosticDiffItem
                     {
                         Project = "TestProject",
@@ -364,10 +361,11 @@ public sealed class DiffReportRendererTests
 
         // Assert
         await Assert.That(markdown).Contains("#### Added Diagnostics");
-        await Assert.That(markdown).Contains("| Errors | 2 |");
-        await Assert.That(markdown).Contains("| Warnings | 3 |");
-        await Assert.That(markdown).Contains("| Info | 0 |");
+        await Assert.That(markdown).Contains("| Error | CS0103 |");
+        await Assert.That(markdown).Contains("| Error | CS0246 |");
+        await Assert.That(markdown).Contains("| Warning | CS8602 |");
         await Assert.That(markdown).Contains("#### Resolved Diagnostics");
+        await Assert.That(markdown).Contains("None");
     }
 
     [Test]
@@ -385,12 +383,11 @@ public sealed class DiffReportRendererTests
     }
 
     [Test]
-    public async Task RenderMarkdown_WithMoreThan20NewDiagnostics_ShowsCountsInTable()
+    public async Task RenderMarkdown_WithManyNewDiagnostics_ShowsAllRowsInTable()
     {
         // Arrange
         var renderer = new DiffReportRenderer();
-        // Create 10 errors (1-10)
-        var topNewErrors = Enumerable.Range(1, 10).Select(i => new DiagnosticDiffItem
+        var addedDiagnostics = Enumerable.Range(1, 10).Select(i => new DiagnosticDiffItem
         {
             Project = $"Project{i}",
             Id = $"CS{i:D4}",
@@ -399,10 +396,7 @@ public sealed class DiffReportRendererTests
             File = $"File{i}.cs",
             Line = i,
             Column = 1
-        }).ToList();
-
-        // Create 15 warnings (11-25)
-        var topNewWarnings = Enumerable.Range(11, 15).Select(i => new DiagnosticDiffItem
+        }).Concat(Enumerable.Range(11, 15).Select(i => new DiagnosticDiffItem
         {
             Project = $"Project{i}",
             Id = $"CS{i:D4}",
@@ -411,7 +405,7 @@ public sealed class DiffReportRendererTests
             File = $"File{i}.cs",
             Line = i,
             Column = 1
-        }).ToList();
+        })).ToList();
 
         var diff = new AnalysisDiffReport
         {
@@ -449,8 +443,7 @@ public sealed class DiffReportRendererTests
                 HeadWarnings = 15,
                 NewErrors = 10,
                 NewWarnings = 15,
-                TopNewErrors = topNewErrors,
-                TopNewWarnings = topNewWarnings
+                AddedDiagnostics = addedDiagnostics
             }
         };
 
@@ -458,9 +451,10 @@ public sealed class DiffReportRendererTests
         var markdown = renderer.RenderMarkdown(diff);
 
         await Assert.That(markdown).Contains("#### Added Diagnostics");
-        await Assert.That(markdown).Contains("| Errors | 10 |");
-        await Assert.That(markdown).Contains("| Warnings | 15 |");
-        await Assert.That(markdown).DoesNotContain("Too many diagnostic issues added to show all of them");
+        await Assert.That(markdown).Contains("| Error | CS0001 |");
+        await Assert.That(markdown).Contains("| Error | CS0010 |");
+        await Assert.That(markdown).Contains("| Warning | CS0011 |");
+        await Assert.That(markdown).Contains("| Warning | CS0025 |");
     }
 
     [Test]
@@ -772,7 +766,7 @@ public sealed class DiffReportRendererTests
                 HeadErrors = 1,
                 BaseWarnings = 0,
                 HeadWarnings = 2,
-                TopNewErrors =
+                AddedDiagnostics =
                 [
                     new DiagnosticDiffItem
                     {
@@ -783,10 +777,7 @@ public sealed class DiffReportRendererTests
                         File = "File.cs",
                         Line = 1,
                         Column = 1
-                    }
-                ],
-                TopNewWarnings =
-                [
+                    },
                     new DiagnosticDiffItem
                     {
                         Project = "TestProject",

@@ -298,10 +298,8 @@ public sealed class DiffCalculator
             ResolvedInfo = resolvedInfo,
             NewHidden = newHidden,
             ResolvedHidden = resolvedHidden,
-            TopNewErrors = newItems.Where(i => i.Severity == "error").Take(20).ToList(),
-            TopNewWarnings = newItems.Where(i => i.Severity == "warning").Take(20).ToList(),
-            TopResolvedErrors = resolvedItems.Where(i => i.Severity == "error").Take(20).ToList(),
-            TopResolvedWarnings = resolvedItems.Where(i => i.Severity == "warning").Take(20).ToList()
+            AddedDiagnostics = newItems,
+            ResolvedDiagnostics = resolvedItems
         };
     }
 

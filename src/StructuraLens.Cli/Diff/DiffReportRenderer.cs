@@ -123,22 +123,30 @@ public sealed class DiffReportRenderer
 
     private static void RenderDiagnosticsChangeTables(AnalysisDiffReport diff, StringBuilder sb)
     {
-        sb.AppendLine("#### Added Diagnostics");
-        sb.AppendLine();
-        sb.AppendLine("| Severity | Count |");
-        sb.AppendLine("| --- | ---: |");
-        sb.AppendLine($"| Errors | {FormatCount(diff.Diagnostics.NewErrors)} |");
-        sb.AppendLine($"| Warnings | {FormatCount(diff.Diagnostics.NewWarnings)} |");
-        sb.AppendLine($"| Info | {FormatCount(diff.Diagnostics.NewInfo)} |");
+        RenderDiagnosticItemsTable(sb, "#### Added Diagnostics", diff.Diagnostics.AddedDiagnostics);
+        RenderDiagnosticItemsTable(sb, "#### Resolved Diagnostics", diff.Diagnostics.ResolvedDiagnostics);
+    }
+
+    private static void RenderDiagnosticItemsTable(StringBuilder sb, string heading, IReadOnlyList<DiagnosticDiffItem> items)
+    {
+        sb.AppendLine(heading);
         sb.AppendLine();
 
-        sb.AppendLine("#### Resolved Diagnostics");
-        sb.AppendLine();
-        sb.AppendLine("| Severity | Count |");
-        sb.AppendLine("| --- | ---: |");
-        sb.AppendLine($"| Errors | {FormatCount(diff.Diagnostics.ResolvedErrors)} |");
-        sb.AppendLine($"| Warnings | {FormatCount(diff.Diagnostics.ResolvedWarnings)} |");
-        sb.AppendLine($"| Info | {FormatCount(diff.Diagnostics.ResolvedInfo)} |");
+        if (items.Count == 0)
+        {
+            sb.AppendLine("None");
+            sb.AppendLine();
+            return;
+        }
+
+        sb.AppendLine("| Severity | ID | Message | Project | File | Line |");
+        sb.AppendLine("| --- | --- | --- | --- | --- | ---: |");
+
+        foreach (var item in items)
+        {
+            sb.AppendLine($"| {Escape(item.Severity)} | {Escape(item.Id)} | {Escape(item.Message)} | {Escape(item.Project)} | {Escape(item.File)} | {item.Line} |");
+        }
+
         sb.AppendLine();
     }
 
