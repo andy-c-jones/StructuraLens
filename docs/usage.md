@@ -568,7 +568,7 @@ using Serilog;                     // Package
 
 ## Diagnostics
 
-StructuraLens collects all Roslyn compiler diagnostics (errors, warnings, info messages) during analysis.
+StructuraLens collects Roslyn diagnostics (errors, warnings, info messages) during analysis and applies analyzer-based suppressions when analyzer references are present in the project.
 
 **Diagnostics are included in JSON and HTML outputs:**
 - **JSON**: `diagnostics[]` array with full details
@@ -584,7 +584,7 @@ StructuraLens collects all Roslyn compiler diagnostics (errors, warnings, info m
 - `columnNumber` - Column number in source
 
 **Use cases:**
-- Track compiler warnings across the codebase
+- Track compiler warnings across the codebase with analyzer suppression parity
 - Identify code analysis violations (CA rules)
 - Find potential bugs before runtime
 

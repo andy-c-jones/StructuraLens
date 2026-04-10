@@ -8,7 +8,7 @@ A high-performance .NET 10 CLI tool for analyzing C# codebases. StructuraLens pr
 - **Coupling Analysis**: Tracks dependencies between projects, namespaces, and types with internal/external split and dependency ratio metrics
 - **Multiple Output Formats**: JSON (machine-readable), HTML (interactive reports), Compact (99% smaller), and Summary (console-friendly)
 - **Memory-Efficient**: Adaptive aggregation strategies automatically handle large codebases with hundreds of projects
-- **Compiler Diagnostics**: Collects and reports all Roslyn compiler diagnostics with severity levels
+- **Analyzer-Aware Diagnostics**: Collects Roslyn diagnostics with analyzer suppression support so reported warnings match developer tooling more closely
 - **Self-Contained Analysis**: Uses Roslyn and MSBuild to analyze solutions without requiring compilation
 
 ## Quick Start

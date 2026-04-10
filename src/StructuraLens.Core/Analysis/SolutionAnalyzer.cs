@@ -280,7 +280,7 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
         }
 
         // Collect diagnostics from compilation
-        var diagnosticSummary = CollectDiagnostics(compilation);
+        var diagnosticSummary = await DiagnosticCollector.CollectAsync(project, compilation, cancellationToken);
 
         var documents = project.Documents.Where(d => d.SourceCodeKind == SourceCodeKind.Regular).ToList();
         var documentCount = documents.Count;
@@ -382,7 +382,7 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
             }
         }
 
-        var diagnosticSummary = CollectDiagnostics(compilation);
+        var diagnosticSummary = await DiagnosticCollector.CollectAsync(project, compilation, cancellationToken);
         var packageReferences = ReadPackageReferences(project.FilePath);
         var projectReferences = GetProjectReferenceNames(project);
 
@@ -432,44 +432,6 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
             _warnings.Add($"Could not read package references from {projectFilePath}: {ex.Message}");
             return [];
         }
-    }
-
-    private static DiagnosticSummary CollectDiagnostics(Compilation compilation)
-    {
-        var diagnostics = compilation.GetDiagnostics()
-            .Where(d => d.Severity != Microsoft.CodeAnalysis.DiagnosticSeverity.Hidden || d.Id.StartsWith("CS"))
-            .Select(d => new DiagnosticInfo(
-                Id: d.Id,
-                Message: d.GetMessage(),
-                Severity: MapSeverity(d.Severity),
-                FilePath: d.Location.SourceTree?.FilePath ?? "",
-                Line: d.Location.GetLineSpan().StartLinePosition.Line + 1,
-                Column: d.Location.GetLineSpan().StartLinePosition.Character + 1)
-            {
-                Category = d.Descriptor.Category,
-                HelpLink = d.Descriptor.HelpLinkUri
-            })
-            .ToList();
-
-        return new DiagnosticSummary
-        {
-            ErrorCount = diagnostics.Count(d => d.Severity == DiagnosticLevel.Error),
-            WarningCount = diagnostics.Count(d => d.Severity == DiagnosticLevel.Warning),
-            InfoCount = diagnostics.Count(d => d.Severity == DiagnosticLevel.Info),
-            HiddenCount = diagnostics.Count(d => d.Severity == DiagnosticLevel.Hidden),
-            Diagnostics = diagnostics
-        };
-    }
-
-    private static DiagnosticLevel MapSeverity(Microsoft.CodeAnalysis.DiagnosticSeverity severity)
-    {
-        return severity switch
-        {
-            Microsoft.CodeAnalysis.DiagnosticSeverity.Error => DiagnosticLevel.Error,
-            Microsoft.CodeAnalysis.DiagnosticSeverity.Warning => DiagnosticLevel.Warning,
-            Microsoft.CodeAnalysis.DiagnosticSeverity.Info => DiagnosticLevel.Info,
-            _ => DiagnosticLevel.Hidden
-        };
     }
 
     private TypeMetrics AnalyzeTypeDeclaration(TypeDeclarationSyntax typeDecl, SemanticModel semanticModel, string filePath)
