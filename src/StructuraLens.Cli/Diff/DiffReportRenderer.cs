@@ -139,12 +139,12 @@ public sealed class DiffReportRenderer
             return;
         }
 
-        sb.AppendLine("| Severity | Code | Line | Col | File | Description |");
-        sb.AppendLine("| --- | --- | ---: | ---: | --- | --- |");
+        sb.AppendLine("| Severity | Code | Location | File | Description |");
+        sb.AppendLine("| --- | --- | --- | --- | --- |");
 
         foreach (var item in items)
         {
-            sb.AppendLine($"| {Escape(item.Severity)} | {Escape(item.Id)} | {item.Line} | {item.Column} | {Escape(item.File)} | {Escape(item.Message)} |");
+            sb.AppendLine($"| {Escape(item.Severity)} | {Escape(item.Id)} | {item.Line}:{item.Column} | {Escape(item.File)} | {Escape(item.Message)} |");
         }
 
         sb.AppendLine();
