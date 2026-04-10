@@ -177,6 +177,10 @@ export interface DiagnosticDiffSummary {
 	resolvedErrors: number;
 	newWarnings: number;
 	resolvedWarnings: number;
+	newInfo: number;
+	resolvedInfo: number;
+	newHidden: number;
+	resolvedHidden: number;
 	[key: string]: unknown;
 }
 

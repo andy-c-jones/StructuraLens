@@ -25,26 +25,43 @@ public sealed class DiffReportRenderer
         RenderNewDiagnostics(diff, sb);
 
         // Section 2: Diagnostics (most critical - errors and warnings)
-        sb.AppendLine("### Diagnostics");
-        sb.AppendLine();
-        sb.AppendLine("| Metric | Base | Head | Delta |");
-        sb.AppendLine("| --- | ---: | ---: | ---: |");
-        sb.AppendLine(BuildRow("Errors",
+        var (solvedErrors, addedErrors) = NormalizeSolvedAdded(
             diff.Totals.BaseErrors,
             diff.Totals.HeadErrors,
-            diff.Totals.ErrorsDelta,
-            diff.Totals.ErrorsDelta > 0 ? DeltaSemantic.CriticalIncrease
-                : diff.Totals.ErrorsDelta < 0 ? DeltaSemantic.GoodDecrease
-                : DeltaSemantic.Neutral));
-        sb.AppendLine(BuildRow("Warnings",
+            diff.Diagnostics.ResolvedErrors,
+            diff.Diagnostics.NewErrors);
+        var (solvedWarnings, addedWarnings) = NormalizeSolvedAdded(
             diff.Totals.BaseWarnings,
             diff.Totals.HeadWarnings,
-            diff.Totals.WarningsDelta,
-            diff.Totals.WarningsDelta > 0 ? DeltaSemantic.BadIncrease
-                : diff.Totals.WarningsDelta < 0 ? DeltaSemantic.GoodDecrease
-                : DeltaSemantic.Neutral));
-        sb.AppendLine(BuildRow("Info", diff.Totals.BaseInfo, diff.Totals.HeadInfo, diff.Totals.InfoDelta));
-        sb.AppendLine(BuildRow("Hidden", diff.Totals.BaseHidden, diff.Totals.HeadHidden, diff.Totals.HiddenDelta));
+            diff.Diagnostics.ResolvedWarnings,
+            diff.Diagnostics.NewWarnings);
+        var (solvedInfo, addedInfo) = NormalizeSolvedAdded(
+            diff.Totals.BaseInfo,
+            diff.Totals.HeadInfo,
+            diff.Diagnostics.ResolvedInfo,
+            diff.Diagnostics.NewInfo);
+
+        sb.AppendLine("### Diagnostics");
+        sb.AppendLine();
+        sb.AppendLine("| Metric | Base | Head | Solved | Added |");
+        sb.AppendLine("| --- | ---: | ---: | ---: | ---: |");
+        sb.AppendLine(BuildSolvedAddedRow("Errors",
+            diff.Totals.BaseErrors,
+            diff.Totals.HeadErrors,
+            solvedErrors,
+            addedErrors,
+            DeltaSemantic.CriticalIncrease));
+        sb.AppendLine(BuildSolvedAddedRow("Warnings",
+            diff.Totals.BaseWarnings,
+            diff.Totals.HeadWarnings,
+            solvedWarnings,
+            addedWarnings,
+            DeltaSemantic.BadIncrease));
+        sb.AppendLine(BuildSolvedAddedRow("Info",
+            diff.Totals.BaseInfo,
+            diff.Totals.HeadInfo,
+            solvedInfo,
+            addedInfo));
         sb.AppendLine();
 
         // Section 3: Project References Changes
@@ -296,9 +313,39 @@ public sealed class DiffReportRenderer
         return $"| {label} | {baseValue} | {headValue} | {FormatDelta(delta, semantic)} |";
     }
 
+    private static string BuildSolvedAddedRow(
+        string label,
+        int baseValue,
+        int headValue,
+        int solved,
+        int added,
+        DeltaSemantic addedSemantic = DeltaSemantic.Neutral)
+    {
+        return $"| {label} | {baseValue} | {headValue} | {FormatCount(solved, DeltaSemantic.GoodDecrease)} | {FormatCount(added, addedSemantic)} |";
+    }
+
     private static string BuildRow(string label, double baseValue, double headValue, double delta, DeltaSemantic semantic = DeltaSemantic.Neutral)
     {
         return $"| {label} | {baseValue:0.0} | {headValue:0.0} | {FormatDelta(delta, semantic)} |";
+    }
+
+    private static string FormatCount(int value, DeltaSemantic semantic = DeltaSemantic.Neutral)
+    {
+        if (value == 0) return "0";
+        return ApplySemanticFormatting(value.ToString(), semantic);
+    }
+
+    private static (int Solved, int Added) NormalizeSolvedAdded(int baseCount, int headCount, int solved, int added)
+    {
+        if (solved > 0 || added > 0) return (solved, added);
+
+        var delta = headCount - baseCount;
+        return delta switch
+        {
+            > 0 => (0, delta),
+            < 0 => (-delta, 0),
+            _ => (0, 0)
+        };
     }
 
     private static string FormatDelta(int value, DeltaSemantic semantic = DeltaSemantic.Neutral)

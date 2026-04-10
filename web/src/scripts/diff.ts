@@ -20,6 +20,37 @@ export function renderDiffTab(diffData: DiffReport | null): void {
   const totals = diffData.totals;
   const projects = diffData.projects || [];
   const diagnostics = diffData.diagnostics || {};
+  const toSolvedAdded = (
+    baseValue: number,
+    headValue: number,
+    solved: number | undefined,
+    added: number | undefined
+  ): { solved: number; added: number } => {
+    const solvedValue = solved || 0;
+    const addedValue = added || 0;
+
+    if (solvedValue > 0 || addedValue > 0) {
+      return { solved: solvedValue, added: addedValue };
+    }
+
+    const delta = headValue - baseValue;
+    if (delta > 0) return { solved: 0, added: delta };
+    if (delta < 0) return { solved: -delta, added: 0 };
+    return { solved: 0, added: 0 };
+  };
+
+  const errorsSolvedAdded = toSolvedAdded(
+    totals.baseErrors,
+    totals.headErrors,
+    diagnostics.resolvedErrors as number | undefined,
+    diagnostics.newErrors as number | undefined
+  );
+  const warningsSolvedAdded = toSolvedAdded(
+    totals.baseWarnings,
+    totals.headWarnings,
+    diagnostics.resolvedWarnings as number | undefined,
+    diagnostics.newWarnings as number | undefined
+  );
   const hasComplexityMetrics = diffData.hasComplexityMetrics !== false;
 
   const topMiChanges = hasComplexityMetrics
@@ -39,12 +70,12 @@ export function renderDiffTab(diffData: DiffReport | null): void {
     },
     { 
       value: totals.headErrors, 
-      label: `Errors ${renderDeltaIndicator({ value: totals.errorsDelta, inverseGood: true })}`,
+      label: `Errors (Solved ${errorsSolvedAdded.solved}, Added ${errorsSolvedAdded.added})`,
       valueColor: totals.headErrors > 0 ? 'var(--error)' : 'var(--success)'
     },
     { 
       value: totals.headWarnings, 
-      label: `Warnings ${renderDeltaIndicator({ value: totals.warningsDelta, inverseGood: true })}`,
+      label: `Warnings (Solved ${warningsSolvedAdded.solved}, Added ${warningsSolvedAdded.added})`,
       valueColor: totals.headWarnings > 0 ? 'var(--warning)' : 'var(--success)'
     }
   ];
@@ -104,10 +135,14 @@ export function renderDiffTab(diffData: DiffReport | null): void {
     : '<p style="color:var(--text-muted)">No project deltas available.</p>';
 
   const diagnosticsCards: CardProps[] = [
-    { value: diagnostics.newErrors || 0, label: 'New Errors' },
-    { value: diagnostics.resolvedErrors || 0, label: 'Resolved Errors' },
-    { value: diagnostics.newWarnings || 0, label: 'New Warnings' },
-    { value: diagnostics.resolvedWarnings || 0, label: 'Resolved Warnings' }
+    { value: diagnostics.resolvedErrors || 0, label: 'Solved Errors' },
+    { value: diagnostics.newErrors || 0, label: 'Added Errors' },
+    { value: diagnostics.resolvedWarnings || 0, label: 'Solved Warnings' },
+    { value: diagnostics.newWarnings || 0, label: 'Added Warnings' },
+    { value: diagnostics.resolvedInfo || 0, label: 'Solved Info' },
+    { value: diagnostics.newInfo || 0, label: 'Added Info' },
+    { value: diagnostics.resolvedHidden || 0, label: 'Solved Hidden' },
+    { value: diagnostics.newHidden || 0, label: 'Added Hidden' }
   ];
 
   el.innerHTML = `

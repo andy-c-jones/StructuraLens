@@ -150,6 +150,10 @@ public record DiagnosticDiffSummary
     public int ResolvedErrors { get; init; }
     public int NewWarnings { get; init; }
     public int ResolvedWarnings { get; init; }
+    public int NewInfo { get; init; }
+    public int ResolvedInfo { get; init; }
+    public int NewHidden { get; init; }
+    public int ResolvedHidden { get; init; }
 
     public IReadOnlyList<DiagnosticDiffItem> TopNewErrors { get; init; } = [];
     public IReadOnlyList<DiagnosticDiffItem> TopNewWarnings { get; init; } = [];
