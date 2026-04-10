@@ -273,8 +273,12 @@ public sealed class DiffCalculator
 
         var newErrors = newItems.Count(i => i.Severity == "error");
         var newWarnings = newItems.Count(i => i.Severity == "warning");
+        var newInfo = newItems.Count(i => i.Severity == "info");
+        var newHidden = newItems.Count(i => i.Severity == "hidden");
         var resolvedErrors = resolvedItems.Count(i => i.Severity == "error");
         var resolvedWarnings = resolvedItems.Count(i => i.Severity == "warning");
+        var resolvedInfo = resolvedItems.Count(i => i.Severity == "info");
+        var resolvedHidden = resolvedItems.Count(i => i.Severity == "hidden");
 
         return new DiagnosticDiffSummary
         {
@@ -290,6 +294,10 @@ public sealed class DiffCalculator
             ResolvedErrors = resolvedErrors,
             NewWarnings = newWarnings,
             ResolvedWarnings = resolvedWarnings,
+            NewInfo = newInfo,
+            ResolvedInfo = resolvedInfo,
+            NewHidden = newHidden,
+            ResolvedHidden = resolvedHidden,
             TopNewErrors = newItems.Where(i => i.Severity == "error").Take(20).ToList(),
             TopNewWarnings = newItems.Where(i => i.Severity == "warning").Take(20).ToList(),
             TopResolvedErrors = resolvedItems.Where(i => i.Severity == "error").Take(20).ToList(),

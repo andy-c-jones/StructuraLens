@@ -145,6 +145,10 @@
     "newErrors": 0,
     "resolvedErrors": 3,
     "newWarnings": 2,
-    "resolvedWarnings": 5
+    "resolvedWarnings": 5,
+    "newInfo": 0,
+    "resolvedInfo": 1,
+    "newHidden": 0,
+    "resolvedHidden": 0
   }
 }

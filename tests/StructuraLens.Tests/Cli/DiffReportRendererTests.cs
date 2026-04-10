@@ -16,7 +16,7 @@ public sealed class DiffReportRendererTests
         var markdown = renderer.RenderMarkdown(diff);
 
         // Assert
-        await Assert.That(markdown).Contains("🚨 **+5**");
+        await Assert.That(markdown).Contains("🚨 **5**");
     }
 
     [Test]
@@ -30,7 +30,7 @@ public sealed class DiffReportRendererTests
         var markdown = renderer.RenderMarkdown(diff);
 
         // Assert
-        await Assert.That(markdown).Contains("✅ -7");
+        await Assert.That(markdown).Contains("✅ 7");
     }
 
     [Test]
@@ -44,7 +44,7 @@ public sealed class DiffReportRendererTests
         var markdown = renderer.RenderMarkdown(diff);
 
         // Assert
-        await Assert.That(markdown).Contains("⚠️ **+10**");
+        await Assert.That(markdown).Contains("⚠️ **10**");
     }
 
     [Test]
@@ -58,7 +58,7 @@ public sealed class DiffReportRendererTests
         var markdown = renderer.RenderMarkdown(diff);
 
         // Assert
-        await Assert.That(markdown).Contains("✅ -15");
+        await Assert.That(markdown).Contains("✅ 15");
     }
 
     [Test]
@@ -218,6 +218,7 @@ public sealed class DiffReportRendererTests
         await Assert.That(errorLine).Contains("| 0 |");
         await Assert.That(warningLine).Contains("| 0 |");
         await Assert.That(miLine).Contains("| 0 |");
+        await Assert.That(markdown).DoesNotContain("| Hidden |");
     }
 
     [Test]
