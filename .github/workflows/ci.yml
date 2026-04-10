@@ -126,7 +126,7 @@ jobs:
 
       - name: Comment on PR
         if: steps.check-changes.outputs.code_changed == 'true'
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const artifactUrl = `https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts/${{ steps.upload-report.outputs.artifact-id }}`;

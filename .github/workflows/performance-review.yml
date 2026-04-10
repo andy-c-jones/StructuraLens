@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Run Copilot performance reviewer
-        uses: andy-c-jones/copilot-performance@v1.0.0
+        uses: andy-c-jones/copilot-performance@v1.2.0
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           skip: dist,web/dist
