@@ -223,88 +223,79 @@ public sealed class DiffReportRenderer
 
     private static void RenderProjectReferencesChanges(AnalysisDiffReport diff, StringBuilder sb, int maxProjects)
     {
-        // Find projects with declared project reference changes
         var projectsWithDependencyChanges = diff.Projects
             .Where(p => !p.IsAdded && !p.IsRemoved)
             .Where(p => p.AddedProjectReferences.Count > 0)
             .OrderByDescending(p => p.AddedProjectReferences.Count)
-            .Take(maxProjects)
             .ToList();
 
         if (projectsWithDependencyChanges.Count > 0)
         {
+            var totalAdded = projectsWithDependencyChanges.Sum(p => p.AddedProjectReferences.Count);
+            var uniqueAdded = projectsWithDependencyChanges
+                .SelectMany(p => p.AddedProjectReferences)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Count();
+
             sb.AppendLine("### Project References Changes");
             sb.AppendLine();
+            sb.AppendLine($"Added direct project refs in {projectsWithDependencyChanges.Count} project(s), {totalAdded} total change(s), {uniqueAdded} unique.");
+            sb.AppendLine();
 
-            foreach (var project in projectsWithDependencyChanges)
+            foreach (var project in projectsWithDependencyChanges.Take(maxProjects))
             {
-                sb.AppendLine($"#### {Escape(project.Name)}");
-                sb.AppendLine();
-
-                // Show added project references
-                if (project.AddedProjectReferences.Count > 0)
-                {
-                    sb.AppendLine($"**🔍 Added Project References ({project.AddedProjectReferences.Count}):**");
-                    foreach (var dep in project.AddedProjectReferences)
-                    {
-                        var isNewToSolution = diff.NewToSolution.Contains(dep);
-                        var marker = isNewToSolution ? " 🆕 (new to solution)" : "";
-                        sb.AppendLine($"- `{dep}`{marker}");
-                    }
-                    sb.AppendLine();
-                }
-
+                sb.AppendLine($"- `{Escape(project.Name)}` → {FormatDependencySummary(project.AddedProjectReferences, diff.NewToSolution)}");
             }
+
+            if (projectsWithDependencyChanges.Count > maxProjects)
+            {
+                sb.AppendLine($"- ...and {projectsWithDependencyChanges.Count - maxProjects} more project(s)");
+            }
+
+            sb.AppendLine();
         }
     }
 
     private static void RenderExternalDependenciesChanges(AnalysisDiffReport diff, StringBuilder sb, int maxProjects)
     {
-        // Find projects with external dependency changes
         var projectsWithExternalChanges = diff.Projects
             .Where(p => !p.IsAdded && !p.IsRemoved)
             .Where(p => p.AddedBclDependencies.Count > 0 || p.AddedPackageDependencies.Count > 0)
             .OrderByDescending(p => Math.Abs(p.ExternalDependenciesDelta))
-            .Take(maxProjects)
             .ToList();
 
         if (projectsWithExternalChanges.Count > 0)
         {
+            var totalBclAdded = projectsWithExternalChanges.Sum(p => p.AddedBclDependencies.Count);
+            var totalPackagesAdded = projectsWithExternalChanges.Sum(p => p.AddedPackageDependencies.Count);
+
             sb.AppendLine("### NuGet Dependencies Changes");
             sb.AppendLine();
+            sb.AppendLine($"Added direct dependencies in {projectsWithExternalChanges.Count} project(s): {totalBclAdded} BCL, {totalPackagesAdded} package.");
+            sb.AppendLine();
 
-            foreach (var project in projectsWithExternalChanges)
+            foreach (var project in projectsWithExternalChanges.Take(maxProjects))
             {
-                sb.AppendLine($"#### {Escape(project.Name)}");
-                sb.AppendLine();
-
-                // Show added BCL dependencies
+                var parts = new List<string>();
                 if (project.AddedBclDependencies.Count > 0)
                 {
-                    sb.AppendLine($"**🔍 Added BCL Dependencies ({project.AddedBclDependencies.Count}):**");
-                    foreach (var dep in project.AddedBclDependencies)
-                    {
-                        var isNewToSolution = diff.NewToSolution.Contains(dep);
-                        var marker = isNewToSolution ? " 🆕 (new to solution)" : "";
-                        sb.AppendLine($"- `{dep}`{marker}");
-                    }
-                    sb.AppendLine();
+                    parts.Add($"BCL: {FormatDependencySummary(project.AddedBclDependencies, diff.NewToSolution)}");
                 }
 
-                // Show added packages
                 if (project.AddedPackageDependencies.Count > 0)
                 {
-                    sb.AppendLine($"**🔍 Added Third-Party Packages ({project.AddedPackageDependencies.Count}):**");
-                    foreach (var dep in project.AddedPackageDependencies)
-                    {
-                        var isNewToSolution = diff.NewToSolution.Contains(dep);
-                        var marker = isNewToSolution ? " 🆕 (new to solution)" : "";
-                        sb.AppendLine($"- `{dep}`{marker}");
-                    }
-                    sb.AppendLine();
+                    parts.Add($"Packages: {FormatDependencySummary(project.AddedPackageDependencies, diff.NewToSolution)}");
                 }
 
+                sb.AppendLine($"- `{Escape(project.Name)}` → {string.Join("; ", parts)}");
             }
+
+            if (projectsWithExternalChanges.Count > maxProjects)
+            {
+                sb.AppendLine($"- ...and {projectsWithExternalChanges.Count - maxProjects} more project(s)");
+            }
+
+            sb.AppendLine();
         }
     }
 
@@ -392,6 +383,32 @@ public sealed class DiffReportRenderer
     private static string Escape(string value)
     {
         return value.Replace("|", "\\|");
+    }
+
+    private static string FormatDependencySummary(
+        IReadOnlyList<string> dependencies,
+        IReadOnlySet<string> newToSolution,
+        int maxItems = 3)
+    {
+        if (dependencies.Count == 0)
+        {
+            return "none";
+        }
+
+        var displayed = dependencies.Take(maxItems)
+            .Select(dep =>
+            {
+                var marker = newToSolution.Contains(dep) ? " 🆕" : "";
+                return $"`{Escape(dep)}`{marker}";
+            })
+            .ToList();
+
+        if (dependencies.Count > maxItems)
+        {
+            displayed.Add($"+{dependencies.Count - maxItems} more");
+        }
+
+        return string.Join(", ", displayed);
     }
 }
 

@@ -565,8 +565,8 @@ public sealed class DiffReportRendererTests
 
         // Assert
         await Assert.That(markdown).Contains("### Project References Changes");
-        await Assert.That(markdown).Contains("ConsumerProject");
-        await Assert.That(markdown).Contains("ProviderProject");
+        await Assert.That(markdown).Contains("`ConsumerProject` → `ProviderProject`");
+        await Assert.That(markdown).DoesNotContain("#### ProviderProject");
     }
 
     [Test]
@@ -895,7 +895,7 @@ public sealed class DiffReportRendererTests
 
         // Assert
         await Assert.That(markdown).Contains("### NuGet Dependencies Changes");
-        await Assert.That(markdown).Contains("🔍 Added BCL Dependencies (2)");
+        await Assert.That(markdown).Contains("`TestProject` → BCL: `Microsoft.Extensions.Logging`, `System.Text.Json`");
         await Assert.That(markdown).Contains("`System.Text.Json`");
         await Assert.That(markdown).Contains("`Microsoft.Extensions.Logging`");
     }
@@ -1197,8 +1197,7 @@ public sealed class DiffReportRendererTests
         var markdown = renderer.RenderMarkdown(diff);
 
         // Assert - Both BCL and Packages should be shown separately with package names
-        await Assert.That(markdown).Contains("🔍 Added BCL Dependencies (2)");
-        await Assert.That(markdown).Contains("🔍 Added Third-Party Packages (3)");
+        await Assert.That(markdown).Contains("`TestProject` → BCL: `Microsoft.Extensions.Logging`, `System.Text.Json`; Packages: `AutoMapper`, `Newtonsoft.Json`, `Serilog`");
         await Assert.That(markdown).Contains("`System.Text.Json`");
         await Assert.That(markdown).Contains("`Newtonsoft.Json`");
     }

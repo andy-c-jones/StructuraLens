@@ -376,11 +376,9 @@ public class SolutionAnalyzerIntegrationTests
     }
 
     [Test]
-    public async Task AnalyzeSolutionAsync_WithDirectoryBuildProps_EachProjectCountsSharedDependencies()
+    public async Task AnalyzeSolutionAsync_WithDirectoryBuildProps_DoesNotTreatInheritedPackagesAsDirect()
     {
-        // This is an integration test that verifies when Directory.Build.props defines
-        // 1 dependency and 3 projects are in scope, each project counts it as 1 dependency
-        // (3 total across all projects, not 1 shared dependency)
+        // This verifies only direct package references from each csproj are reported.
 
         var tempDir = Path.Combine(Path.GetTempPath(), $"StructuraLensIntegrationTest_{Guid.NewGuid():N}");
         try
@@ -482,26 +480,22 @@ public class SolutionAnalyzerIntegrationTests
             await Assert.That(project2).IsNotNull();
             await Assert.That(project3).IsNotNull();
 
-            // Project1: only SharedTestPackage (from Directory.Build.props)
-            await Assert.That(project1!.PackageReferences.Count).IsEqualTo(1);
-            await Assert.That(project1.PackageReferences).Contains("SharedTestPackage");
+            // Project1: no direct packages
+            await Assert.That(project1!.PackageReferences).IsEmpty();
 
-            // Project2: SharedTestPackage + Project2Package = 2 packages
-            await Assert.That(project2!.PackageReferences.Count).IsEqualTo(2);
-            await Assert.That(project2.PackageReferences).Contains("SharedTestPackage");
+            // Project2: only direct package
+            await Assert.That(project2!.PackageReferences.Count).IsEqualTo(1);
             await Assert.That(project2.PackageReferences).Contains("Project2Package");
 
-            // Project3: SharedTestPackage + Project3Package = 2 packages
-            await Assert.That(project3!.PackageReferences.Count).IsEqualTo(2);
-            await Assert.That(project3.PackageReferences).Contains("SharedTestPackage");
+            // Project3: only direct package
+            await Assert.That(project3!.PackageReferences.Count).IsEqualTo(1);
             await Assert.That(project3.PackageReferences).Contains("Project3Package");
 
-            // Total count: 1 + 2 + 2 = 5 package references across all projects
-            // This demonstrates that the 1 shared package is counted once per project (3 times total)
+            // Total count: 0 + 1 + 1 = 2 direct package references across all projects
             var totalPackageReferences = project1.PackageReferences.Count +
                                         project2.PackageReferences.Count +
                                         project3.PackageReferences.Count;
-            await Assert.That(totalPackageReferences).IsEqualTo(5);
+            await Assert.That(totalPackageReferences).IsEqualTo(2);
         }
         finally
         {
