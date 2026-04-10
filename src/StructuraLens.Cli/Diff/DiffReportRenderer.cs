@@ -21,10 +21,7 @@ public sealed class DiffReportRenderer
         sb.AppendLine($"Analysis mode: `{diff.Head.AnalysisMode}`");
         sb.AppendLine();
 
-        // Section 1: New Diagnostics (up to 20 most important, with warning if more)
-        RenderNewDiagnostics(diff, sb);
-
-        // Section 2: Diagnostics (most critical - errors and warnings)
+        // Section 1: Diagnostics
         var (solvedErrors, addedErrors) = NormalizeSolvedAdded(
             diff.Totals.BaseErrors,
             diff.Totals.HeadErrors,
@@ -64,19 +61,21 @@ public sealed class DiffReportRenderer
             addedInfo));
         sb.AppendLine();
 
-        // Section 3: Project References Changes
+        RenderDiagnosticsChangeTables(diff, sb);
+
+        // Section 2: Project References Changes
         RenderProjectReferencesChanges(diff, sb, maxProjects);
 
-        // Section 4: NuGet Dependencies Changes
+        // Section 3: NuGet Dependencies Changes
         RenderExternalDependenciesChanges(diff, sb, maxProjects);
 
-        // Section 5: Maintainability Changes (per-project breakdown - only projects with changes)
+        // Section 4: Maintainability Changes (per-project breakdown - only projects with changes)
         if (diff.HasComplexityMetrics)
         {
             RenderMaintainabilityChanges(diff, sb);
         }
 
-        // Section 6: Overall Metrics (overall statistics)
+        // Section 5: Overall Metrics (overall statistics)
         sb.AppendLine("### Overall Metrics");
         sb.AppendLine();
         sb.AppendLine("| Metric | Base | Head | Delta |");
@@ -122,59 +121,25 @@ public sealed class DiffReportRenderer
         return sb.ToString();
     }
 
-    private static void RenderNewDiagnostics(AnalysisDiffReport diff, StringBuilder sb)
+    private static void RenderDiagnosticsChangeTables(AnalysisDiffReport diff, StringBuilder sb)
     {
-        // Gather all new diagnostics (errors, warnings, info, hidden) with priority weighting
-        var allNewDiagnostics = new List<(DiagnosticDiffItem Item, int Priority)>();
+        sb.AppendLine("#### Added Diagnostics");
+        sb.AppendLine();
+        sb.AppendLine("| Severity | Count |");
+        sb.AppendLine("| --- | ---: |");
+        sb.AppendLine($"| Errors | {FormatCount(diff.Diagnostics.NewErrors)} |");
+        sb.AppendLine($"| Warnings | {FormatCount(diff.Diagnostics.NewWarnings)} |");
+        sb.AppendLine($"| Info | {FormatCount(diff.Diagnostics.NewInfo)} |");
+        sb.AppendLine();
 
-        // Priority: Error=4, Warning=3, Info=2, Hidden=1
-        foreach (var error in diff.Diagnostics.TopNewErrors)
-            allNewDiagnostics.Add((error, 4));
-        foreach (var warning in diff.Diagnostics.TopNewWarnings)
-            allNewDiagnostics.Add((warning, 3));
-
-        var totalDiagnosticsCount = allNewDiagnostics.Count;
-
-        // Take top 20 by priority, then by project name for stability
-        var topDiagnostics = allNewDiagnostics
-            .OrderByDescending(x => x.Priority)
-            .ThenBy(x => x.Item.Project)
-            .Take(20)
-            .ToList();
-
-        if (topDiagnostics.Count > 0)
-        {
-            // Add alarming emoji if more than 20 diagnostics exist
-            var title = totalDiagnosticsCount > 20
-                ? "### 🚨 New Diagnostics"
-                : "### New Diagnostics";
-
-            sb.AppendLine(title);
-            sb.AppendLine();
-
-            foreach (var (item, priority) in topDiagnostics)
-            {
-                var icon = priority switch
-                {
-                    4 => "🚨",  // Error
-                    3 => "⚠️",   // Warning
-                    2 => "ℹ️",   // Info
-                    _ => "💡"   // Hidden
-                };
-
-                sb.AppendLine($"{icon} **{item.Id}** in `{item.Project}`");
-                sb.AppendLine($"  - {Escape(item.Message)}");
-                sb.AppendLine($"  - Location: `{item.File}:{item.Line}:{item.Column}`");
-                sb.AppendLine();
-            }
-
-            // Add warning if there are more than 20 diagnostics
-            if (totalDiagnosticsCount > 20)
-            {
-                sb.AppendLine($"🚨 **Too many diagnostic issues added to show all of them** ({totalDiagnosticsCount} total, showing 20)");
-                sb.AppendLine();
-            }
-        }
+        sb.AppendLine("#### Resolved Diagnostics");
+        sb.AppendLine();
+        sb.AppendLine("| Severity | Count |");
+        sb.AppendLine("| --- | ---: |");
+        sb.AppendLine($"| Errors | {FormatCount(diff.Diagnostics.ResolvedErrors)} |");
+        sb.AppendLine($"| Warnings | {FormatCount(diff.Diagnostics.ResolvedWarnings)} |");
+        sb.AppendLine($"| Info | {FormatCount(diff.Diagnostics.ResolvedInfo)} |");
+        sb.AppendLine();
     }
 
     private static void RenderMaintainabilityChanges(AnalysisDiffReport diff, StringBuilder sb)
@@ -312,7 +277,7 @@ public sealed class DiffReportRenderer
         int added,
         DeltaSemantic addedSemantic = DeltaSemantic.Neutral)
     {
-        return $"| {label} | {baseValue} | {headValue} | {FormatCount(solved, DeltaSemantic.GoodDecrease)} | {FormatCount(added, addedSemantic)} |";
+        return $"| {label} | {baseValue} | {headValue} | {FormatCount(solved)} | {FormatCount(added, addedSemantic)} |";
     }
 
     private static string BuildRow(string label, double baseValue, double headValue, double delta, DeltaSemantic semantic = DeltaSemantic.Neutral)
