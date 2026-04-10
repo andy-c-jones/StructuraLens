@@ -418,7 +418,7 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
         var projectDirectory = Path.GetDirectoryName(projectFilePath)!;
 
         return GetDirectReferenceIncludes(projectFilePath, "ProjectReference")
-            .Select(include => Path.GetFullPath(Path.Combine(projectDirectory, include)))
+            .Select(include => Path.GetFullPath(Path.Combine(projectDirectory, include.Replace('\\', '/'))))
             .Select(path => solutionProjectsByPath.TryGetValue(path, out var name)
                 ? name
                 : Path.GetFileNameWithoutExtension(path))
