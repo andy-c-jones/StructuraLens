@@ -410,9 +410,12 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
 
         var solutionProjectsByPath = project.Solution.Projects
             .Where(p => !string.IsNullOrWhiteSpace(p.FilePath))
-            .ToDictionary(
+            .GroupBy(
                 p => Path.GetFullPath(p.FilePath!),
-                p => p.Name,
+                StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                group => group.Key,
+                group => group.First().Name,
                 StringComparer.OrdinalIgnoreCase);
 
         var projectDirectory = Path.GetDirectoryName(projectFilePath)!;

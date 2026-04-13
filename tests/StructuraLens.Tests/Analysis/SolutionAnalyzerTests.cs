@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.CodeAnalysis;
 using StructuraLens.Core.Analysis;
 using StructuraLens.Core.Infrastructure;
 using StructuraLens.Core.Models;
@@ -496,6 +497,101 @@ public class SolutionAnalyzerIntegrationTests
                                         project2.PackageReferences.Count +
                                         project3.PackageReferences.Count;
             await Assert.That(totalPackageReferences).IsEqualTo(2);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, recursive: true);
+            }
+        }
+    }
+
+    [Test]
+    public async Task AnalyzeSolutionAsync_WithDuplicateProjectPaths_DoesNotThrowWhenResolvingProjectReferences()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"StructuraLensDuplicateProjectPathTest_{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+
+            var sharedDir = Path.Combine(tempDir, "Shared");
+            var consumerDir = Path.Combine(tempDir, "Consumer");
+            Directory.CreateDirectory(sharedDir);
+            Directory.CreateDirectory(consumerDir);
+
+            var sharedProjectPath = Path.Combine(sharedDir, "Shared.csproj");
+            var consumerProjectPath = Path.Combine(consumerDir, "Consumer.csproj");
+
+            var sharedProjectContent = """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <TargetFramework>net10.0</TargetFramework>
+                  </PropertyGroup>
+                </Project>
+                """;
+
+            var consumerProjectContent = """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <TargetFramework>net10.0</TargetFramework>
+                  </PropertyGroup>
+                  <ItemGroup>
+                    <ProjectReference Include="..\Shared\Shared.csproj" />
+                  </ItemGroup>
+                </Project>
+                """;
+
+            File.WriteAllText(sharedProjectPath, sharedProjectContent);
+            File.WriteAllText(consumerProjectPath, consumerProjectContent);
+
+            using var workspace = new AdhocWorkspace();
+            var solution = workspace.CurrentSolution;
+
+            var sharedProjectId = ProjectId.CreateNewId();
+            solution = solution.AddProject(ProjectInfo.Create(
+                id: sharedProjectId,
+                version: VersionStamp.Create(),
+                name: "Shared",
+                assemblyName: "Shared",
+                language: LanguageNames.CSharp,
+                filePath: sharedProjectPath));
+
+            var sharedDuplicateProjectId = ProjectId.CreateNewId();
+            solution = solution.AddProject(ProjectInfo.Create(
+                id: sharedDuplicateProjectId,
+                version: VersionStamp.Create(),
+                name: "SharedDuplicate",
+                assemblyName: "SharedDuplicate",
+                language: LanguageNames.CSharp,
+                filePath: sharedProjectPath));
+
+            var consumerProjectId = ProjectId.CreateNewId();
+            solution = solution.AddProject(ProjectInfo.Create(
+                id: consumerProjectId,
+                version: VersionStamp.Create(),
+                name: "Consumer",
+                assemblyName: "Consumer",
+                language: LanguageNames.CSharp,
+                filePath: consumerProjectPath));
+
+            workspace.TryApplyChanges(solution);
+
+            var consumerProject = workspace.CurrentSolution.GetProject(consumerProjectId);
+            await Assert.That(consumerProject).IsNotNull();
+
+            var method = typeof(SolutionAnalyzer).GetMethod(
+                "GetProjectReferenceNames",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+            await Assert.That(method).IsNotNull();
+
+            var projectReferences = (List<string>)method!.Invoke(null, [consumerProject!])!;
+            await Assert.That(projectReferences.Count).IsEqualTo(1);
+
+            var referencesSharedProject =
+                projectReferences.Contains("Shared") ||
+                projectReferences.Contains("SharedDuplicate");
+            await Assert.That(referencesSharedProject).IsTrue();
         }
         finally
         {
