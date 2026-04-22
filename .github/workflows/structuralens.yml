@@ -27,4 +27,5 @@ jobs:
         with:
           solution: StructuraLens.slnx
           github-token: ${{ github.token }}
+          fail-on: warning
 
