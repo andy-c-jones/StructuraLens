@@ -11,7 +11,7 @@ public sealed class DiffReportRenderer
     private const double SevereMaintainabilityDrop = -10.0;
     private const double ModerateMaintainabilityDrop = -5.0;
 
-    public string RenderMarkdown(AnalysisDiffReport diff, int maxProjects = 10)
+    public string RenderMarkdown(AnalysisDiffReport diff, int maxProjects = 10, DiagnosticLevel minDiagnosticLevel = DiagnosticLevel.Info)
     {
         var sb = new StringBuilder();
         sb.AppendLine("## StructuraLens Diff Summary");
@@ -61,7 +61,7 @@ public sealed class DiffReportRenderer
             addedInfo));
         sb.AppendLine();
 
-        RenderDiagnosticsChangeTables(diff, sb);
+        RenderDiagnosticsChangeTables(diff, sb, minDiagnosticLevel);
 
         // Section 2: Project References Changes
         RenderProjectReferencesChanges(diff, sb, maxProjects);
@@ -121,30 +121,33 @@ public sealed class DiffReportRenderer
         return sb.ToString();
     }
 
-    private static void RenderDiagnosticsChangeTables(AnalysisDiffReport diff, StringBuilder sb)
+    private static void RenderDiagnosticsChangeTables(AnalysisDiffReport diff, StringBuilder sb, DiagnosticLevel minDiagnosticLevel)
     {
-        RenderDiagnosticItemsTable(sb, "#### Added Diagnostics", diff.Diagnostics.AddedDiagnostics);
-        RenderDiagnosticItemsTable(sb, "#### Resolved Diagnostics", diff.Diagnostics.ResolvedDiagnostics);
+        RenderDiagnosticItemsTable(sb, "#### Added Diagnostics", diff.Diagnostics.AddedDiagnostics, minDiagnosticLevel);
+        RenderDiagnosticItemsTable(sb, "#### Resolved Diagnostics", diff.Diagnostics.ResolvedDiagnostics, minDiagnosticLevel);
     }
 
-    private static void RenderDiagnosticItemsTable(StringBuilder sb, string heading, IReadOnlyList<DiagnosticDiffItem> items)
+    private static void RenderDiagnosticItemsTable(StringBuilder sb, string heading, IReadOnlyList<DiagnosticDiffItem> items, DiagnosticLevel minDiagnosticLevel = DiagnosticLevel.Info)
     {
+        var filteredItems = items
+            .Where(i => ParseSeverity(i.Severity) >= minDiagnosticLevel)
+            .ToList();
         sb.AppendLine(heading);
         sb.AppendLine();
 
-        if (items.Count == 0)
+        if (filteredItems.Count == 0)
         {
             sb.AppendLine("None");
             sb.AppendLine();
             return;
         }
 
-        sb.AppendLine("| Severity | Code | Location | File | Description |");
+        sb.AppendLine("| Severity | Code | Description | Location | File |");
         sb.AppendLine("| --- | --- | --- | --- | --- |");
 
-        foreach (var item in items)
+        foreach (var item in filteredItems)
         {
-            sb.AppendLine($"| {Escape(item.Severity)} | {Escape(item.Id)} | {item.Line}:{item.Column} | {Escape(item.File)} | {Escape(item.Message)} |");
+            sb.AppendLine($"| {Escape(item.Severity)} | {Escape(item.Id)} | {Escape(item.Message)} | {item.Line}:{item.Column} | {Escape(item.File)} |");
         }
 
         sb.AppendLine();
@@ -356,6 +359,13 @@ public sealed class DiffReportRenderer
     private static string Escape(string value)
     {
         return value.Replace("|", "\\|");
+    }
+
+    private static DiagnosticLevel ParseSeverity(string severity)
+    {
+        return Enum.TryParse<DiagnosticLevel>(severity, ignoreCase: true, out var level)
+            ? level
+            : DiagnosticLevel.Hidden;
     }
 
     private static string FormatDependencySummary(

@@ -91,6 +91,12 @@ var diffMaxProjectsOption = new Option<int>("--max-projects")
     DefaultValueFactory = _ => 10
 };
 
+var diffMinDiagnosticLevelOption = new Option<string>("--min-diagnostic-level")
+{
+    Description = "Minimum diagnostic severity to include in added/resolved tables: Hidden, Info, Warning, Error (default: Info)",
+    DefaultValueFactory = _ => "Info"
+};
+
 // Create path argument
 var pathArgument = new Argument<string>("path")
 {
@@ -145,6 +151,7 @@ diffCommand.Options.Add(headReportOption);
 diffCommand.Options.Add(outputOption);
 diffCommand.Options.Add(diffFormatOption);
 diffCommand.Options.Add(diffMaxProjectsOption);
+diffCommand.Options.Add(diffMinDiagnosticLevelOption);
 
 diffCommand.SetAction(async (parseResult, cancellationToken) =>
 {
@@ -153,9 +160,13 @@ diffCommand.SetAction(async (parseResult, cancellationToken) =>
     var output = parseResult.GetValue(outputOption);
     var format = parseResult.GetValue(diffFormatOption) ?? "json";
     var maxProjects = parseResult.GetValue(diffMaxProjectsOption);
+    var minDiagnosticLevelStr = parseResult.GetValue(diffMinDiagnosticLevelOption) ?? "Info";
+    var minDiagnosticLevel = Enum.TryParse<DiagnosticLevel>(minDiagnosticLevelStr, ignoreCase: true, out var parsedLevel)
+        ? parsedLevel
+        : DiagnosticLevel.Info;
     format = format.ToLowerInvariant();
 
-    return await ExecuteDiffAsync(basePath ?? string.Empty, headPath ?? string.Empty, output, format, maxProjects, serviceProvider, cancellationToken);
+    return await ExecuteDiffAsync(basePath ?? string.Empty, headPath ?? string.Empty, output, format, maxProjects, minDiagnosticLevel, serviceProvider, cancellationToken);
 });
 
 static async Task<int> ExecuteAnalysisAsync(
@@ -332,6 +343,7 @@ static async Task<int> ExecuteDiffAsync(
     string? output,
     string format,
     int maxProjects,
+    DiagnosticLevel minDiagnosticLevel,
     IServiceProvider serviceProvider,
     CancellationToken cancellationToken)
 {
@@ -379,7 +391,7 @@ static async Task<int> ExecuteDiffAsync(
         if (format == "markdown")
         {
             var renderer = new DiffReportRenderer();
-            var markdown = renderer.RenderMarkdown(diff, maxProjects);
+            var markdown = renderer.RenderMarkdown(diff, maxProjects, minDiagnosticLevel);
             if (!string.IsNullOrEmpty(output))
             {
                 await File.WriteAllTextAsync(output, markdown, cancellationToken);

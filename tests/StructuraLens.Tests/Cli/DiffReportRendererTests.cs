@@ -1312,5 +1312,144 @@ public sealed class DiffReportRendererTests
             Diagnostics = new DiagnosticDiffSummary()
         };
     }
-}
 
+    [Test]
+    public async Task RenderMarkdown_WithNewDiagnostics_ColumnOrderIsCorrect()
+    {
+        // Arrange
+        var renderer = new DiffReportRenderer();
+        var diff = new AnalysisDiffReport
+        {
+            Base = new DiffMetadata { CommitSha = "abc123", BranchName = "main", AnalyzedAt = DateTime.UtcNow },
+            Head = new DiffMetadata { CommitSha = "def456", BranchName = "feature", AnalyzedAt = DateTime.UtcNow },
+            Totals = new DiffTotals { BaseProjects = 1, HeadProjects = 1, HeadErrors = 1 },
+            Projects = [],
+            Diagnostics = new DiagnosticDiffSummary
+            {
+                NewErrors = 1,
+                AddedDiagnostics =
+                [
+                    new DiagnosticDiffItem
+                    {
+                        Project = "TestProject",
+                        Id = "CS0103",
+                        Severity = "Error",
+                        Message = "The name 'foo' does not exist",
+                        File = "Program.cs",
+                        Line = 42,
+                        Column = 10
+                    }
+                ]
+            }
+        };
+
+        // Act
+        var markdown = renderer.RenderMarkdown(diff);
+
+        // Assert - header order: Severity | Code | Description | Location | File
+        await Assert.That(markdown).Contains("| Severity | Code | Description | Location | File |");
+        // Assert - row order matches header
+        await Assert.That(markdown).Contains("| Error | CS0103 | The name 'foo' does not exist | 42:10 | Program.cs |");
+    }
+
+    [Test]
+    public async Task RenderMarkdown_DefaultLevel_FiltersOutHiddenDiagnostics()
+    {
+        // Arrange
+        var renderer = new DiffReportRenderer();
+        var diff = CreateDiffWithDiagnostics(
+        [
+            MakeDiagnostic("CS0001", "Error", "An error"),
+            MakeDiagnostic("CS0002", "Hidden", "A hidden diagnostic")
+        ]);
+
+        // Act - default minDiagnosticLevel is Info, so Hidden should be excluded
+        var markdown = renderer.RenderMarkdown(diff);
+
+        // Assert
+        await Assert.That(markdown).Contains("| Error | CS0001 |");
+        await Assert.That(markdown).DoesNotContain("| Hidden | CS0002 |");
+    }
+
+    [Test]
+    public async Task RenderMarkdown_WithMinLevelWarning_FiltersOutInfoDiagnostics()
+    {
+        // Arrange
+        var renderer = new DiffReportRenderer();
+        var diff = CreateDiffWithDiagnostics(
+        [
+            MakeDiagnostic("CS0001", "Error", "An error"),
+            MakeDiagnostic("CS8019", "Warning", "A warning"),
+            MakeDiagnostic("CS0060", "Info", "An info message"),
+            MakeDiagnostic("CS9001", "Hidden", "A hidden message")
+        ]);
+
+        // Act
+        var markdown = renderer.RenderMarkdown(diff, minDiagnosticLevel: DiagnosticLevel.Warning);
+
+        // Assert
+        await Assert.That(markdown).Contains("| Error | CS0001 |");
+        await Assert.That(markdown).Contains("| Warning | CS8019 |");
+        await Assert.That(markdown).DoesNotContain("| Info | CS0060 |");
+        await Assert.That(markdown).DoesNotContain("| Hidden |");
+    }
+
+    [Test]
+    public async Task RenderMarkdown_WithMinLevelError_FiltersOutWarningAndBelowDiagnostics()
+    {
+        // Arrange
+        var renderer = new DiffReportRenderer();
+        var diff = CreateDiffWithDiagnostics(
+        [
+            MakeDiagnostic("CS0001", "Error", "An error"),
+            MakeDiagnostic("CS8019", "Warning", "A warning"),
+            MakeDiagnostic("CS0060", "Info", "An info message")
+        ]);
+
+        // Act
+        var markdown = renderer.RenderMarkdown(diff, minDiagnosticLevel: DiagnosticLevel.Error);
+
+        // Assert
+        await Assert.That(markdown).Contains("| Error | CS0001 |");
+        await Assert.That(markdown).DoesNotContain("| Warning | CS8019 |");
+        await Assert.That(markdown).DoesNotContain("| Info | CS0060 |");
+    }
+
+    [Test]
+    public async Task RenderMarkdown_WithMinLevelHidden_ShowsAllDiagnostics()
+    {
+        // Arrange
+        var renderer = new DiffReportRenderer();
+        var diff = CreateDiffWithDiagnostics(
+        [
+            MakeDiagnostic("CS0001", "Error", "An error"),
+            MakeDiagnostic("CS8019", "Warning", "A warning"),
+            MakeDiagnostic("CS0060", "Info", "An info message"),
+            MakeDiagnostic("CS9999", "Hidden", "A hidden diagnostic")
+        ]);
+
+        // Act
+        var markdown = renderer.RenderMarkdown(diff, minDiagnosticLevel: DiagnosticLevel.Hidden);
+
+        // Assert - all severities should appear
+        await Assert.That(markdown).Contains("| Error | CS0001 |");
+        await Assert.That(markdown).Contains("| Warning | CS8019 |");
+        await Assert.That(markdown).Contains("| Info | CS0060 |");
+        await Assert.That(markdown).Contains("| Hidden | CS9999 |");
+    }
+
+    private static AnalysisDiffReport CreateDiffWithDiagnostics(IReadOnlyList<DiagnosticDiffItem> addedDiagnostics)
+    {
+        return new AnalysisDiffReport
+        {
+            Base = new DiffMetadata { CommitSha = "abc123", BranchName = "main", AnalyzedAt = DateTime.UtcNow },
+            Head = new DiffMetadata { CommitSha = "def456", BranchName = "feature", AnalyzedAt = DateTime.UtcNow },
+            Totals = new DiffTotals { BaseProjects = 1, HeadProjects = 1 },
+            Projects = [],
+            Diagnostics = new DiagnosticDiffSummary { AddedDiagnostics = addedDiagnostics }
+        };
+    }
+
+    private static DiagnosticDiffItem MakeDiagnostic(string id, string severity, string message) =>
+        new() { Project = "TestProject", Id = id, Severity = severity, Message = message, File = "Test.cs", Line = 1, Column = 1 };
+}
