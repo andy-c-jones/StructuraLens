@@ -26,17 +26,20 @@ public sealed class DiffReportRenderer
             diff.Totals.BaseErrors,
             diff.Totals.HeadErrors,
             diff.Diagnostics.ResolvedErrors,
-            diff.Diagnostics.NewErrors);
+            diff.Diagnostics.NewErrors,
+            diff.Diagnostics.MovedErrors);
         var (solvedWarnings, addedWarnings) = NormalizeSolvedAdded(
             diff.Totals.BaseWarnings,
             diff.Totals.HeadWarnings,
             diff.Diagnostics.ResolvedWarnings,
-            diff.Diagnostics.NewWarnings);
+            diff.Diagnostics.NewWarnings,
+            diff.Diagnostics.MovedWarnings);
         var (solvedInfo, addedInfo) = NormalizeSolvedAdded(
             diff.Totals.BaseInfo,
             diff.Totals.HeadInfo,
             diff.Diagnostics.ResolvedInfo,
-            diff.Diagnostics.NewInfo);
+            diff.Diagnostics.NewInfo,
+            diff.Diagnostics.MovedInfo);
 
         sb.AppendLine("### Diagnostics");
         sb.AppendLine();
@@ -302,9 +305,9 @@ public sealed class DiffReportRenderer
         return ApplySemanticFormatting(value.ToString(), semantic);
     }
 
-    private static (int Solved, int Added) NormalizeSolvedAdded(int baseCount, int headCount, int solved, int added)
+    private static (int Solved, int Added) NormalizeSolvedAdded(int baseCount, int headCount, int solved, int added, int moved)
     {
-        if (solved > 0 || added > 0) return (solved, added);
+        if (solved > 0 || added > 0 || moved > 0) return (solved, added);
 
         var delta = headCount - baseCount;
         return delta switch

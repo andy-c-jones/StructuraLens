@@ -148,15 +148,20 @@ public record DiagnosticDiffSummary
 
     public int NewErrors { get; init; }
     public int ResolvedErrors { get; init; }
+    public int MovedErrors { get; init; }
     public int NewWarnings { get; init; }
     public int ResolvedWarnings { get; init; }
+    public int MovedWarnings { get; init; }
     public int NewInfo { get; init; }
     public int ResolvedInfo { get; init; }
+    public int MovedInfo { get; init; }
     public int NewHidden { get; init; }
     public int ResolvedHidden { get; init; }
+    public int MovedHidden { get; init; }
 
     public IReadOnlyList<DiagnosticDiffItem> AddedDiagnostics { get; init; } = [];
     public IReadOnlyList<DiagnosticDiffItem> ResolvedDiagnostics { get; init; } = [];
+    public IReadOnlyList<DiagnosticMoveDiffItem> MovedDiagnostics { get; init; } = [];
 }
 
 /// <summary>Diagnostic entry for diff lists.</summary>
@@ -169,4 +174,18 @@ public record DiagnosticDiffItem
     public string File { get; init; } = "";
     public int Line { get; init; }
     public int Column { get; init; }
+}
+
+/// <summary>Diagnostic entry that moved within the same file between two reports.</summary>
+public record DiagnosticMoveDiffItem
+{
+    public string Project { get; init; } = "";
+    public string Id { get; init; } = "";
+    public string Severity { get; init; } = "";
+    public string Message { get; init; } = "";
+    public string File { get; init; } = "";
+    public int BaseLine { get; init; }
+    public int BaseColumn { get; init; }
+    public int HeadLine { get; init; }
+    public int HeadColumn { get; init; }
 }
