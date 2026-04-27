@@ -1353,6 +1353,50 @@ public sealed class DiffReportRendererTests
     }
 
     [Test]
+    public async Task RenderMarkdown_WithMovedDiagnostics_HidesMovedDiagnostics()
+    {
+        // Arrange
+        var renderer = new DiffReportRenderer();
+        var diff = new AnalysisDiffReport
+        {
+            Base = new DiffMetadata { CommitSha = "abc123", BranchName = "main", AnalyzedAt = DateTime.UtcNow },
+            Head = new DiffMetadata { CommitSha = "def456", BranchName = "feature", AnalyzedAt = DateTime.UtcNow },
+            Totals = new DiffTotals { BaseProjects = 1, HeadProjects = 1, BaseWarnings = 1, HeadWarnings = 1 },
+            Projects = [],
+            Diagnostics = new DiagnosticDiffSummary
+            {
+                MovedWarnings = 1,
+                MovedDiagnostics =
+                [
+                    new DiagnosticMoveDiffItem
+                    {
+                        Project = "TestProject",
+                        Id = "NSDEPCOP01",
+                        Severity = "warning",
+                        Message = "Illegal namespace reference",
+                        File = "Controller.cs",
+                        BaseLine = 289,
+                        BaseColumn = 26,
+                        HeadLine = 291,
+                        HeadColumn = 26
+                    }
+                ]
+            }
+        };
+
+        // Act
+        var markdown = renderer.RenderMarkdown(diff);
+
+        // Assert
+        await Assert.That(markdown).Contains("| Metric | Base | Head | Solved | Added |");
+        await Assert.That(markdown).Contains("| Warnings | 1 | 1 | 0 | 0 |");
+        await Assert.That(markdown).DoesNotContain("Moved");
+        await Assert.That(markdown).DoesNotContain("#### Moved Diagnostics");
+        await Assert.That(markdown).DoesNotContain("| warning | NSDEPCOP01 | Illegal namespace reference | 289:26 | 291:26 | Controller.cs |");
+        await Assert.That(markdown).DoesNotContain("| warning | NSDEPCOP01 | Illegal namespace reference | 291:26 | Controller.cs |");
+    }
+
+    [Test]
     public async Task RenderMarkdown_DefaultLevel_FiltersOutHiddenDiagnostics()
     {
         // Arrange

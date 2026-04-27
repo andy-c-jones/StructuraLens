@@ -265,11 +265,8 @@ public sealed class DiffCalculator
         var baseSummary = BuildDiagnosticsSummary(baseReport);
         var headSummary = BuildDiagnosticsSummary(headReport);
 
-        var baseSet = new HashSet<string>(baseSummary.Items.Select(KeyFor), StringComparer.OrdinalIgnoreCase);
-        var headSet = new HashSet<string>(headSummary.Items.Select(KeyFor), StringComparer.OrdinalIgnoreCase);
-
-        var newItems = headSummary.Items.Where(i => !baseSet.Contains(KeyFor(i))).ToList();
-        var resolvedItems = baseSummary.Items.Where(i => !headSet.Contains(KeyFor(i))).ToList();
+        var (unmatchedBaseItems, unmatchedHeadItems) = RemoveExactMatches(baseSummary.Items, headSummary.Items);
+        var (movedItems, resolvedItems, newItems) = MatchMovedDiagnostics(unmatchedBaseItems, unmatchedHeadItems);
 
         var newErrors = newItems.Count(i => i.Severity == "error");
         var newWarnings = newItems.Count(i => i.Severity == "warning");
@@ -279,6 +276,10 @@ public sealed class DiffCalculator
         var resolvedWarnings = resolvedItems.Count(i => i.Severity == "warning");
         var resolvedInfo = resolvedItems.Count(i => i.Severity == "info");
         var resolvedHidden = resolvedItems.Count(i => i.Severity == "hidden");
+        var movedErrors = movedItems.Count(i => i.Severity == "error");
+        var movedWarnings = movedItems.Count(i => i.Severity == "warning");
+        var movedInfo = movedItems.Count(i => i.Severity == "info");
+        var movedHidden = movedItems.Count(i => i.Severity == "hidden");
 
         return new DiagnosticDiffSummary
         {
@@ -292,20 +293,143 @@ public sealed class DiffCalculator
             HeadHidden = headSummary.Hidden,
             NewErrors = newErrors,
             ResolvedErrors = resolvedErrors,
+            MovedErrors = movedErrors,
             NewWarnings = newWarnings,
             ResolvedWarnings = resolvedWarnings,
+            MovedWarnings = movedWarnings,
             NewInfo = newInfo,
             ResolvedInfo = resolvedInfo,
+            MovedInfo = movedInfo,
             NewHidden = newHidden,
             ResolvedHidden = resolvedHidden,
+            MovedHidden = movedHidden,
             AddedDiagnostics = newItems,
-            ResolvedDiagnostics = resolvedItems
+            ResolvedDiagnostics = resolvedItems,
+            MovedDiagnostics = movedItems
         };
     }
 
-    private static string KeyFor(DiagnosticDiffItem item)
+    private static (List<DiagnosticDiffItem> Base, List<DiagnosticDiffItem> Head) RemoveExactMatches(
+        IReadOnlyList<DiagnosticDiffItem> baseItems,
+        IReadOnlyList<DiagnosticDiffItem> headItems)
+    {
+        var unmatchedBaseItems = new List<DiagnosticDiffItem>();
+        var headByExactKey = BuildLookup(headItems, ExactKeyFor);
+
+        foreach (var baseItem in baseItems)
+        {
+            if (!TryTake(headByExactKey, ExactKeyFor(baseItem), out _))
+            {
+                unmatchedBaseItems.Add(baseItem);
+            }
+        }
+
+        var unmatchedHeadItems = headByExactKey.Values.SelectMany(q => q).ToList();
+        return (unmatchedBaseItems, unmatchedHeadItems);
+    }
+
+    private static (List<DiagnosticMoveDiffItem> Moved, List<DiagnosticDiffItem> Resolved, List<DiagnosticDiffItem> Added) MatchMovedDiagnostics(
+        IReadOnlyList<DiagnosticDiffItem> baseItems,
+        IReadOnlyList<DiagnosticDiffItem> headItems)
+    {
+        var movedItems = new List<DiagnosticMoveDiffItem>();
+        var resolvedItems = new List<DiagnosticDiffItem>();
+        var headByMoveKey = BuildLookup(headItems, MoveKeyFor);
+
+        foreach (var baseItem in baseItems)
+        {
+            var moveKey = MoveKeyFor(baseItem);
+            if (!headByMoveKey.TryGetValue(moveKey, out var candidates) || candidates.Count == 0)
+            {
+                resolvedItems.Add(baseItem);
+                continue;
+            }
+
+            var headItem = TakeClosest(baseItem, candidates);
+            movedItems.Add(new DiagnosticMoveDiffItem
+            {
+                Project = baseItem.Project,
+                Id = baseItem.Id,
+                Severity = baseItem.Severity,
+                Message = baseItem.Message,
+                File = baseItem.File,
+                BaseLine = baseItem.Line,
+                BaseColumn = baseItem.Column,
+                HeadLine = headItem.Line,
+                HeadColumn = headItem.Column
+            });
+        }
+
+        var addedItems = headByMoveKey.Values.SelectMany(q => q).ToList();
+        return (movedItems, resolvedItems, addedItems);
+    }
+
+    private static Dictionary<string, Queue<DiagnosticDiffItem>> BuildLookup(
+        IEnumerable<DiagnosticDiffItem> items,
+        Func<DiagnosticDiffItem, string> keySelector)
+    {
+        var lookup = new Dictionary<string, Queue<DiagnosticDiffItem>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var item in items)
+        {
+            var key = keySelector(item);
+            if (!lookup.TryGetValue(key, out var queue))
+            {
+                queue = new Queue<DiagnosticDiffItem>();
+                lookup.Add(key, queue);
+            }
+
+            queue.Enqueue(item);
+        }
+
+        return lookup;
+    }
+
+    private static bool TryTake(
+        Dictionary<string, Queue<DiagnosticDiffItem>> lookup,
+        string key,
+        out DiagnosticDiffItem? item)
+    {
+        if (lookup.TryGetValue(key, out var queue) && queue.TryDequeue(out item))
+        {
+            if (queue.Count == 0)
+            {
+                lookup.Remove(key);
+            }
+
+            return true;
+        }
+
+        item = null;
+        return false;
+    }
+
+    private static DiagnosticDiffItem TakeClosest(DiagnosticDiffItem baseItem, Queue<DiagnosticDiffItem> candidates)
+    {
+        var candidateList = candidates.ToList();
+        var closest = candidateList
+            .OrderBy(i => Math.Abs(i.Line - baseItem.Line))
+            .ThenBy(i => Math.Abs(i.Column - baseItem.Column))
+            .ThenBy(i => i.Line)
+            .ThenBy(i => i.Column)
+            .First();
+
+        candidates.Clear();
+        foreach (var candidate in candidateList.Where(i => !ReferenceEquals(i, closest)))
+        {
+            candidates.Enqueue(candidate);
+        }
+
+        return closest;
+    }
+
+    private static string ExactKeyFor(DiagnosticDiffItem item)
     {
         return string.Join("|", item.Project, item.Id, item.Severity, item.Message, item.File, item.Line, item.Column);
+    }
+
+    private static string MoveKeyFor(DiagnosticDiffItem item)
+    {
+        return string.Join("|", item.Project, item.Id, item.Severity, item.Message, item.File);
     }
 
     private static bool IsBclNamespace(string packageName)
