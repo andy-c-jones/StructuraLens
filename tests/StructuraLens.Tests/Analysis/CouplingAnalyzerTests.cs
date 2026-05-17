@@ -3,7 +3,6 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Text;
 using Microsoft.Extensions.Logging;
-using StructuraLens.Core.Abstractions;
 using StructuraLens.Core.Analysis;
 using StructuraLens.Core.Models;
 
@@ -11,7 +10,7 @@ namespace StructuraLens.Tests.Analysis;
 
 public class CouplingAnalyzerTests
 {
-    private ICouplingAnalyzer CreateAnalyzer()
+    private static CouplingAnalyzer CreateAnalyzer()
     {
         var logger = A.Fake<ILogger<CouplingAnalyzer>>();
         return new CouplingAnalyzer(logger);
@@ -21,7 +20,10 @@ public class CouplingAnalyzerTests
     public void Constructor_WithNullLogger_ThrowsArgumentNullException()
     {
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => new CouplingAnalyzer(null!));
+        Assert.Throws<ArgumentNullException>(() =>
+        {
+            _ = new CouplingAnalyzer(null!);
+        });
     }
 
     [Test]
@@ -209,6 +211,46 @@ public class CouplingAnalyzerTests
         var project1Coupling = analysis.ProjectCoupling.FirstOrDefault(p => p.EntityName == "Project1");
         await Assert.That(project1Coupling).IsNotNull();
         await Assert.That(project1Coupling!.InternalOutbound.Count).IsGreaterThan(0);
+    }
+
+    [Test]
+    public async Task BuildCouplingAnalysisFromDependencies_WithSolutionAndInputProjectReference_DoesNotDoubleCount()
+    {
+        // Arrange
+        var analyzer = CreateAnalyzer();
+        var workspace = new AdhocWorkspace();
+        var project1Id = ProjectId.CreateNewId();
+        var project2Id = ProjectId.CreateNewId();
+        var solution = workspace.CurrentSolution
+            .AddProject(ProjectInfo.Create(
+                project1Id,
+                VersionStamp.Default,
+                "Project1",
+                "Project1",
+                LanguageNames.CSharp,
+                projectReferences: [new ProjectReference(project2Id)]))
+            .AddProject(ProjectInfo.Create(
+                project2Id,
+                VersionStamp.Default,
+                "Project2",
+                "Project2",
+                LanguageNames.CSharp));
+
+        var dependencies = new List<DependencyEdge>
+        {
+            new("Project1", "Project2", DependencyType.ProjectReference, 1)
+        };
+
+        // Act
+        var analysis = analyzer.BuildCouplingAnalysisFromDependencies(solution, dependencies);
+
+        // Assert
+        var projectEdge = analysis.AllDependencies.Single(edge =>
+            edge.Type == DependencyType.ProjectReference &&
+            edge.FromEntity == "Project1" &&
+            edge.ToEntity == "Project2");
+
+        await Assert.That(projectEdge.ReferenceCount).IsEqualTo(1);
     }
 
     [Test]

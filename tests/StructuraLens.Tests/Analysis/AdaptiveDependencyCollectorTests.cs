@@ -150,6 +150,31 @@ public class AdaptiveDependencyCollectorTests
     }
 
     [Test]
+    public async Task Migration_WithLogger_ReportsMigrationMessages()
+    {
+        // Arrange
+        var messages = new List<string>();
+        using var collector = new AdaptiveDependencyCollector(
+            memoryThresholdMB: 1,
+            sqliteBatchSize: 100,
+            memoryProvider: AlwaysAboveThreshold,
+            migrationLogger: messages.Add);
+
+        // Act
+        for (int i = 0; i < 12000; i++)
+        {
+            collector.AddDependency(new DependencyEdge($"Entity_{i % 100}", $"Entity_{(i + 1) % 100}", DependencyType.TypeReference, 1));
+        }
+
+        // Assert
+        await Assert.That(collector.HasMigrated).IsTrue();
+        await Assert.That(messages.Count).IsEqualTo(3);
+        await Assert.That(messages[0]).Contains("Migrating to SQLite");
+        await Assert.That(messages[1]).Contains("Migrated");
+        await Assert.That(messages[2]).Contains("Migration complete");
+    }
+
+    [Test]
     public async Task Migration_PreservesAllData()
     {
         // Arrange - Low threshold with deterministic memory provider to trigger migration

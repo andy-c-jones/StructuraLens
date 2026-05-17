@@ -5,12 +5,12 @@ namespace StructuraLens.Tests.Export;
 
 public class HtmlReportGeneratorTests
 {
-    private HtmlReportGenerator CreateGenerator()
+    private static HtmlReportGenerator CreateGenerator()
     {
         return new HtmlReportGenerator(new CompactReportExporter());
     }
 
-    private AnalysisReport CreateMinimalReport(
+    private static AnalysisReport CreateMinimalReport(
         string solutionPath = "TestSolution.sln",
         DateTime? analyzedAt = null,
         GitRepositoryInfo? gitInfo = null,
@@ -53,7 +53,7 @@ public class HtmlReportGeneratorTests
         };
     }
 
-    private AnalysisDiffReport CreateMinimalDiff()
+    private static AnalysisDiffReport CreateMinimalDiff()
     {
         return new AnalysisDiffReport
         {

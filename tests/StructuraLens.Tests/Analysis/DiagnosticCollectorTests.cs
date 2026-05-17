@@ -7,6 +7,7 @@ using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Diagnostics;
+using Microsoft.CodeAnalysis.Text;
 
 using StructuraLens.Core.Analysis;
 
@@ -25,8 +26,8 @@ public class DiagnosticCollectorTests
         var summary = await DiagnosticCollector.CollectAsync(
             project,
             compilation!,
-            CancellationToken.None,
-            concurrentAnalyzerExecution: true);
+            concurrentAnalyzerExecution: true,
+            cancellationToken: CancellationToken.None);
 
         var hasCs0168 = summary.Diagnostics.Any(d => d.Id == "CS0168");
         await Assert.That(hasCs0168).IsTrue();
@@ -43,11 +44,45 @@ public class DiagnosticCollectorTests
         var summary = await DiagnosticCollector.CollectAsync(
             project,
             compilation!,
-            CancellationToken.None,
-            concurrentAnalyzerExecution: true);
+            concurrentAnalyzerExecution: true,
+            cancellationToken: CancellationToken.None);
 
         var hasCs0168 = summary.Diagnostics.Any(d => d.Id == "CS0168");
         await Assert.That(hasCs0168).IsFalse();
+    }
+
+    [Test]
+    public async Task CollectAsync_GeneratedObjSource_ExcludesDiagnostics()
+    {
+        var project = CreateProjectWithGeneratedWarning();
+        var compilation = await project.GetCompilationAsync();
+
+        await Assert.That(compilation).IsNotNull();
+
+        var summary = await DiagnosticCollector.CollectAsync(
+            project,
+            compilation!,
+            concurrentAnalyzerExecution: true,
+            cancellationToken: CancellationToken.None);
+
+        await Assert.That(summary.Diagnostics).IsEmpty();
+    }
+
+    [Test]
+    public async Task CollectAsync_UserAssemblyInfoSource_IncludesDiagnostics()
+    {
+        var project = CreateProjectWithUserAssemblyInfoWarning();
+        var compilation = await project.GetCompilationAsync();
+
+        await Assert.That(compilation).IsNotNull();
+
+        var summary = await DiagnosticCollector.CollectAsync(
+            project,
+            compilation!,
+            concurrentAnalyzerExecution: true,
+            cancellationToken: CancellationToken.None);
+
+        await Assert.That(summary.Diagnostics.Any(d => d.Id == "CS0168")).IsTrue();
     }
 
     private static Project CreateProject(bool withSuppressor)
@@ -85,6 +120,80 @@ public class DiagnosticCollectorTests
             new TestAnalyzerAssemblyLoader());
 
         return project.AddAnalyzerReference(analyzerReference);
+    }
+
+    private static Project CreateProjectWithGeneratedWarning()
+    {
+        var workspace = new AdhocWorkspace();
+        var projectInfo = ProjectInfo.Create(
+            ProjectId.CreateNewId(),
+            VersionStamp.Default,
+            "GeneratedDiagnosticsProject",
+            "GeneratedDiagnosticsProject",
+            LanguageNames.CSharp,
+            compilationOptions: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, warningLevel: 4),
+            metadataReferences: [MetadataReference.CreateFromFile(typeof(object).Assembly.Location)]);
+
+        var generatedFilePath = Path.Combine(
+            Path.GetTempPath(),
+            "StructuraLensTests",
+            "obj",
+            "Debug",
+            "net10.0",
+            "GeneratedWarning.cs");
+
+        return workspace
+            .AddProject(projectInfo)
+            .AddDocument(
+                "GeneratedWarning.cs",
+                SourceText.From(
+                    """
+                    public sealed class GeneratedWarning
+                    {
+                        public void Execute()
+                        {
+                            int unused;
+                        }
+                    }
+                    """),
+                filePath: generatedFilePath)
+            .Project;
+    }
+
+    private static Project CreateProjectWithUserAssemblyInfoWarning()
+    {
+        var workspace = new AdhocWorkspace();
+        var projectInfo = ProjectInfo.Create(
+            ProjectId.CreateNewId(),
+            VersionStamp.Default,
+            "UserAssemblyInfoDiagnosticsProject",
+            "UserAssemblyInfoDiagnosticsProject",
+            LanguageNames.CSharp,
+            compilationOptions: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, warningLevel: 4),
+            metadataReferences: [MetadataReference.CreateFromFile(typeof(object).Assembly.Location)]);
+
+        var sourceFilePath = Path.Combine(
+            Path.GetTempPath(),
+            "StructuraLensTests",
+            "Properties",
+            "AssemblyInfo.cs");
+
+        return workspace
+            .AddProject(projectInfo)
+            .AddDocument(
+                "AssemblyInfo.cs",
+                SourceText.From(
+                    """
+                    public sealed class UserAssemblyInfoWarning
+                    {
+                        public void Execute()
+                        {
+                            int unused;
+                        }
+                    }
+                    """),
+                filePath: sourceFilePath)
+            .Project;
     }
 
     [DiagnosticAnalyzer(LanguageNames.CSharp)]

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using StructuraLens.Core.Models;
 
 namespace StructuraLens.Cli.Logging;
 
@@ -37,7 +38,7 @@ internal static partial class ProgramLog
         EventId = 4007,
         Level = LogLevel.Information,
         Message = "Dependency aggregation strategy: {strategy}")]
-    public static partial void AggregationStrategy(ILogger logger, string strategy);
+    public static partial void AggregationStrategy(ILogger logger, DependencyAggregationStrategy strategy);
 
     [LoggerMessage(
         EventId = 4008,

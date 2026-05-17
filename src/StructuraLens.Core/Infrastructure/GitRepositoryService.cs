@@ -1,6 +1,7 @@
 using LibGit2Sharp;
 using Microsoft.Extensions.Logging;
 using StructuraLens.Core.Abstractions;
+using StructuraLens.Core.Infrastructure.Logging;
 
 namespace StructuraLens.Core.Infrastructure;
 
@@ -26,7 +27,7 @@ public sealed class GitRepositoryService : IGitRepositoryService
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "Failed to discover git repository for path: {Path}", path);
+            GitRepositoryServiceLog.FailedToDiscoverRepository(_logger, ex, path);
             return false;
         }
     }
@@ -47,7 +48,7 @@ public sealed class GitRepositoryService : IGitRepositoryService
             var head = repo.Head;
             if (head?.Tip == null)
             {
-                _logger.LogWarning("Git repository found but HEAD is null or has no commits");
+                GitRepositoryServiceLog.GitHeadUnavailable(_logger);
                 return null;
             }
 
@@ -73,9 +74,7 @@ public sealed class GitRepositoryService : IGitRepositoryService
             var status = repo.RetrieveStatus(new StatusOptions());
             var isDirty = status.IsDirty;
 
-            _logger.LogDebug(
-                "Git metadata retrieved: Commit={Commit}, Branch={Branch}, Dirty={Dirty}",
-                shortCommitSha, branchName, isDirty);
+            GitRepositoryServiceLog.GitMetadataRetrieved(_logger, shortCommitSha, branchName, isDirty);
 
             return new GitMetadata(
                 CommitSha: commitSha,
@@ -86,7 +85,7 @@ public sealed class GitRepositoryService : IGitRepositoryService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to retrieve git metadata for path: {Path}", path);
+            GitRepositoryServiceLog.FailedToRetrieveMetadata(_logger, ex, path);
             return null;
         }
     }

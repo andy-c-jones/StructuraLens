@@ -155,6 +155,27 @@ public class SQLiteDependencyCollectorTests
     }
 
     [Test]
+    public async Task AddDependencies_Batch_UpdatesTotalEdgesAdded()
+    {
+        // Arrange
+        using var collector = new SQLiteDependencyCollector();
+        var edges = new[]
+        {
+            new DependencyEdge("A", "B", DependencyType.TypeReference, 1),
+            new DependencyEdge("A", "B", DependencyType.TypeReference, 1),
+            new DependencyEdge("B", "C", DependencyType.TypeReference, 1)
+        };
+
+        // Act
+        collector.AddDependencies(edges);
+        var stats = collector.GetStats();
+
+        // Assert
+        await Assert.That(stats.TotalEdgesAdded).IsEqualTo(3);
+        await Assert.That(stats.UniqueEdgesCount).IsEqualTo(2);
+    }
+
+    [Test]
     public async Task GetStats_ReturnsCorrectInformation()
     {
         // Arrange

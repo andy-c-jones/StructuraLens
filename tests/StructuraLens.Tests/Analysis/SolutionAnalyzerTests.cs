@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.CodeAnalysis;
 using StructuraLens.Core.Analysis;
@@ -317,24 +316,27 @@ public class SolutionAnalyzerIntegrationTests
     }
 
     [Test]
-    public async Task AnalyzeSolutionAsync_OwnSolution_LocalFunctionsAreAnalyzed()
+    public async Task AnalyzeSolutionAsync_OwnSolution_CliEntryPointAndHandlersAreAnalyzed()
     {
         var solutionPath = GetSolutionPath();
         var analyzer = CreateAnalyzer();
         var report = await analyzer.AnalyzeSolutionAsync(solutionPath);
 
-        // CLI has a PrintSummary local function
         var cliProject = report.Projects.FirstOrDefault(p => p.Name == "StructuraLens.Cli");
         await Assert.That(cliProject).IsNotNull();
 
-        var programType = cliProject!.Types.FirstOrDefault(t => t.FullName.Contains("Program"));
-        await Assert.That(programType).IsNotNull();
+        var hasProgramMain = cliProject!.Types.Any(t =>
+            t.FullName.Contains("Program") &&
+            t.Methods.Any(m => m.FullName.Contains("Main")));
+        await Assert.That(hasProgramMain).IsTrue();
 
-        // Should have more than just Main - should include PrintSummary
-        await Assert.That(programType!.Methods.Count).IsGreaterThanOrEqualTo(2);
+        var analyzeHandler = cliProject.Types.FirstOrDefault(t => t.FullName == "StructuraLens.Cli.AnalyzeCommandHandler");
+        await Assert.That(analyzeHandler).IsNotNull();
+        await Assert.That(analyzeHandler!.Methods.Any(m => m.FullName.Contains("ExecuteAsync"))).IsTrue();
 
-        var printSummary = programType.Methods.FirstOrDefault(m => m.FullName.Contains("PrintSummary"));
-        await Assert.That(printSummary).IsNotNull();
+        var summaryRenderer = cliProject.Types.FirstOrDefault(t => t.FullName == "StructuraLens.Cli.SummaryReportRenderer");
+        await Assert.That(summaryRenderer).IsNotNull();
+        await Assert.That(summaryRenderer!.Methods.Any(m => m.FullName.Contains("RenderAnalysis"))).IsTrue();
     }
 
     [Test]
@@ -580,12 +582,7 @@ public class SolutionAnalyzerIntegrationTests
             var consumerProject = workspace.CurrentSolution.GetProject(consumerProjectId);
             await Assert.That(consumerProject).IsNotNull();
 
-            var method = typeof(SolutionAnalyzer).GetMethod(
-                "GetProjectReferenceNames",
-                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
-            await Assert.That(method).IsNotNull();
-
-            var projectReferences = (List<string>)method!.Invoke(null, [consumerProject!])!;
+            var projectReferences = ProjectReferenceResolver.GetProjectReferenceNames(consumerProject!);
             await Assert.That(projectReferences.Count).IsEqualTo(1);
 
             var referencesSharedProject =

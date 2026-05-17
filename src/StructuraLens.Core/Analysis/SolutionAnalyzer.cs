@@ -1,11 +1,10 @@
-using System.Xml.Linq;
+using System.Collections.Concurrent;
 using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.MSBuild;
 using Microsoft.Extensions.Logging;
 
 using StructuraLens.Core.Abstractions;
 using StructuraLens.Core.Analysis.Logging;
-using StructuraLens.Core.Infrastructure;
 using StructuraLens.Core.Models;
 
 namespace StructuraLens.Core.Analysis;
@@ -20,7 +19,7 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
     private readonly INuGetRestorer _nugetRestorer;
     private readonly IMSBuildWorkspaceFactory _workspaceFactory;
     private readonly ICouplingAnalyzer _couplingAnalyzer;
-    private readonly IMetricsCalculator _metricsCalculator;
+    private readonly DocumentMetricsAnalyzer _documentMetricsAnalyzer;
     private readonly IFileSystemService _fileSystem;
     private readonly IGitRepositoryService _gitService;
     private readonly AnalysisOptions _options;
@@ -40,7 +39,7 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
         _nugetRestorer = nugetRestorer;
         _workspaceFactory = workspaceFactory;
         _couplingAnalyzer = couplingAnalyzer;
-        _metricsCalculator = metricsCalculator;
+        _documentMetricsAnalyzer = new DocumentMetricsAnalyzer(metricsCalculator);
         _fileSystem = fileSystem;
         _gitService = gitService;
         _options = options ?? new AnalysisOptions();
@@ -59,7 +58,8 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
                 _options.SQLiteBatchSize),
             DependencyAggregationStrategy.Adaptive => new AdaptiveDependencyCollector(
                 _options.MemoryThresholdMB,
-                _options.SQLiteBatchSize),
+                _options.SQLiteBatchSize,
+                migrationLogger: message => SolutionAnalyzerLog.DependencyCollectorMigration(_logger, message)),
             _ => throw new ArgumentException($"Unknown aggregation strategy: {_options.AggregationStrategy}")
         };
     }
@@ -81,42 +81,17 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
 
         SolutionAnalyzerLog.LoadingSolutionIntoWorkspace(_logger);
         using var workspace = _workspaceFactory.Create();
-        workspace.RegisterWorkspaceFailedHandler(e =>
-        {
-            if (e.Diagnostic.Kind == WorkspaceDiagnosticKind.Warning)
-            {
-                _warnings.Add($"Workspace warning: {e.Diagnostic.Message}");
-                SolutionAnalyzerLog.WorkspaceWarning(_logger, e.Diagnostic.Message);
-            }
-        });
+        RegisterWorkspaceWarnings(workspace);
 
         var solution = await workspace.OpenSolutionAsync(fullPath, cancellationToken: cancellationToken);
         var csharpProjects = solution.Projects.Where(p => p.Language == LanguageNames.CSharp).ToList();
         SolutionAnalyzerLog.LoadedSolutionWithProjects(_logger, csharpProjects.Count);
 
-        // Pre-fetch all compilations in parallel and cache them for reuse
-        SolutionAnalyzerLog.PreFetchingCompilations(_logger);
-        var compilationCache = new System.Collections.Concurrent.ConcurrentDictionary<string, Compilation>();
-
-        await Parallel.ForEachAsync(csharpProjects, new ParallelOptions
-        {
-            MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount),
-            CancellationToken = cancellationToken
-        }, async (project, ct) =>
-        {
-            var compilation = await project.GetCompilationAsync(ct);
-            if (compilation != null)
-            {
-                compilationCache[project.Name] = compilation;
-            }
-            else
-            {
-                _warnings.Add($"Could not get compilation for project: {project.Name}");
-                SolutionAnalyzerLog.CouldNotGetCompilation(_logger, project.Name);
-            }
-        });
-
-        SolutionAnalyzerLog.CachedCompilations(_logger, compilationCache.Count);
+        var compilationCache = await CompilationCacheBuilder.BuildAsync(
+            csharpProjects,
+            _warnings,
+            _logger,
+            cancellationToken);
 
         // Analyze projects in parallel for performance on large solutions
         // Use streaming dependency collector to reduce memory usage in full mode only.
@@ -135,8 +110,8 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
             SolutionAnalyzerLog.AnalyzingProject(_logger, currentIndex, totalProjects, project.Name);
 
             var metrics = IsDiagnosticsAndReferencesMode
-                ? await AnalyzeProjectDiagnosticsAndReferencesAsync(project, compilationCache, ct, concurrentAnalyzerExecution: false)
-                : await AnalyzeProjectWithCouplingAsync(project, compilationCache, dependencyCollector!, ct, concurrentAnalyzerExecution: false);
+                ? await AnalyzeProjectDiagnosticsAndReferencesAsync(project, compilationCache, concurrentAnalyzerExecution: false, cancellationToken: ct)
+                : await AnalyzeProjectWithCouplingAsync(project, compilationCache, dependencyCollector!, concurrentAnalyzerExecution: false, cancellationToken: ct);
             projectMetricsList.Add(metrics);
 
             if (IsDiagnosticsAndReferencesMode)
@@ -163,35 +138,18 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
         {
             SolutionAnalyzerLog.AnalysisCompleteLightweight(_logger, projectMetricsList.Count);
         }
-        else
+        else if (_logger.IsEnabled(LogLevel.Information))
         {
-            SolutionAnalyzerLog.AnalysisComplete(_logger, projectMetricsList.Count, projectMetricsList.Sum(p => p.Types.Count), projectMetricsList.Sum(p => p.TotalMethods));
+            var typeCount = projectMetricsList.Sum(static p => p.Types.Count);
+            var methodCount = projectMetricsList.Sum(static p => p.TotalMethods);
+            SolutionAnalyzerLog.AnalysisComplete(_logger, projectMetricsList.Count, typeCount, methodCount);
         }
 
-        // Collect git metadata for the analyzed solution
-        var gitMetadata = _gitService.GetGitMetadata(fullPath);
-        GitRepositoryInfo? gitInfo = null;
-        if (gitMetadata != null)
-        {
-            gitInfo = new GitRepositoryInfo(
-                CommitSha: gitMetadata.CommitSha,
-                BranchName: gitMetadata.BranchName,
-                RemoteUrl: gitMetadata.RemoteUrl,
-                IsDirty: gitMetadata.IsDirty);
-        }
-
-        return new AnalysisReport(
-            SolutionPath: fullPath,
-            AnalyzedAt: DateTime.UtcNow,
-            Projects: projectMetricsList.ToList(),
-            Warnings: _warnings.ToList(),
-            ToolVersion: _options.ToolVersion,
-            AnalysisMode: _options.AnalysisMode)
-        {
-            CouplingAnalysis = couplingAnalysis,
-            AggregationStats = collectorStats,
-            GitInfo = gitInfo
-        };
+        return CreateReport(
+            fullPath,
+            projectMetricsList.ToList(),
+            couplingAnalysis,
+            collectorStats);
     }
 
     /// <inheritdoc />
@@ -211,22 +169,15 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
 
         SolutionAnalyzerLog.LoadingProjectIntoWorkspace(_logger);
         using var workspace = _workspaceFactory.Create();
-        workspace.RegisterWorkspaceFailedHandler(e =>
-        {
-            if (e.Diagnostic.Kind == WorkspaceDiagnosticKind.Warning)
-            {
-                _warnings.Add($"Workspace warning: {e.Diagnostic.Message}");
-                SolutionAnalyzerLog.WorkspaceWarning(_logger, e.Diagnostic.Message);
-            }
-        });
+        RegisterWorkspaceWarnings(workspace);
 
         var project = await workspace.OpenProjectAsync(fullPath, cancellationToken: cancellationToken);
         SolutionAnalyzerLog.AnalyzingProjectSingle(_logger, project.Name);
 
         // For single project, create an empty cache (compilation will be fetched on demand)
-        var compilationCache = new System.Collections.Concurrent.ConcurrentDictionary<string, Compilation>();
+        var compilationCache = new ConcurrentDictionary<string, Compilation>();
         var projectMetrics = IsDiagnosticsAndReferencesMode
-            ? await AnalyzeProjectDiagnosticsAndReferencesAsync(project, compilationCache, cancellationToken, concurrentAnalyzerExecution: true)
+            ? await AnalyzeProjectDiagnosticsAndReferencesAsync(project, compilationCache, concurrentAnalyzerExecution: true, cancellationToken: cancellationToken)
             : await AnalyzeProjectAsync(project, compilationCache, cancellationToken);
 
         CouplingAnalysis? couplingAnalysis = null;
@@ -236,53 +187,24 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
             couplingAnalysis = await _couplingAnalyzer.AnalyzeProjectCouplingAsync(project, cancellationToken);
         }
 
-        // Collect git metadata for the analyzed project
-        var gitMetadata = _gitService.GetGitMetadata(fullPath);
-        GitRepositoryInfo? gitInfo = null;
-        if (gitMetadata != null)
-        {
-            gitInfo = new GitRepositoryInfo(
-                CommitSha: gitMetadata.CommitSha,
-                BranchName: gitMetadata.BranchName,
-                RemoteUrl: gitMetadata.RemoteUrl,
-                IsDirty: gitMetadata.IsDirty);
-        }
-
-        return new AnalysisReport(
-            SolutionPath: fullPath,
-            AnalyzedAt: DateTime.UtcNow,
-            Projects: [projectMetrics],
-            Warnings: _warnings.ToList(),
-            ToolVersion: _options.ToolVersion,
-            AnalysisMode: _options.AnalysisMode)
-        {
-            CouplingAnalysis = couplingAnalysis,
-            GitInfo = gitInfo
-        };
+        return CreateReport(fullPath, [projectMetrics], couplingAnalysis);
     }
 
     private async Task<ProjectMetrics> AnalyzeProjectWithCouplingAsync(
         Project project,
-        System.Collections.Concurrent.ConcurrentDictionary<string, Compilation> compilationCache,
+        ConcurrentDictionary<string, Compilation> compilationCache,
         IDependencyCollector dependencyCollector,
-        CancellationToken cancellationToken,
-        bool concurrentAnalyzerExecution)
+        bool concurrentAnalyzerExecution,
+        CancellationToken cancellationToken)
     {
-        // Use cached compilation if available
-        if (!compilationCache.TryGetValue(project.Name, out var compilation))
+        var compilation = await GetCompilationAsync(project, compilationCache, cancellationToken);
+        if (compilation == null)
         {
-            SolutionAnalyzerLog.GettingCompilationForProject(_logger, project.Name);
-            compilation = await project.GetCompilationAsync(cancellationToken);
-            if (compilation == null)
-            {
-                _warnings.Add($"Could not get compilation for project: {project.Name}");
-                SolutionAnalyzerLog.CouldNotGetCompilation(_logger, project.Name);
-                return new ProjectMetrics(project.Name, project.FilePath ?? "", []);
-            }
+            return CreateEmptyProjectMetrics(project);
         }
 
         // Collect diagnostics from compilation
-        var diagnosticSummary = await DiagnosticCollector.CollectAsync(project, compilation, cancellationToken, concurrentAnalyzerExecution);
+        var diagnosticSummary = await DiagnosticCollector.CollectAsync(project, compilation, concurrentAnalyzerExecution, cancellationToken);
 
         var documents = project.Documents.Where(d => d.SourceCodeKind == SourceCodeKind.Regular).ToList();
         var documentCount = documents.Count;
@@ -317,34 +239,15 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
             // Analyze coupling dependencies - stream directly to shared collector
             CouplingAnalyzer.AnalyzeDocumentCouplingStreaming(semanticModel, filePath, root, dependencyCollector);
 
-            // Single pass to collect all nodes of interest, avoiding redundant tree traversals
-            var descendantNodes = root.DescendantNodes().ToList();
-
-            // Analyze traditional type declarations
-            var typeDeclarations = descendantNodes.OfType<TypeDeclarationSyntax>();
-
-            foreach (var typeDecl in typeDeclarations)
+            foreach (var typeMetrics in _documentMetricsAnalyzer.Analyze(root, semanticModel, filePath))
             {
-                var typeMetrics = AnalyzeTypeDeclaration(typeDecl, semanticModel, filePath);
                 typeMetricsBag.Add(typeMetrics);
-            }
-
-            // Analyze top-level statements (C# 9+ feature)
-            var topLevelStatements = descendantNodes.OfType<GlobalStatementSyntax>().ToList();
-
-            if (topLevelStatements.Count > 0)
-            {
-                var topLevelMetrics = AnalyzeTopLevelStatements(root, topLevelStatements, semanticModel, filePath);
-                if (topLevelMetrics != null)
-                {
-                    typeMetricsBag.Add(topLevelMetrics);
-                }
             }
         });
 
         var typeMetricsList = typeMetricsBag.ToList();
         var packageReferences = ReadPackageReferences(project.FilePath);
-        var projectReferences = GetProjectReferenceNames(project);
+        var projectReferences = ProjectReferenceResolver.GetProjectReferenceNames(project);
 
         var projectMetrics = new ProjectMetrics(
             Name: project.Name,
@@ -359,35 +262,28 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
         return projectMetrics;
     }
 
-    private async Task<ProjectMetrics> AnalyzeProjectAsync(Project project, System.Collections.Concurrent.ConcurrentDictionary<string, Compilation> compilationCache, CancellationToken cancellationToken)
+    private async Task<ProjectMetrics> AnalyzeProjectAsync(Project project, ConcurrentDictionary<string, Compilation> compilationCache, CancellationToken cancellationToken)
     {
         // For single project analysis, create a temporary collector that we don't use
         using var tempCollector = new InMemoryDependencyCollector();
-        return await AnalyzeProjectWithCouplingAsync(project, compilationCache, tempCollector, cancellationToken, concurrentAnalyzerExecution: true);
+        return await AnalyzeProjectWithCouplingAsync(project, compilationCache, tempCollector, concurrentAnalyzerExecution: true, cancellationToken: cancellationToken);
     }
 
     private async Task<ProjectMetrics> AnalyzeProjectDiagnosticsAndReferencesAsync(
         Project project,
-        System.Collections.Concurrent.ConcurrentDictionary<string, Compilation> compilationCache,
-        CancellationToken cancellationToken,
-        bool concurrentAnalyzerExecution)
+        ConcurrentDictionary<string, Compilation> compilationCache,
+        bool concurrentAnalyzerExecution,
+        CancellationToken cancellationToken)
     {
-        // Use cached compilation if available
-        if (!compilationCache.TryGetValue(project.Name, out var compilation))
+        var compilation = await GetCompilationAsync(project, compilationCache, cancellationToken);
+        if (compilation == null)
         {
-            SolutionAnalyzerLog.GettingCompilationForProject(_logger, project.Name);
-            compilation = await project.GetCompilationAsync(cancellationToken);
-            if (compilation == null)
-            {
-                _warnings.Add($"Could not get compilation for project: {project.Name}");
-                SolutionAnalyzerLog.CouldNotGetCompilation(_logger, project.Name);
-                return new ProjectMetrics(project.Name, project.FilePath ?? "", []);
-            }
+            return CreateEmptyProjectMetrics(project);
         }
 
-        var diagnosticSummary = await DiagnosticCollector.CollectAsync(project, compilation, cancellationToken, concurrentAnalyzerExecution);
+        var diagnosticSummary = await DiagnosticCollector.CollectAsync(project, compilation, concurrentAnalyzerExecution, cancellationToken);
         var packageReferences = ReadPackageReferences(project.FilePath);
-        var projectReferences = GetProjectReferenceNames(project);
+        var projectReferences = ProjectReferenceResolver.GetProjectReferenceNames(project);
 
         return new ProjectMetrics(
             Name: project.Name,
@@ -400,35 +296,16 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
         };
     }
 
-    private static List<string> GetProjectReferenceNames(Project project)
+    private void RegisterWorkspaceWarnings(MSBuildWorkspace workspace)
     {
-        var projectFilePath = project.FilePath;
-        if (string.IsNullOrWhiteSpace(projectFilePath) || !File.Exists(projectFilePath))
+        workspace.RegisterWorkspaceFailedHandler(e =>
         {
-            return [];
-        }
-
-        var solutionProjectsByPath = project.Solution.Projects
-            .Where(p => !string.IsNullOrWhiteSpace(p.FilePath))
-            .GroupBy(
-                p => Path.GetFullPath(p.FilePath!),
-                StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(
-                group => group.Key,
-                group => group.First().Name,
-                StringComparer.OrdinalIgnoreCase);
-
-        var projectDirectory = Path.GetDirectoryName(projectFilePath)!;
-
-        return GetDirectReferenceIncludes(projectFilePath, "ProjectReference")
-            .Select(include => Path.GetFullPath(Path.Combine(projectDirectory, include.Replace('\\', '/'))))
-            .Select(path => solutionProjectsByPath.TryGetValue(path, out var name)
-                ? name
-                : Path.GetFileNameWithoutExtension(path))
-            .Where(name => !string.IsNullOrWhiteSpace(name))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
-            .ToList();
+            if (e.Diagnostic.Kind == WorkspaceDiagnosticKind.Warning)
+            {
+                _warnings.Add($"Workspace warning: {e.Diagnostic.Message}");
+                SolutionAnalyzerLog.WorkspaceWarning(_logger, e.Diagnostic.Message);
+            }
+        });
     }
 
     /// <summary>
@@ -443,7 +320,7 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
 
         try
         {
-            return GetDirectReferenceIncludes(projectFilePath, "PackageReference");
+            return ProjectReferenceResolver.GetDirectReferenceIncludes(projectFilePath, "PackageReference");
         }
         catch (Exception ex)
         {
@@ -452,188 +329,64 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
         }
     }
 
-    private static List<string> GetDirectReferenceIncludes(string projectFilePath, string itemName)
+    private async Task<Compilation?> GetCompilationAsync(
+        Project project,
+        ConcurrentDictionary<string, Compilation> compilationCache,
+        CancellationToken cancellationToken)
     {
-        var document = XDocument.Load(projectFilePath);
-
-        return document.Descendants()
-            .Where(e => string.Equals(e.Name.LocalName, itemName, StringComparison.Ordinal))
-            .Select(e => e.Attribute("Include")?.Value)
-            .Where(value => !string.IsNullOrWhiteSpace(value))
-            .Select(value => value!.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-    }
-
-    private TypeMetrics AnalyzeTypeDeclaration(TypeDeclarationSyntax typeDecl, SemanticModel semanticModel, string filePath)
-    {
-        var typeSymbol = semanticModel.GetDeclaredSymbol(typeDecl) as INamedTypeSymbol;
-        var dit = _metricsCalculator.CalculateDepthOfInheritance(typeSymbol);
-
-        var methodMetricsList = new List<MethodMetrics>();
-
-        // Single pass to collect all type members, avoiding redundant tree traversals
-        var members = typeDecl.DescendantNodes().ToList();
-
-        var methods = members.OfType<MethodDeclarationSyntax>();
-        foreach (var method in methods)
+        if (compilationCache.TryGetValue(project.Name, out var compilation))
         {
-            var metrics = AnalyzeMethod(method, semanticModel, filePath);
-            methodMetricsList.Add(metrics);
+            return compilation;
         }
 
-        var constructors = members.OfType<ConstructorDeclarationSyntax>();
-        foreach (var ctor in constructors)
+        SolutionAnalyzerLog.GettingCompilationForProject(_logger, project.Name);
+        compilation = await project.GetCompilationAsync(cancellationToken);
+        if (compilation == null)
         {
-            var metrics = AnalyzeConstructor(ctor, typeDecl, semanticModel, filePath);
-            methodMetricsList.Add(metrics);
+            _warnings.Add($"Could not get compilation for project: {project.Name}");
+            SolutionAnalyzerLog.CouldNotGetCompilation(_logger, project.Name);
         }
 
-        var typeName = typeSymbol?.ToDisplayString() ?? typeDecl.Identifier.Text;
-
-        return new TypeMetrics(
-            FullName: typeName,
-            FilePath: filePath,
-            DepthOfInheritance: dit,
-            Methods: methodMetricsList);
+        return compilation;
     }
 
-    private TypeMetrics? AnalyzeTopLevelStatements(SyntaxNode root, List<GlobalStatementSyntax> topLevelStatements, SemanticModel semanticModel, string filePath)
+    private static ProjectMetrics CreateEmptyProjectMetrics(Project project)
     {
-        var methodMetricsList = new List<MethodMetrics>();
+        return new ProjectMetrics(project.Name, project.FilePath ?? "", []);
+    }
 
-        // Analyze the top-level code as a single "Main" method using unified calculator
-        var firstStatement = topLevelStatements.First();
-        var lastStatement = topLevelStatements.Last();
-
-        var (cc, loc, halsteadVolume, mi) = CalculateCodeMetrics(
-            root,
-            hasBody: topLevelStatements.Count > 0,
-            expressionBodiedFallbackLoc: 1);
-
-        var startLine = firstStatement.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
-        var endLine = lastStatement.GetLocation().GetLineSpan().EndLinePosition.Line + 1;
-
-        methodMetricsList.Add(new MethodMetrics(
-            FullName: "<Program>$.Main(string[])",
-            FilePath: filePath,
-            StartLine: startLine,
-            EndLine: endLine,
-            CyclomaticComplexity: cc,
-            LinesOfExecutableCode: loc,
-            HalsteadVolume: halsteadVolume,
-            MaintainabilityIndex: mi));
-
-        // Analyze local functions defined in top-level code
-        var localFunctions = root.DescendantNodes()
-            .OfType<LocalFunctionStatementSyntax>()
-            .Where(lf => !lf.Ancestors().OfType<TypeDeclarationSyntax>().Any());
-
-        foreach (var localFunc in localFunctions)
+    private AnalysisReport CreateReport(
+        string fullPath,
+        IReadOnlyList<ProjectMetrics> projects,
+        CouplingAnalysis? couplingAnalysis,
+        DependencyCollectorStats? collectorStats = null)
+    {
+        return new AnalysisReport(
+            SolutionPath: fullPath,
+            AnalyzedAt: DateTime.UtcNow,
+            Projects: projects,
+            Warnings: _warnings.ToList(),
+            ToolVersion: _options.ToolVersion,
+            AnalysisMode: _options.AnalysisMode)
         {
-            var localMetrics = AnalyzeLocalFunction(localFunc, filePath);
-            methodMetricsList.Add(localMetrics);
+            CouplingAnalysis = couplingAnalysis,
+            AggregationStats = collectorStats,
+            GitInfo = CreateGitRepositoryInfo(fullPath)
+        };
+    }
+
+    private GitRepositoryInfo? CreateGitRepositoryInfo(string fullPath)
+    {
+        var gitMetadata = _gitService.GetGitMetadata(fullPath);
+        if (gitMetadata == null)
+        {
+            return null;
         }
 
-        return new TypeMetrics(
-            FullName: "<Program>$",
-            FilePath: filePath,
-            DepthOfInheritance: 0,
-            Methods: methodMetricsList);
+        return new GitRepositoryInfo(
+            CommitSha: gitMetadata.CommitSha,
+            BranchName: gitMetadata.BranchName,
+            RemoteUrl: gitMetadata.RemoteUrl,
+            IsDirty: gitMetadata.IsDirty);
     }
-
-    private MethodMetrics AnalyzeMethod(MethodDeclarationSyntax method, SemanticModel semanticModel, string filePath)
-    {
-        var methodSymbol = semanticModel.GetDeclaredSymbol(method);
-        var fullName = methodSymbol?.ToDisplayString() ?? method.Identifier.Text;
-
-        var (cc, loc, halsteadVolume, mi) = CalculateCodeMetrics(
-            method,
-            hasBody: method.Body != null || method.ExpressionBody != null,
-            expressionBodiedFallbackLoc: method.Body != null ? 0 : 1);
-
-        var lineSpan = method.GetLocation().GetLineSpan();
-
-        return new MethodMetrics(
-            FullName: fullName,
-            FilePath: filePath,
-            StartLine: lineSpan.StartLinePosition.Line + 1,
-            EndLine: lineSpan.EndLinePosition.Line + 1,
-            CyclomaticComplexity: cc,
-            LinesOfExecutableCode: loc,
-            HalsteadVolume: halsteadVolume,
-            MaintainabilityIndex: mi);
-    }
-
-    private MethodMetrics AnalyzeConstructor(ConstructorDeclarationSyntax ctor, TypeDeclarationSyntax typeDecl, SemanticModel semanticModel, string filePath)
-    {
-        var ctorSymbol = semanticModel.GetDeclaredSymbol(ctor);
-        var fullName = ctorSymbol?.ToDisplayString() ?? $"{typeDecl.Identifier.Text}.ctor";
-
-        var (cc, loc, halsteadVolume, mi) = CalculateCodeMetrics(
-            ctor,
-            hasBody: ctor.Body != null || ctor.ExpressionBody != null,
-            expressionBodiedFallbackLoc: ctor.Body != null ? 0 : 1);
-
-        var lineSpan = ctor.GetLocation().GetLineSpan();
-
-        return new MethodMetrics(
-            FullName: fullName,
-            FilePath: filePath,
-            StartLine: lineSpan.StartLinePosition.Line + 1,
-            EndLine: lineSpan.EndLinePosition.Line + 1,
-            CyclomaticComplexity: cc,
-            LinesOfExecutableCode: loc,
-            HalsteadVolume: halsteadVolume,
-            MaintainabilityIndex: mi);
-    }
-
-    private MethodMetrics AnalyzeLocalFunction(LocalFunctionStatementSyntax localFunc, string filePath)
-    {
-        var fullName = $"<Program>$.{localFunc.Identifier.Text}()";
-
-        var (cc, loc, halsteadVolume, mi) = CalculateCodeMetrics(
-            localFunc,
-            hasBody: localFunc.Body != null || localFunc.ExpressionBody != null,
-            expressionBodiedFallbackLoc: localFunc.Body != null ? 0 : 1);
-
-        var lineSpan = localFunc.GetLocation().GetLineSpan();
-
-        return new MethodMetrics(
-            FullName: fullName,
-            FilePath: filePath,
-            StartLine: lineSpan.StartLinePosition.Line + 1,
-            EndLine: lineSpan.EndLinePosition.Line + 1,
-            CyclomaticComplexity: cc,
-            LinesOfExecutableCode: loc,
-            HalsteadVolume: halsteadVolume,
-            MaintainabilityIndex: mi);
-    }
-
-    private (int CyclomaticComplexity, int LinesOfCode, double HalsteadVolume, double MaintainabilityIndex) CalculateCodeMetrics(
-        SyntaxNode node,
-        bool hasBody,
-        int expressionBodiedFallbackLoc)
-    {
-        if (IsDiagnosticsAndReferencesMode)
-        {
-            // Lightweight mode intentionally avoids unified metrics traversal.
-            return (0, 0, 0, 0);
-        }
-
-        if (!hasBody)
-        {
-            return (1, 0, 0, 100.0);
-        }
-
-        var metrics = _metricsCalculator.CalculateUnifiedMetrics(node);
-        var loc = metrics.LinesOfCode > 0 ? metrics.LinesOfCode : expressionBodiedFallbackLoc;
-        return (
-            metrics.CyclomaticComplexity,
-            loc,
-            metrics.HalsteadVolume,
-            metrics.MaintainabilityIndex);
-    }
-
 }

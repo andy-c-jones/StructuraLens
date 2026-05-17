@@ -71,9 +71,9 @@ public sealed class HtmlReportGenerator : IReportGenerator
 
     private (string compactJson, string diagnosticsJson) SerializeReportData(AnalysisReport report)
     {
-        var exporter = _reportExporter as CompactReportExporter;
-        var compactReport = exporter?.ExportHierarchical(report, includeMethodDetails: true, includeTypeDetails: true)
-                            ?? _reportExporter.Export(report, includeMethodDetails: true, includeTypeDetails: true);
+        var compactReport = _reportExporter is CompactReportExporter exporter
+            ? exporter.ExportHierarchical(report, includeMethodDetails: true, includeTypeDetails: true)
+            : _reportExporter.Export(report, includeMethodDetails: true, includeTypeDetails: true);
 
         var compactJson = JsonSerializer.Serialize(compactReport, JsonOptions);
         var diagnosticsJson = BuildDiagnosticsJson(report);
@@ -100,7 +100,7 @@ public sealed class HtmlReportGenerator : IReportGenerator
         return JsonSerializer.Serialize(diagnostics);
     }
 
-    private string BuildHtml(AnalysisReport report, string compactJson, string diagnosticsJson, string? diffJson, AnalysisDiffReport? diff = null)
+    private static string BuildHtml(AnalysisReport report, string compactJson, string diagnosticsJson, string? diffJson, AnalysisDiffReport? diff = null)
     {
         var template = LoadTemplate();
 

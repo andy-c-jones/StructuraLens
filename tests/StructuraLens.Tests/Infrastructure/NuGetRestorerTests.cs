@@ -68,6 +68,9 @@ public class NuGetRestorerTests
     public void Constructor_WithNullLogger_ThrowsArgumentNullException()
     {
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => new NuGetRestorer(null!));
+        Assert.Throws<ArgumentNullException>(() =>
+        {
+            _ = new NuGetRestorer(null!);
+        });
     }
 }

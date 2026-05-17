@@ -56,7 +56,10 @@ public class MSBuildWorkspaceFactoryTests
     public void Constructor_WithNullRegistrationService_ThrowsArgumentNullException()
     {
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => new MSBuildWorkspaceFactory(null!));
+        Assert.Throws<ArgumentNullException>(() =>
+        {
+            _ = new MSBuildWorkspaceFactory(null!);
+        });
     }
 
     [Test]

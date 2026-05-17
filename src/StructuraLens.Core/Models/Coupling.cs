@@ -103,7 +103,7 @@ public record CouplingMetrics(
     /// <summary>Total reference strength based on all reference counts.</summary>
     public int TotalReferenceStrength => _totalReferenceStrength ??= ComputeTotalReferenceStrength();
 
-    private int ComputeUniqueTargets(IReadOnlyList<DependencyEdge> edges)
+    private static int ComputeUniqueTargets(IReadOnlyList<DependencyEdge> edges)
     {
         var seen = new HashSet<string>();
         foreach (var d in edges)
@@ -111,7 +111,7 @@ public record CouplingMetrics(
         return seen.Count;
     }
 
-    private int ComputeUniqueSources(IReadOnlyList<DependencyEdge> edges)
+    private static int ComputeUniqueSources(IReadOnlyList<DependencyEdge> edges)
     {
         var seen = new HashSet<string>();
         foreach (var d in edges)
@@ -124,7 +124,7 @@ public record CouplingMetrics(
         var seen = new HashSet<string>();
         foreach (var d in ExternalOutbound)
         {
-            if (IsBclNamespace(d.ToEntity))
+            if (DependencyClassifier.IsBclDependency(d.ToEntity))
                 seen.Add(d.ToEntity);
         }
         return seen.Count;
@@ -135,7 +135,7 @@ public record CouplingMetrics(
         var seen = new HashSet<string>();
         foreach (var d in ExternalOutbound)
         {
-            if (!IsBclNamespace(d.ToEntity))
+            if (!DependencyClassifier.IsBclDependency(d.ToEntity))
                 seen.Add(d.ToEntity);
         }
         return seen.Count;
@@ -153,12 +153,6 @@ public record CouplingMetrics(
         return total;
     }
 
-    private static bool IsBclNamespace(string ns)
-    {
-        return ns.StartsWith("System.") ||
-               ns.Equals("System") ||
-               ns.StartsWith("Microsoft.");
-    }
 }
 
 /// <summary>
