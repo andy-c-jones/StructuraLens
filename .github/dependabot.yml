@@ -9,6 +9,8 @@ updates:
       day: "friday"
       time: "09:00"
       timezone: "UTC"
+    cooldown:
+      default-days: 3
     groups:
       github-actions:
         patterns:
@@ -28,6 +30,8 @@ updates:
       day: "friday"
       time: "09:00"
       timezone: "UTC"
+    cooldown:
+      default-days: 3
     groups:
       production-dependencies:
         patterns:
@@ -51,8 +55,31 @@ updates:
       day: "friday"
       time: "09:00"
       timezone: "UTC"
+    cooldown:
+      default-days: 3
     groups:
       development-dependencies:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    pull-request-branch-name:
+      separator: "-"
+
+  # npm dependencies - Web report app
+  # Groups all npm updates into a single weekly PR stream
+  - package-ecosystem: "npm"
+    directory: "/web"
+    schedule:
+      interval: "weekly"
+      day: "friday"
+      time: "09:00"
+      timezone: "UTC"
+    cooldown:
+      default-days: 3
+    groups:
+      web-dependencies:
         patterns:
           - "*"
     commit-message:
