@@ -264,7 +264,6 @@ public sealed class DiffReportRendererTests
         await Assert.That(markdown).Contains("## StructuraLens Diff Summary");
 
         var diagnosticsIndex = markdown.IndexOf("### Diagnostics");
-        var topChangesIndex = markdown.IndexOf("### Maintainability Changes");
         var metricsIndex = markdown.IndexOf("### Overall Metrics");
 
         // Diagnostics should come first

@@ -26,7 +26,10 @@ public sealed class GitRepositoryService : IGitRepositoryService
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "Failed to discover git repository for path: {Path}", path);
+            if (_logger.IsEnabled(Microsoft.Extensions.Logging.LogLevel.Debug))
+            {
+                _logger.LogDebug(ex, "Failed to discover git repository for path: {Path}", path);
+            }
             return false;
         }
     }
@@ -73,9 +76,12 @@ public sealed class GitRepositoryService : IGitRepositoryService
             var status = repo.RetrieveStatus(new StatusOptions());
             var isDirty = status.IsDirty;
 
-            _logger.LogDebug(
-                "Git metadata retrieved: Commit={Commit}, Branch={Branch}, Dirty={Dirty}",
-                shortCommitSha, branchName, isDirty);
+            if (_logger.IsEnabled(Microsoft.Extensions.Logging.LogLevel.Debug))
+            {
+                _logger.LogDebug(
+                    "Git metadata retrieved: Commit={Commit}, Branch={Branch}, Dirty={Dirty}",
+                    shortCommitSha, branchName, isDirty);
+            }
 
             return new GitMetadata(
                 CommitSha: commitSha,

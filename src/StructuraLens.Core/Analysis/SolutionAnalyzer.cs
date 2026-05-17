@@ -110,8 +110,8 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
             SolutionAnalyzerLog.AnalyzingProject(_logger, currentIndex, totalProjects, project.Name);
 
             var metrics = IsDiagnosticsAndReferencesMode
-                ? await AnalyzeProjectDiagnosticsAndReferencesAsync(project, compilationCache, ct, concurrentAnalyzerExecution: false)
-                : await AnalyzeProjectWithCouplingAsync(project, compilationCache, dependencyCollector!, ct, concurrentAnalyzerExecution: false);
+                ? await AnalyzeProjectDiagnosticsAndReferencesAsync(project, compilationCache, concurrentAnalyzerExecution: false, cancellationToken: ct)
+                : await AnalyzeProjectWithCouplingAsync(project, compilationCache, dependencyCollector!, concurrentAnalyzerExecution: false, cancellationToken: ct);
             projectMetricsList.Add(metrics);
 
             if (IsDiagnosticsAndReferencesMode)
@@ -138,9 +138,11 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
         {
             SolutionAnalyzerLog.AnalysisCompleteLightweight(_logger, projectMetricsList.Count);
         }
-        else
+        else if (_logger.IsEnabled(LogLevel.Information))
         {
-            SolutionAnalyzerLog.AnalysisComplete(_logger, projectMetricsList.Count, projectMetricsList.Sum(p => p.Types.Count), projectMetricsList.Sum(p => p.TotalMethods));
+            var typeCount = projectMetricsList.Sum(static p => p.Types.Count);
+            var methodCount = projectMetricsList.Sum(static p => p.TotalMethods);
+            SolutionAnalyzerLog.AnalysisComplete(_logger, projectMetricsList.Count, typeCount, methodCount);
         }
 
         return CreateReport(
@@ -175,7 +177,7 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
         // For single project, create an empty cache (compilation will be fetched on demand)
         var compilationCache = new ConcurrentDictionary<string, Compilation>();
         var projectMetrics = IsDiagnosticsAndReferencesMode
-            ? await AnalyzeProjectDiagnosticsAndReferencesAsync(project, compilationCache, cancellationToken, concurrentAnalyzerExecution: true)
+            ? await AnalyzeProjectDiagnosticsAndReferencesAsync(project, compilationCache, concurrentAnalyzerExecution: true, cancellationToken: cancellationToken)
             : await AnalyzeProjectAsync(project, compilationCache, cancellationToken);
 
         CouplingAnalysis? couplingAnalysis = null;
@@ -192,8 +194,8 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
         Project project,
         ConcurrentDictionary<string, Compilation> compilationCache,
         IDependencyCollector dependencyCollector,
-        CancellationToken cancellationToken,
-        bool concurrentAnalyzerExecution)
+        bool concurrentAnalyzerExecution,
+        CancellationToken cancellationToken)
     {
         var compilation = await GetCompilationAsync(project, compilationCache, cancellationToken);
         if (compilation == null)
@@ -202,7 +204,7 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
         }
 
         // Collect diagnostics from compilation
-        var diagnosticSummary = await DiagnosticCollector.CollectAsync(project, compilation, cancellationToken, concurrentAnalyzerExecution);
+        var diagnosticSummary = await DiagnosticCollector.CollectAsync(project, compilation, concurrentAnalyzerExecution, cancellationToken);
 
         var documents = project.Documents.Where(d => d.SourceCodeKind == SourceCodeKind.Regular).ToList();
         var documentCount = documents.Count;
@@ -264,14 +266,14 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
     {
         // For single project analysis, create a temporary collector that we don't use
         using var tempCollector = new InMemoryDependencyCollector();
-        return await AnalyzeProjectWithCouplingAsync(project, compilationCache, tempCollector, cancellationToken, concurrentAnalyzerExecution: true);
+        return await AnalyzeProjectWithCouplingAsync(project, compilationCache, tempCollector, concurrentAnalyzerExecution: true, cancellationToken: cancellationToken);
     }
 
     private async Task<ProjectMetrics> AnalyzeProjectDiagnosticsAndReferencesAsync(
         Project project,
         ConcurrentDictionary<string, Compilation> compilationCache,
-        CancellationToken cancellationToken,
-        bool concurrentAnalyzerExecution)
+        bool concurrentAnalyzerExecution,
+        CancellationToken cancellationToken)
     {
         var compilation = await GetCompilationAsync(project, compilationCache, cancellationToken);
         if (compilation == null)
@@ -279,7 +281,7 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
             return CreateEmptyProjectMetrics(project);
         }
 
-        var diagnosticSummary = await DiagnosticCollector.CollectAsync(project, compilation, cancellationToken, concurrentAnalyzerExecution);
+        var diagnosticSummary = await DiagnosticCollector.CollectAsync(project, compilation, concurrentAnalyzerExecution, cancellationToken);
         var packageReferences = ReadPackageReferences(project.FilePath);
         var projectReferences = ProjectReferenceResolver.GetProjectReferenceNames(project);
 

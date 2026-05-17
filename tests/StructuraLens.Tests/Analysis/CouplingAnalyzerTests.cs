@@ -3,7 +3,6 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Text;
 using Microsoft.Extensions.Logging;
-using StructuraLens.Core.Abstractions;
 using StructuraLens.Core.Analysis;
 using StructuraLens.Core.Models;
 
@@ -11,7 +10,7 @@ namespace StructuraLens.Tests.Analysis;
 
 public class CouplingAnalyzerTests
 {
-    private ICouplingAnalyzer CreateAnalyzer()
+    private static CouplingAnalyzer CreateAnalyzer()
     {
         var logger = A.Fake<ILogger<CouplingAnalyzer>>();
         return new CouplingAnalyzer(logger);
@@ -21,7 +20,10 @@ public class CouplingAnalyzerTests
     public void Constructor_WithNullLogger_ThrowsArgumentNullException()
     {
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => new CouplingAnalyzer(null!));
+        Assert.Throws<ArgumentNullException>(() =>
+        {
+            _ = new CouplingAnalyzer(null!);
+        });
     }
 
     [Test]

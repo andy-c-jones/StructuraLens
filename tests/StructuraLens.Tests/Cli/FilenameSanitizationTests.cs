@@ -2,19 +2,17 @@ namespace StructuraLens.Tests.Cli;
 
 public class FilenameSanitizationTests
 {
+    private static readonly char[] InvalidBranchNameChars =
+    [
+        '<', '>', ':', '"', '|', '?', '*', '/', '\\', '\0',
+        .. Enumerable.Range(1, 31).Select(static value => (char)value)
+    ];
+
     // Copy of the SanitizeBranchName function from Program.cs for testing
     private static string SanitizeBranchName(string branchName)
     {
-        // Use a unified set of invalid characters that works across all platforms
-        // This includes all Windows-invalid chars for maximum cross-platform compatibility
-        // Characters: < > : " | ? * / \ and control characters (0-31)
-        char[] invalidChars = new[] { '<', '>', ':', '"', '|', '?', '*', '/', '\\', '\0' }
-            .Concat(Enumerable.Range(1, 31).Select(i => (char)i))
-            .Distinct()
-            .ToArray();
-
         var result = branchName;
-        foreach (char c in invalidChars)
+        foreach (char c in InvalidBranchNameChars)
         {
             result = result.Replace(c, '_');
         }

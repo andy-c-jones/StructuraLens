@@ -1,8 +1,6 @@
 using FakeItEasy;
 using Microsoft.Extensions.Logging;
 using StructuraLens.Core.Infrastructure;
-using TUnit.Assertions.Extensions;
-using TUnit.Core;
 
 namespace StructuraLens.Tests.Infrastructure;
 

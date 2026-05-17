@@ -5,12 +5,12 @@ namespace StructuraLens.Tests.Export;
 
 public class CompactReportExporterTests
 {
-    private CompactReportExporter CreateExporter()
+    private static CompactReportExporter CreateExporter()
     {
         return new CompactReportExporter();
     }
 
-    private AnalysisReport CreateMinimalReport()
+    private static AnalysisReport CreateMinimalReport()
     {
         var method = new MethodMetrics(
             FullName: "TestProject.TestClass.TestMethod()",

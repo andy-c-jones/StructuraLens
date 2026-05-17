@@ -1,9 +1,15 @@
+using System.Diagnostics.CodeAnalysis;
+
 using StructuraLens.Core.Models;
 
 namespace StructuraLens.Core.Diff;
 
 public sealed class DiffCalculator
 {
+    [SuppressMessage(
+        "Performance",
+        "CA1822:Mark members as static",
+        Justification = "Keep this public method as an instance member to preserve the calculator API.")]
     public AnalysisDiffReport Compare(AnalysisReport baseReport, AnalysisReport headReport)
     {
         var projectDiffs = ProjectDiffBuilder.Build(baseReport, headReport);

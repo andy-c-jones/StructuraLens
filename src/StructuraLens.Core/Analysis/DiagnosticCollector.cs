@@ -12,10 +12,10 @@ internal static class DiagnosticCollector
     public static async Task<DiagnosticSummary> CollectAsync(
         Project project,
         Compilation compilation,
-        CancellationToken cancellationToken,
-        bool concurrentAnalyzerExecution)
+        bool concurrentAnalyzerExecution,
+        CancellationToken cancellationToken)
     {
-        var diagnostics = await GetDiagnosticsAsync(project, compilation, cancellationToken, concurrentAnalyzerExecution);
+        var diagnostics = await GetDiagnosticsAsync(project, compilation, concurrentAnalyzerExecution, cancellationToken);
 
         var filteredDiagnostics = diagnostics
             .Where(ShouldIncludeDiagnostic)
@@ -45,8 +45,8 @@ internal static class DiagnosticCollector
     private static async Task<IReadOnlyList<Diagnostic>> GetDiagnosticsAsync(
         Project project,
         Compilation compilation,
-        CancellationToken cancellationToken,
-        bool concurrentAnalyzerExecution)
+        bool concurrentAnalyzerExecution,
+        CancellationToken cancellationToken)
     {
         var analyzers = project.AnalyzerReferences
             .SelectMany(reference => reference.GetAnalyzers(project.Language))
@@ -96,8 +96,29 @@ internal static class DiagnosticCollector
     private static bool ShouldIncludeDiagnostic(Diagnostic diagnostic)
     {
         return !diagnostic.IsSuppressed &&
+               !IsGeneratedSourceFile(diagnostic.Location.SourceTree?.FilePath) &&
                (diagnostic.Severity != DiagnosticSeverity.Hidden ||
                 diagnostic.Id.StartsWith("CS", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool IsGeneratedSourceFile(string? filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            return false;
+        }
+
+        var normalizedPath = filePath.Replace('\\', '/');
+        var pathSegments = normalizedPath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (pathSegments.Any(segment => segment.Equals("obj", StringComparison.OrdinalIgnoreCase)))
+        {
+            return true;
+        }
+
+        var fileName = Path.GetFileName(normalizedPath);
+        return fileName.EndsWith(".g.cs", StringComparison.OrdinalIgnoreCase) ||
+               fileName.EndsWith(".g.i.cs", StringComparison.OrdinalIgnoreCase) ||
+               fileName.EndsWith(".designer.cs", StringComparison.OrdinalIgnoreCase);
     }
 
     private static DiagnosticLevel MapSeverity(DiagnosticSeverity severity)

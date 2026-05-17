@@ -5,6 +5,11 @@ namespace StructuraLens.Tests.Models;
 
 public class CompactReportTests
 {
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
+
     [Test]
     public async Task CompactNamespace_JsonSerialization_UsesShortPropertyNames()
     {
@@ -27,10 +32,7 @@ public class CompactReportTests
         };
 
         // Act
-        var json = JsonSerializer.Serialize(compactNamespace, new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-        });
+        var json = JsonSerializer.Serialize(compactNamespace, JsonOptions);
 
         // Assert - Verify short property names are used
         await Assert.That(json).Contains("\"n\":");
@@ -66,10 +68,7 @@ public class CompactReportTests
         """;
 
         // Act
-        var compactNamespace = JsonSerializer.Deserialize<CompactNamespace>(json, new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-        });
+        var compactNamespace = JsonSerializer.Deserialize<CompactNamespace>(json, JsonOptions);
 
         // Assert
         await Assert.That(compactNamespace).IsNotNull();
@@ -97,10 +96,7 @@ public class CompactReportTests
         };
 
         // Act
-        var json = JsonSerializer.Serialize(compactType, new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-        });
+        var json = JsonSerializer.Serialize(compactType, JsonOptions);
 
         // Assert
         await Assert.That(json).Contains("\"fn\":");
@@ -122,10 +118,7 @@ public class CompactReportTests
         };
 
         // Act
-        var json = JsonSerializer.Serialize(compactType, new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-        });
+        var json = JsonSerializer.Serialize(compactType, JsonOptions);
 
         // Assert - FullName should be omitted when null due to JsonIgnoreCondition
         await Assert.That(json).DoesNotContain("\"fn\":");
@@ -148,10 +141,7 @@ public class CompactReportTests
         };
 
         // Act
-        var json = JsonSerializer.Serialize(compactProject, new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-        });
+        var json = JsonSerializer.Serialize(compactProject, JsonOptions);
 
         // Assert
         await Assert.That(json).DoesNotContain("\"ns\":");
@@ -177,10 +167,7 @@ public class CompactReportTests
         };
 
         // Act
-        var json = JsonSerializer.Serialize(compactProject, new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-        });
+        var json = JsonSerializer.Serialize(compactProject, JsonOptions);
 
         // Assert
         await Assert.That(json).Contains("\"ns\":");
@@ -214,16 +201,9 @@ public class CompactReportTests
         };
 
         // Act
-        var json = JsonSerializer.Serialize(compactNamespace, new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            WriteIndented = false
-        });
+        var json = JsonSerializer.Serialize(compactNamespace, JsonOptions);
 
-        var deserialized = JsonSerializer.Deserialize<CompactNamespace>(json, new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-        });
+        var deserialized = JsonSerializer.Deserialize<CompactNamespace>(json, JsonOptions);
 
         // Assert - Round-trip serialization should preserve all data
         await Assert.That(deserialized).IsNotNull();

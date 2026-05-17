@@ -100,7 +100,7 @@ public sealed class HtmlReportGenerator : IReportGenerator
         return JsonSerializer.Serialize(diagnostics);
     }
 
-    private string BuildHtml(AnalysisReport report, string compactJson, string diagnosticsJson, string? diffJson, AnalysisDiffReport? diff = null)
+    private static string BuildHtml(AnalysisReport report, string compactJson, string diagnosticsJson, string? diffJson, AnalysisDiffReport? diff = null)
     {
         var template = LoadTemplate();
 

@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using StructuraLens.Core.Models;
 
@@ -11,6 +12,10 @@ public sealed class DiffReportRenderer
     private const double SevereMaintainabilityDrop = -10.0;
     private const double ModerateMaintainabilityDrop = -5.0;
 
+    [SuppressMessage(
+        "Performance",
+        "CA1822:Mark members as static",
+        Justification = "Keep this public method as an instance member to preserve the renderer API.")]
     public string RenderMarkdown(AnalysisDiffReport diff, int maxProjects = 10, DiagnosticLevel minDiagnosticLevel = DiagnosticLevel.Info)
     {
         var sb = new StringBuilder();
