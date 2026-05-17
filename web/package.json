@@ -10,14 +10,13 @@
     "preview": "astro preview"
   },
   "dependencies": {
-    "astro": "^6.1.10",
-    "d3": "^7.9.0"
+    "astro": "6.3.2",
+    "d3": "7.9.0"
   },
   "devDependencies": {
-    "@astrojs/check": "0.9.2",
-    "@types/d3": "^7.4.3",
-    "prettier": "^3.8.1",
-    "prettier-plugin-astro": "^0.14.1",
-    "typescript": "^5.8.3"
+    "@types/d3": "7.4.3",
+    "prettier": "3.8.3",
+    "prettier-plugin-astro": "0.14.1",
+    "typescript": "6.0.3"
   }
 }
