@@ -124,7 +124,7 @@ public record CouplingMetrics(
         var seen = new HashSet<string>();
         foreach (var d in ExternalOutbound)
         {
-            if (IsBclNamespace(d.ToEntity))
+            if (DependencyClassifier.IsBclDependency(d.ToEntity))
                 seen.Add(d.ToEntity);
         }
         return seen.Count;
@@ -135,7 +135,7 @@ public record CouplingMetrics(
         var seen = new HashSet<string>();
         foreach (var d in ExternalOutbound)
         {
-            if (!IsBclNamespace(d.ToEntity))
+            if (!DependencyClassifier.IsBclDependency(d.ToEntity))
                 seen.Add(d.ToEntity);
         }
         return seen.Count;
@@ -153,12 +153,6 @@ public record CouplingMetrics(
         return total;
     }
 
-    private static bool IsBclNamespace(string ns)
-    {
-        return ns.StartsWith("System.") ||
-               ns.Equals("System") ||
-               ns.StartsWith("Microsoft.");
-    }
 }
 
 /// <summary>

@@ -1,248 +1,38 @@
 import * as d3 from "d3";
 import type { CompactReport, GraphLayer, GraphNode } from "./types";
+import { getNodeColor, getNodeSizeValue } from "./graphMetrics";
 
-/**
- * Get color on green-yellow-red scale with muted saturation.
- * ratio 0 = green, 0.5 = yellow, 1 = red
- */
-function getHeatColor(ratio: number): string {
-  ratio = Math.max(0, Math.min(1, ratio));
-
-  const isDark =
-    window.matchMedia("(prefers-color-scheme: dark)").matches ||
-    !window.matchMedia("(prefers-color-scheme: light)").matches;
-
-  const colors = isDark
-    ? {
-      green: [45, 90, 61],
-      yellow: [107, 91, 45],
-      red: [90, 45, 45],
-    }
-    : {
-      green: [168, 213, 186],
-      yellow: [240, 230, 184],
-      red: [232, 184, 184],
-    };
-
-  let r: number, g: number, b: number;
-  if (ratio < 0.5) {
-    const t = ratio * 2;
-    r = Math.round(
-      colors.green[0] + t * (colors.yellow[0] - colors.green[0]),
-    );
-    g = Math.round(
-      colors.green[1] + t * (colors.yellow[1] - colors.green[1]),
-    );
-    b = Math.round(
-      colors.green[2] + t * (colors.yellow[2] - colors.green[2]),
-    );
-  } else {
-    const t = (ratio - 0.5) * 2;
-    r = Math.round(
-      colors.yellow[0] + t * (colors.red[0] - colors.yellow[0]),
-    );
-    g = Math.round(
-      colors.yellow[1] + t * (colors.red[1] - colors.yellow[1]),
-    );
-    b = Math.round(
-      colors.yellow[2] + t * (colors.red[2] - colors.yellow[2]),
-    );
-  }
-
-  return `rgb(${r}, ${g}, ${b})`;
+interface RenderedGraphNode extends d3.SimulationNodeDatum {
+  id: number;
+  name: string;
+  size: number;
+  depCount: number;
+  radius?: number;
+  sizeValue?: number;
+  cc?: number;
+  loc?: number;
+  mi?: number;
+  tc?: number;
+  mc?: number;
+  internalDependencies?: number;
+  internalDependents?: number;
+  dependencyRatio?: number;
+  externalDependencies?: number;
+  externalBclDependencies?: number;
+  externalPackageDependencies?: number;
+  err?: number;
+  warn?: number;
 }
 
-function getProjectMetrics(reportData: CompactReport, name: string) {
-  return reportData.prj.find((p) => p.n === name);
+interface RenderedGraphLink extends d3.SimulationLinkDatum<RenderedGraphNode> {
+  weight: number;
+  targetX?: number;
+  targetY?: number;
 }
 
-function getNodeColor(
-  node: GraphNode,
-  colorMetric: string,
-  graphType: string,
-  reportData: CompactReport,
-): string {
-  if (colorMetric === "none") return "var(--node-default)";
-
-  let metrics: Record<string, number> | null = null;
-  let allMetrics: Record<string, number>[] = [];
-
-  if (graphType === "project") {
-    const pm = getProjectMetrics(reportData, node.name);
-    if (!pm) return "var(--node-default)";
-    metrics = {
-      cc: pm.cc,
-      loc: pm.loc,
-      mi: pm.mi,
-      id: pm.id,
-      idx: pm.idx,
-      ed: pm.ed,
-      edb: pm.edb,
-      edp: pm.edp,
-      err: pm.err ?? 0,
-      warn: pm.warn ?? 0,
-    };
-    allMetrics = reportData.prj.map((p) => ({
-      cc: p.cc,
-      loc: p.loc,
-      mi: p.mi,
-      id: p.id,
-      idx: p.idx,
-      ed: p.ed,
-      edb: p.edb,
-      edp: p.edp,
-      err: p.err ?? 0,
-      warn: p.warn ?? 0,
-    }));
-  } else {
-    const nsNode = node as {
-      cc?: number;
-      loc?: number;
-      mi?: number;
-      internalDependencies?: number;
-      internalDependents?: number;
-      externalDependencies?: number;
-    };
-    metrics = {
-      cc: nsNode.cc ?? 0,
-      loc: nsNode.loc ?? 0,
-      mi: nsNode.mi ?? 0,
-      id: nsNode.internalDependencies ?? 0,
-      idx: nsNode.internalDependents ?? 0,
-      ed: nsNode.externalDependencies ?? 0,
-    };
-    allMetrics = reportData.g.ns.n.map(
-      ([, , loc, cc, mi, , , id, idx, , ed]: (number | string)[]) => ({
-        cc: cc as number,
-        loc: loc as number,
-        mi: mi as number,
-        id: id as number,
-        idx: idx as number,
-        ed: ed as number,
-      }),
-    );
-  }
-
-  if (!metrics) return "var(--node-default)";
-
-  let value: number;
-  let values: number[];
-
-  switch (colorMetric) {
-    case "diagnostics":
-      if (graphType === "namespace") return "var(--node-default)";
-      value = (metrics.err || 0) * 5 + (metrics.warn || 0);
-      values = allMetrics.map((m) => (m.err || 0) * 5 + (m.warn || 0));
-      break;
-    case "coupling":
-      value = metrics.id || 0;
-      values = allMetrics.map((m) => m.id || 0);
-      break;
-    case "external-deps":
-      value = metrics.ed || 0;
-      values = allMetrics.map((m) => m.ed || 0);
-      break;
-    case "bcl-deps":
-      if (graphType === "namespace") return "var(--node-default)";
-      value = (metrics as { edb?: number }).edb || 0;
-      values = allMetrics.map((m) => (m as { edb?: number }).edb || 0);
-      break;
-    case "package-deps":
-      if (graphType === "namespace") return "var(--node-default)";
-      value = (metrics as { edp?: number }).edp || 0;
-      values = allMetrics.map((m) => (m as { edp?: number }).edp || 0);
-      break;
-    case "complexity":
-      value = metrics.cc || 0;
-      values = allMetrics.map((m) => m.cc || 0);
-      break;
-    case "loc":
-      value = metrics.loc || 0;
-      values = allMetrics.map((m) => m.loc || 0);
-      break;
-    case "maintainability":
-      value = 100 - (metrics.mi || 100);
-      values = allMetrics.map((m) => 100 - (m.mi || 100));
-      break;
-    default:
-      return "var(--node-default)";
-  }
-
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  if (max === min) return getHeatColor(0);
-  const ratio = (value - min) / (max - min);
-  return getHeatColor(ratio);
-}
-
-function getNodeSizeValue(
-  node: GraphNode,
-  sizeMetric: string,
-  graphType: string,
-  outboundCount: number,
-): number {
-  if (sizeMetric === "dependencies") return outboundCount;
-
-  let metrics: Record<string, number> | null = null;
-
-  if (graphType === "project") {
-    // The node object for project type only has id, name, size, depCount
-    // We need to find the project metrics from the name
-    metrics = {
-      cc: (node as { cc?: number }).cc ?? 0,
-      loc: (node as { loc?: number }).loc ?? node.size ?? 0,
-      mi: (node as { mi?: number }).mi ?? 0,
-      id: (node as { internalDependencies?: number }).internalDependencies ?? 0,
-      ed: (node as { externalDependencies?: number }).externalDependencies ?? 0,
-      edb: (node as { externalBclDependencies?: number }).externalBclDependencies ?? 0,
-      edp: (node as { externalPackageDependencies?: number }).externalPackageDependencies ?? 0,
-      err: (node as { err?: number }).err ?? 0,
-      warn: (node as { warn?: number }).warn ?? 0,
-    };
-  } else {
-    const nsNode = node as {
-      cc?: number;
-      loc?: number;
-      mi?: number;
-      internalDependencies?: number;
-      internalDependents?: number;
-      externalDependencies?: number;
-    };
-    metrics = {
-      cc: nsNode.cc ?? 0,
-      loc: nsNode.loc ?? 0,
-      mi: nsNode.mi ?? 0,
-      id: nsNode.internalDependencies ?? 0,
-      idx: nsNode.internalDependents ?? 0,
-      ed: nsNode.externalDependencies ?? 0,
-    };
-  }
-
-  if (!metrics) return outboundCount;
-
-  switch (sizeMetric) {
-    case "diagnostics":
-      if (graphType === "namespace") return outboundCount;
-      return (metrics.err || 0) * 5 + (metrics.warn || 0);
-    case "coupling":
-      return metrics.id || 0;
-    case "external-deps":
-      return metrics.ed || 0;
-    case "bcl-deps":
-      if (graphType === "namespace") return outboundCount;
-      return (metrics as { edb?: number }).edb || 0;
-    case "package-deps":
-      if (graphType === "namespace") return outboundCount;
-      return (metrics as { edp?: number }).edp || 0;
-    case "complexity":
-      return metrics.cc || 0;
-    case "loc":
-      return metrics.loc || 0;
-    case "maintainability":
-      return 100 - (metrics.mi || 100);
-    default:
-      return outboundCount;
-  }
+interface InitialRenderedGraphLink extends RenderedGraphLink {
+  source: number;
+  target: number;
 }
 
 function renderGraph(
@@ -265,28 +55,29 @@ function renderGraph(
     return;
   }
 
-  const links = graphData.e.map(([source, target, weight]) => ({
+  const initialLinks: InitialRenderedGraphLink[] = graphData.e.map(([source, target, weight]) => ({
     source,
     target,
     weight,
   }));
 
   const outboundCounts: Record<number, number> = {};
-  links.forEach((l) => {
+  initialLinks.forEach((l) => {
     outboundCounts[l.source] =
       (outboundCounts[l.source] || 0) + l.weight;
   });
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const prelimNodes: any[] = graphData.n.map((nodeData) => {
+  const prelimNodes: RenderedGraphNode[] = graphData.n.map((nodeData) => {
     if (graphType === "project") {
-      const [id, name, size] = nodeData;
+      const id = Number(nodeData[0]);
+      const name = String(nodeData[1]);
+      const size = Number(nodeData[2] ?? 0);
       const projectMetrics = reportData.prj.find(p => p.n === name);
       return {
         id,
         name,
         size,
-        depCount: outboundCounts[id as number] || 0,
+        depCount: outboundCounts[id] || 0,
         cc: projectMetrics?.cc ?? 0,
         loc: projectMetrics?.loc ?? size,
         mi: projectMetrics?.mi ?? 0,
@@ -298,8 +89,17 @@ function renderGraph(
         warn: projectMetrics?.warn ?? 0,
       };
     } else {
-      const [id, name, loc, cc, mi, tc, mc, internalDeps, internalDependents, depRatio, externalDeps] =
-        nodeData;
+      const id = Number(nodeData[0]);
+      const name = String(nodeData[1]);
+      const loc = Number(nodeData[2] ?? 0);
+      const cc = Number(nodeData[3] ?? 0);
+      const mi = Number(nodeData[4] ?? 0);
+      const tc = Number(nodeData[5] ?? 0);
+      const mc = Number(nodeData[6] ?? 0);
+      const internalDeps = Number(nodeData[7] ?? 0);
+      const internalDependents = Number(nodeData[8] ?? 0);
+      const depRatio = Number(nodeData[9] ?? 0);
+      const externalDeps = Number(nodeData[10] ?? 0);
       return {
         id,
         name,
@@ -313,7 +113,7 @@ function renderGraph(
         dependencyRatio: depRatio,
         externalDependencies: externalDeps,
         size: loc,
-        depCount: outboundCounts[id as number] || 0,
+        depCount: outboundCounts[id] || 0,
       };
     }
   });
@@ -326,7 +126,7 @@ function renderGraph(
   const minRadius = 15;
   const maxRadius = 200;
 
-  const nodes = prelimNodes.map((n, i) => {
+  const nodes: RenderedGraphNode[] = prelimNodes.map((n, i) => {
     const value = sizeValues[i];
     const ratio =
       maxValue === minValue ? 0.5 : (value - minValue) / (maxValue - minValue);
@@ -350,27 +150,19 @@ function renderGraph(
     .on("zoom", (e) => g.attr("transform", e.transform));
   (svg as d3.Selection<SVGSVGElement, unknown, HTMLElement, unknown>).call(zoom);
 
-  const avgRadius =
-    nodes.reduce((sum: number, n: { radius: number }) => sum + n.radius, 0) /
-    nodes.length;
+  const avgRadius = nodes.reduce((sum, n) => sum + (n.radius ?? 0), 0) / nodes.length;
+  const links: RenderedGraphLink[] = initialLinks.map((link) => ({ ...link }));
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const simulation = d3
-    .forceSimulation(nodes)
+    .forceSimulation<RenderedGraphNode>(nodes)
     .force(
       "link",
       d3
-        .forceLink(links)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .id((d: any) => d.id)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .distance((d: any) => {
-          const sourceNode = nodes.find(
-            (n: { id: number }) => n.id === (d.source.id ?? d.source),
-          );
-          const targetNode = nodes.find(
-            (n: { id: number }) => n.id === (d.target.id ?? d.target),
-          );
+        .forceLink<RenderedGraphNode, RenderedGraphLink>(links)
+        .id((d) => d.id)
+        .distance((d) => {
+          const sourceNode = resolveLinkNode(d.source, nodes);
+          const targetNode = resolveLinkNode(d.target, nodes);
           const sourceR = sourceNode?.radius || avgRadius;
           const targetR = targetNode?.radius || avgRadius;
           return sourceR + targetR + 100;
@@ -384,9 +176,8 @@ function renderGraph(
     .force(
       "collision",
       d3
-        .forceCollide()
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .radius((d: any) => d.radius + 30)
+        .forceCollide<RenderedGraphNode>()
+        .radius((d) => (d.radius ?? 0) + 30)
         .strength(1),
     )
     .force("x", d3.forceX(width / 2).strength(0.03))
@@ -409,7 +200,7 @@ function renderGraph(
 
   const link = g
     .append("g")
-    .selectAll("line")
+    .selectAll<SVGLineElement, RenderedGraphLink>("line")
     .data(links)
     .join("line")
     .attr("class", "link")
@@ -420,14 +211,13 @@ function renderGraph(
 
   const node = g
     .append("g")
-    .selectAll("g")
+    .selectAll<SVGGElement, RenderedGraphNode>("g")
     .data(nodes)
     .join("g")
     .attr("class", "node")
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .call(
       d3
-        .drag<SVGGElement, any>()
+        .drag<SVGGElement, RenderedGraphNode>()
         .on("start", (e, d) => {
           if (!e.active) simulation.alphaTarget(0.3).restart();
           d.fx = d.x;
@@ -441,31 +231,26 @@ function renderGraph(
           if (!e.active) simulation.alphaTarget(0);
           d.fx = null;
           d.fy = null;
-        }) as any,
+        }),
     );
 
   node
     .append("circle")
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .attr("r", (d: any) => d.radius)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .attr("fill", (d: any) =>
-      getNodeColor(d, colorMetric, graphType, reportData),
+    .attr("r", (d) => d.radius ?? 0)
+    .attr("fill", (d) =>
+      getNodeColor(d as GraphNode, colorMetric, graphType, reportData),
     );
 
   node
     .append("text")
     .attr("dy", 4)
     .attr("text-anchor", "middle")
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .attr("font-size", (d: any) => Math.max(9, Math.min(12, d.radius / 3)))
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .text((d: any) => d.name);
+    .attr("font-size", (d) => Math.max(9, Math.min(12, (d.radius ?? 0) / 3)))
+    .text((d) => d.name);
 
   node
     .append("title")
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .text((d: any) => {
+    .text((d) => {
       if (graphType === "project") {
         const lines = [
           d.name,
@@ -486,29 +271,39 @@ function renderGraph(
     });
 
   simulation.on("tick", () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    link.each(function(d: any) {
-      const dx = d.target.x - d.source.x;
-      const dy = d.target.y - d.source.y;
+    link.each((d) => {
+      const source = resolveLinkNode(d.source, nodes);
+      const target = resolveLinkNode(d.target, nodes);
+      if (!source || !target) return;
+
+      const dx = (target.x ?? 0) - (source.x ?? 0);
+      const dy = (target.y ?? 0) - (source.y ?? 0);
       const dist = Math.sqrt(dx * dx + dy * dy);
       if (dist === 0) return;
-      const targetRadius = d.target.radius || 20;
+      const targetRadius = target.radius || 20;
       const ratio = (dist - targetRadius - 5) / dist;
-      d.targetX = d.source.x + dx * ratio;
-      d.targetY = d.source.y + dy * ratio;
+      d.targetX = (source.x ?? 0) + dx * ratio;
+      d.targetY = (source.y ?? 0) + dy * ratio;
     });
     link
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .attr("x1", (d: any) => d.source.x)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .attr("y1", (d: any) => d.source.y)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .attr("x2", (d: any) => d.targetX || d.target.x)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .attr("y2", (d: any) => d.targetY || d.target.y);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    node.attr("transform", (d: any) => `translate(${d.x},${d.y})`);
+      .attr("x1", (d) => resolveLinkNode(d.source, nodes)?.x ?? 0)
+      .attr("y1", (d) => resolveLinkNode(d.source, nodes)?.y ?? 0)
+      .attr("x2", (d) => d.targetX || (resolveLinkNode(d.target, nodes)?.x ?? 0))
+      .attr("y2", (d) => d.targetY || (resolveLinkNode(d.target, nodes)?.y ?? 0));
+    node.attr("transform", (d) => `translate(${d.x ?? 0},${d.y ?? 0})`);
   });
+}
+
+function resolveLinkNode(
+  endpoint: number | string | RenderedGraphNode,
+  nodes: ReadonlyArray<RenderedGraphNode>,
+): RenderedGraphNode | undefined {
+  if (typeof endpoint === "object") {
+    return endpoint;
+  }
+
+  const id = Number(endpoint);
+  return nodes.find((node) => node.id === id);
 }
 
 // ---------- Public API ----------

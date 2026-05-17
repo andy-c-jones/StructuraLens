@@ -14,14 +14,39 @@ public sealed class DiffReportRenderer
     public string RenderMarkdown(AnalysisDiffReport diff, int maxProjects = 10, DiagnosticLevel minDiagnosticLevel = DiagnosticLevel.Info)
     {
         var sb = new StringBuilder();
+        RenderHeader(diff, sb);
+        RenderDiagnosticsSection(diff, sb, minDiagnosticLevel);
+        RenderProjectReferencesChanges(diff, sb, maxProjects);
+        RenderExternalDependenciesChanges(diff, sb, maxProjects);
+
+        if (diff.HasComplexityMetrics)
+        {
+            RenderMaintainabilityChanges(diff, sb);
+        }
+
+        RenderOverallMetrics(diff, sb);
+
+        return sb.ToString();
+    }
+
+    private static void RenderHeader(AnalysisDiffReport diff, StringBuilder sb)
+    {
         sb.AppendLine("## StructuraLens Diff Summary");
         sb.AppendLine();
         sb.AppendLine($"Base: `{ShortSha(diff.Base.CommitSha)}` {diff.Base.BranchName}");
         sb.AppendLine($"Head: `{ShortSha(diff.Head.CommitSha)}` {diff.Head.BranchName}");
         sb.AppendLine($"Analysis mode: `{diff.Head.AnalysisMode}`");
         sb.AppendLine();
+    }
 
-        // Section 1: Diagnostics
+    private static void RenderDiagnosticsSection(AnalysisDiffReport diff, StringBuilder sb, DiagnosticLevel minDiagnosticLevel)
+    {
+        AppendDiagnosticsSummaryTable(diff, sb);
+        RenderDiagnosticsChangeTables(diff, sb, minDiagnosticLevel);
+    }
+
+    private static void AppendDiagnosticsSummaryTable(AnalysisDiffReport diff, StringBuilder sb)
+    {
         var (solvedErrors, addedErrors) = NormalizeSolvedAdded(
             diff.Totals.BaseErrors,
             diff.Totals.HeadErrors,
@@ -63,22 +88,10 @@ public sealed class DiffReportRenderer
             solvedInfo,
             addedInfo));
         sb.AppendLine();
+    }
 
-        RenderDiagnosticsChangeTables(diff, sb, minDiagnosticLevel);
-
-        // Section 2: Project References Changes
-        RenderProjectReferencesChanges(diff, sb, maxProjects);
-
-        // Section 3: NuGet Dependencies Changes
-        RenderExternalDependenciesChanges(diff, sb, maxProjects);
-
-        // Section 4: Maintainability Changes (per-project breakdown - only projects with changes)
-        if (diff.HasComplexityMetrics)
-        {
-            RenderMaintainabilityChanges(diff, sb);
-        }
-
-        // Section 5: Overall Metrics (overall statistics)
+    private static void RenderOverallMetrics(AnalysisDiffReport diff, StringBuilder sb)
+    {
         sb.AppendLine("### Overall Metrics");
         sb.AppendLine();
         sb.AppendLine("| Metric | Base | Head | Delta |");
@@ -92,36 +105,21 @@ public sealed class DiffReportRenderer
 
         if (diff.HasComplexityMetrics)
         {
-            // Highlight significant complexity increases
-            var complexityDelta = diff.Totals.CyclomaticComplexityDelta;
-            var complexityPercent = diff.Totals.BaseCyclomaticComplexity > 0
-                ? (double)complexityDelta / diff.Totals.BaseCyclomaticComplexity
-                : 0;
-            var isSignificantComplexity = complexityDelta > SignificantComplexityAbsolute
-                || complexityPercent > SignificantComplexityPercent;
             sb.AppendLine(BuildRow("Cyclomatic Complexity",
                 diff.Totals.BaseCyclomaticComplexity,
                 diff.Totals.HeadCyclomaticComplexity,
                 diff.Totals.CyclomaticComplexityDelta,
-                isSignificantComplexity ? DeltaSemantic.BadIncrease : DeltaSemantic.Neutral));
+                GetComplexityDeltaSemantic(diff.Totals)));
 
             sb.AppendLine(BuildRow("Lines of Code", diff.Totals.BaseLinesOfCode, diff.Totals.HeadLinesOfCode, diff.Totals.LinesOfCodeDelta));
 
-            // Highlight significant maintainability drops
-            var miDelta = diff.Totals.AvgMaintainabilityDelta;
-            var miSemantic = miDelta <= SevereMaintainabilityDrop ? DeltaSemantic.SevereDecrease
-                : miDelta <= ModerateMaintainabilityDrop ? DeltaSemantic.ModerateDecrease
-                : miDelta > 0 ? DeltaSemantic.GoodIncrease
-                : DeltaSemantic.Neutral;
             sb.AppendLine(BuildRow("Avg Maintainability",
                 diff.Totals.BaseAvgMaintainabilityIndex,
                 diff.Totals.HeadAvgMaintainabilityIndex,
                 diff.Totals.AvgMaintainabilityDelta,
-                miSemantic));
+                GetMaintainabilityDeltaSemantic(diff.Totals.AvgMaintainabilityDelta)));
         }
         sb.AppendLine();
-
-        return sb.ToString();
     }
 
     private static void RenderDiagnosticsChangeTables(AnalysisDiffReport diff, StringBuilder sb, DiagnosticLevel minDiagnosticLevel)
@@ -177,24 +175,8 @@ public sealed class DiffReportRenderer
 
             foreach (var project in projectsWithChanges)
             {
-                // Determine MI delta severity
-                var miDeltaSemantic = project.MaintainabilityDelta <= SevereMaintainabilityDrop
-                    ? DeltaSemantic.SevereDecrease
-                    : project.MaintainabilityDelta <= ModerateMaintainabilityDrop
-                    ? DeltaSemantic.ModerateDecrease
-                    : project.MaintainabilityDelta > 0
-                    ? DeltaSemantic.GoodIncrease
-                    : DeltaSemantic.Neutral;
-
-                // Determine warnings delta semantic
-                var warningsSemantic = project.WarningsDelta > 0
-                    ? DeltaSemantic.BadIncrease
-                    : project.WarningsDelta < 0
-                    ? DeltaSemantic.GoodDecrease
-                    : DeltaSemantic.Neutral;
-
                 sb.AppendLine(
-                    $"| {Escape(project.Name)} | {project.Base.AvgMaintainabilityIndex:0.0} | {project.Head.AvgMaintainabilityIndex:0.0} | {FormatDelta(project.MaintainabilityDelta, miDeltaSemantic)} | {FormatDelta(project.CyclomaticComplexityDelta)} | {FormatDelta(project.LinesOfCodeDelta)} | {FormatDelta(project.WarningsDelta, warningsSemantic)} |");
+                    $"| {Escape(project.Name)} | {project.Base.AvgMaintainabilityIndex:0.0} | {project.Head.AvgMaintainabilityIndex:0.0} | {FormatDelta(project.MaintainabilityDelta, GetMaintainabilityDeltaSemantic(project.MaintainabilityDelta))} | {FormatDelta(project.CyclomaticComplexityDelta)} | {FormatDelta(project.LinesOfCodeDelta)} | {FormatDelta(project.WarningsDelta, GetWarningsDeltaSemantic(project.WarningsDelta))} |");
             }
             sb.AppendLine();
         }
@@ -316,6 +298,33 @@ public sealed class DiffReportRenderer
             < 0 => (-delta, 0),
             _ => (0, 0)
         };
+    }
+
+    private static DeltaSemantic GetComplexityDeltaSemantic(DiffTotals totals)
+    {
+        var complexityDelta = totals.CyclomaticComplexityDelta;
+        var complexityPercent = totals.BaseCyclomaticComplexity > 0
+            ? (double)complexityDelta / totals.BaseCyclomaticComplexity
+            : 0;
+
+        return complexityDelta > SignificantComplexityAbsolute || complexityPercent > SignificantComplexityPercent
+            ? DeltaSemantic.BadIncrease
+            : DeltaSemantic.Neutral;
+    }
+
+    private static DeltaSemantic GetMaintainabilityDeltaSemantic(double delta)
+    {
+        return delta <= SevereMaintainabilityDrop ? DeltaSemantic.SevereDecrease
+            : delta <= ModerateMaintainabilityDrop ? DeltaSemantic.ModerateDecrease
+            : delta > 0 ? DeltaSemantic.GoodIncrease
+            : DeltaSemantic.Neutral;
+    }
+
+    private static DeltaSemantic GetWarningsDeltaSemantic(int delta)
+    {
+        return delta > 0 ? DeltaSemantic.BadIncrease
+            : delta < 0 ? DeltaSemantic.GoodDecrease
+            : DeltaSemantic.Neutral;
     }
 
     private static string FormatDelta(int value, DeltaSemantic semantic = DeltaSemantic.Neutral)

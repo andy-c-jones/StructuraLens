@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.Data.Sqlite;
 using StructuraLens.Core.Abstractions;
 using StructuraLens.Core.Models;
@@ -88,10 +89,13 @@ public sealed class SQLiteDependencyCollector : IDependencyCollector
     {
         lock (_batchLock)
         {
-            _batch.AddRange(edges);
+            var count = 0;
+            foreach (var edge in edges)
+            {
+                _batch.Add(edge);
+                count++;
+            }
 
-            // Update counter
-            var count = _batch.Count - (_totalAdded > 0 ? 0 : _batch.Count);
             Interlocked.Add(ref _totalAdded, count);
 
             if (_batch.Count >= _batchSize)
@@ -303,26 +307,49 @@ public sealed class SQLiteDependencyCollector : IDependencyCollector
         // Only delete temp databases
         if (_isTemporary && !string.IsNullOrEmpty(_dbPath))
         {
+            DeleteTemporaryDatabaseFiles();
+        }
+    }
+
+    private void DeleteTemporaryDatabaseFiles()
+    {
+        TryDeleteTemporaryFile(_dbPath);
+        TryDeleteTemporaryFile(_dbPath + "-wal");
+        TryDeleteTemporaryFile(_dbPath + "-shm");
+    }
+
+    private static void TryDeleteTemporaryFile(string path)
+    {
+        const int MaxAttempts = 3;
+
+        for (var attempt = 1; attempt <= MaxAttempts; attempt++)
+        {
             try
             {
-                // Give a moment for file handles to be released
-                System.Threading.Thread.Sleep(100);
+                if (File.Exists(path))
+                {
+                    File.Delete(path);
+                }
 
-                // Delete main database and WAL files
-                if (File.Exists(_dbPath))
-                    File.Delete(_dbPath);
-
-                var walPath = _dbPath + "-wal";
-                if (File.Exists(walPath))
-                    File.Delete(walPath);
-
-                var shmPath = _dbPath + "-shm";
-                if (File.Exists(shmPath))
-                    File.Delete(shmPath);
+                return;
             }
-            catch
+            catch (IOException ex) when (attempt < MaxAttempts)
             {
-                // Ignore cleanup errors - best effort
+                Trace.TraceWarning("Could not delete temporary SQLite file {0}: {1}", path, ex.Message);
+            }
+            catch (UnauthorizedAccessException ex) when (attempt < MaxAttempts)
+            {
+                Trace.TraceWarning("Could not delete temporary SQLite file {0}: {1}", path, ex.Message);
+            }
+            catch (IOException ex)
+            {
+                Trace.TraceWarning("Could not delete temporary SQLite file {0}: {1}", path, ex.Message);
+                return;
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                Trace.TraceWarning("Could not delete temporary SQLite file {0}: {1}", path, ex.Message);
+                return;
             }
         }
     }

@@ -105,6 +105,12 @@ internal static partial class SolutionAnalyzerLog
         Message = "Analyzing project coupling")]
     public static partial void AnalyzingProjectCoupling(ILogger logger);
 
+    [LoggerMessage(
+        EventId = 1016,
+        Level = LogLevel.Information,
+        Message = "{message}")]
+    public static partial void DependencyCollectorMigration(ILogger logger, string message);
+
     // Debug events (1050-1099)
 
     [LoggerMessage(

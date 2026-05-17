@@ -15,6 +15,7 @@ public sealed class AdaptiveDependencyCollector : IDependencyCollector
     private readonly long _memoryThresholdBytes;
     private readonly int _sqliteBatchSize;
     private readonly Func<long> _memoryProvider;
+    private readonly Action<string>? _migrationLogger;
     private int _edgesSinceLastCheck;
     private long _totalEdgesAdded;
     private bool _hasMigrated;
@@ -34,11 +35,13 @@ public sealed class AdaptiveDependencyCollector : IDependencyCollector
     public AdaptiveDependencyCollector(
         long memoryThresholdMB = 1024,
         int sqliteBatchSize = 1000,
-        Func<long>? memoryProvider = null)
+        Func<long>? memoryProvider = null,
+        Action<string>? migrationLogger = null)
     {
         _memoryThresholdBytes = memoryThresholdMB * 1024 * 1024;
         _sqliteBatchSize = sqliteBatchSize;
         _memoryProvider = memoryProvider ?? (() => GC.GetTotalMemory(false));
+        _migrationLogger = migrationLogger;
         _current = new InMemoryDependencyCollector();
         _hasMigrated = false;
         _totalEdgesAdded = 0;
@@ -128,8 +131,8 @@ public sealed class AdaptiveDependencyCollector : IDependencyCollector
         }
 
         // Log and GC outside the write lock to avoid blocking concurrent operations
-        Console.WriteLine($"[StructuraLens] Memory threshold exceeded ({currentMemory / 1024 / 1024} MB / {_memoryThresholdBytes / 1024 / 1024} MB). Migrating to SQLite...");
-        Console.WriteLine($"[StructuraLens] Migrated {edgeCount} unique edges to disk.");
+        LogMigration($"Memory threshold exceeded ({currentMemory / 1024 / 1024} MB / {_memoryThresholdBytes / 1024 / 1024} MB). Migrating to SQLite...");
+        LogMigration($"Migrated {edgeCount} unique edges to disk.");
 
         GC.Collect(2, GCCollectionMode.Aggressive, blocking: true, compacting: true);
         GC.WaitForPendingFinalizers();
@@ -137,7 +140,12 @@ public sealed class AdaptiveDependencyCollector : IDependencyCollector
 
         var afterMemory = GC.GetTotalMemory(false);
         var reclaimed = currentMemory - afterMemory;
-        Console.WriteLine($"[StructuraLens] Migration complete. Memory: {afterMemory / 1024 / 1024} MB (reclaimed {reclaimed / 1024 / 1024} MB)");
+        LogMigration($"Migration complete. Memory: {afterMemory / 1024 / 1024} MB (reclaimed {reclaimed / 1024 / 1024} MB)");
+    }
+
+    private void LogMigration(string message)
+    {
+        _migrationLogger?.Invoke(message);
     }
 
     /// <summary>
