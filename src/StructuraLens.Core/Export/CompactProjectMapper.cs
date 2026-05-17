@@ -26,7 +26,7 @@ internal static class CompactProjectMapper
 
     private static CompactProject ExportProject(
         ProjectMetrics project,
-        IReadOnlyDictionary<string, CouplingMetrics> projectCouplingLookup,
+        Dictionary<string, CouplingMetrics> projectCouplingLookup,
         bool includeTypes,
         bool includeMethods,
         bool useNamespaceHierarchy)

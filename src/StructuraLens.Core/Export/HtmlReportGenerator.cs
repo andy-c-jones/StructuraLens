@@ -71,9 +71,9 @@ public sealed class HtmlReportGenerator : IReportGenerator
 
     private (string compactJson, string diagnosticsJson) SerializeReportData(AnalysisReport report)
     {
-        var exporter = _reportExporter as CompactReportExporter;
-        var compactReport = exporter?.ExportHierarchical(report, includeMethodDetails: true, includeTypeDetails: true)
-                            ?? _reportExporter.Export(report, includeMethodDetails: true, includeTypeDetails: true);
+        var compactReport = _reportExporter is CompactReportExporter exporter
+            ? exporter.ExportHierarchical(report, includeMethodDetails: true, includeTypeDetails: true)
+            : _reportExporter.Export(report, includeMethodDetails: true, includeTypeDetails: true);
 
         var compactJson = JsonSerializer.Serialize(compactReport, JsonOptions);
         var diagnosticsJson = BuildDiagnosticsJson(report);

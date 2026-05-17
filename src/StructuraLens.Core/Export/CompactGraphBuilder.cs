@@ -85,8 +85,8 @@ internal static class CompactGraphBuilder
     }
 
     private static List<object[]> BuildNamespaceNodes(
-        IReadOnlyDictionary<string, NamespaceGraphMetrics> namespaceMetrics,
-        IReadOnlyDictionary<string, CouplingMetrics> namespaceCouplingLookup,
+        Dictionary<string, NamespaceGraphMetrics> namespaceMetrics,
+        Dictionary<string, CouplingMetrics> namespaceCouplingLookup,
         Dictionary<string, int> nodeIndex)
     {
         var nodes = new List<object[]>();

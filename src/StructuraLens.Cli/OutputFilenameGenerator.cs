@@ -6,6 +6,12 @@ namespace StructuraLens.Cli;
 
 internal static class OutputFilenameGenerator
 {
+    private static readonly char[] InvalidBranchNameChars =
+    [
+        '<', '>', ':', '"', '|', '?', '*', '/', '\\', '\0',
+        .. Enumerable.Range(1, 31).Select(static value => (char)value)
+    ];
+
     public static string GenerateDefaultFilename(AnalysisReport report, string format, ILogger logger)
     {
         if (report.GitInfo != null)
@@ -29,13 +35,8 @@ internal static class OutputFilenameGenerator
 
     public static string SanitizeBranchName(string branchName)
     {
-        char[] invalidChars = new[] { '<', '>', ':', '"', '|', '?', '*', '/', '\\', '\0' }
-            .Concat(Enumerable.Range(1, 31).Select(i => (char)i))
-            .Distinct()
-            .ToArray();
-
         var result = branchName;
-        foreach (char c in invalidChars)
+        foreach (char c in InvalidBranchNameChars)
         {
             result = result.Replace(c, '_');
         }

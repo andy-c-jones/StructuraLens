@@ -28,7 +28,10 @@ internal sealed class AnalyzeCommandHandler
 
         try
         {
-            ProgramLog.ApplicationStartup(logger, VersionProvider.GetVersion());
+            if (logger.IsEnabled(LogLevel.Information))
+            {
+                ProgramLog.ApplicationStartup(logger, analysisOptions.ToolVersion);
+            }
             ProgramLog.AnalyzingPath(logger, path);
             ProgramLog.CouplingModeEnabled(logger, "All");
             LogAnalysisOptions(logger, analysisOptions);
@@ -83,7 +86,10 @@ internal sealed class AnalyzeCommandHandler
 
     private static void LogAnalysisOptions(ILogger logger, AnalysisOptions analysisOptions)
     {
-        ProgramLog.AggregationStrategy(logger, analysisOptions.AggregationStrategy.ToString());
+        if (logger.IsEnabled(LogLevel.Information))
+        {
+            ProgramLog.AggregationStrategy(logger, analysisOptions.AggregationStrategy);
+        }
         if (analysisOptions.AggregationStrategy == DependencyAggregationStrategy.Adaptive)
         {
             ProgramLog.MemoryThreshold(logger, analysisOptions.MemoryThresholdMB);

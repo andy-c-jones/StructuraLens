@@ -151,7 +151,7 @@ public sealed class CouplingAnalyzer : ICouplingAnalyzer
     /// <summary>
     /// Analyzes project-to-project dependencies based on project references.
     /// </summary>
-    private List<DependencyEdge> AnalyzeProjectDependencies(Solution solution)
+    private static List<DependencyEdge> AnalyzeProjectDependencies(Solution solution)
     {
         var dependencies = new List<DependencyEdge>();
 
@@ -178,7 +178,7 @@ public sealed class CouplingAnalyzer : ICouplingAnalyzer
     }
 
     private static List<DependencyEdge> AddMissingProjectDependencies(
-        IReadOnlyList<DependencyEdge> projectDependencies,
+        List<DependencyEdge> projectDependencies,
         IReadOnlyList<DependencyEdge> allDependencies)
     {
         var suppliedProjectReferenceKeys = allDependencies
@@ -267,7 +267,7 @@ public sealed class CouplingAnalyzer : ICouplingAnalyzer
         return (namespaceCoupling, dependencies);
     }
 
-    private List<CouplingMetrics> BuildProjectCouplingMetrics(Solution solution, List<DependencyEdge> allDependencies)
+    private static List<CouplingMetrics> BuildProjectCouplingMetrics(Solution solution, List<DependencyEdge> allDependencies)
     {
         var projectNames = solution.Projects.Select(p => p.Name).ToHashSet();
         var metrics = new List<CouplingMetrics>();
@@ -306,12 +306,12 @@ public sealed class CouplingAnalyzer : ICouplingAnalyzer
         return metrics;
     }
 
-    private List<CouplingMetrics> BuildNamespaceCouplingMetrics(List<DependencyEdge> allDependencies)
+    private static List<CouplingMetrics> BuildNamespaceCouplingMetrics(List<DependencyEdge> allDependencies)
     {
         return BuildEntityCouplingMetrics(allDependencies, DependencyType.NamespaceReference);
     }
 
-    private List<CouplingMetrics> BuildTypeCouplingMetrics(List<DependencyEdge> allDependencies)
+    private static List<CouplingMetrics> BuildTypeCouplingMetrics(List<DependencyEdge> allDependencies)
     {
         return BuildEntityCouplingMetrics(allDependencies, DependencyType.TypeReference);
     }
@@ -374,7 +374,7 @@ public sealed class CouplingAnalyzer : ICouplingAnalyzer
         return (internalList, externalList);
     }
 
-    private List<DependencyEdge> AggregateDependencies(List<DependencyEdge> dependencies)
+    private static List<DependencyEdge> AggregateDependencies(List<DependencyEdge> dependencies)
     {
         if (dependencies.Count == 0) return dependencies;
 
@@ -397,7 +397,7 @@ public sealed class CouplingAnalyzer : ICouplingAnalyzer
         return result;
     }
 
-    private CouplingSummary BuildCouplingSummary(
+    private static CouplingSummary BuildCouplingSummary(
         List<CouplingMetrics> projectCoupling,
         List<CouplingMetrics> namespaceCoupling,
         List<CouplingMetrics> typeCoupling,

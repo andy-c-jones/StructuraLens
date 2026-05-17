@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 using StructuraLens.Core.Abstractions;
 using StructuraLens.Core.Models;
 
@@ -20,6 +22,10 @@ public sealed class CompactReportExporter : IReportExporter
     /// <summary>
     /// Exports the report with hierarchical namespace structure for the HTML report.
     /// </summary>
+    [SuppressMessage(
+        "Performance",
+        "CA1822:Mark members as static",
+        Justification = "Keep this public method as an instance member to preserve the exporter API.")]
     public CompactReport ExportHierarchical(
         AnalysisReport report,
         bool includeMethodDetails = false,

@@ -18,8 +18,8 @@ internal static class ProjectDiffBuilder
 
     private static ProjectDiff BuildProjectDiff(
         string name,
-        IReadOnlyDictionary<string, ProjectMetrics> baseProjects,
-        IReadOnlyDictionary<string, ProjectMetrics> headProjects,
+        Dictionary<string, ProjectMetrics> baseProjects,
+        Dictionary<string, ProjectMetrics> headProjects,
         AnalysisReport baseReport,
         AnalysisReport headReport)
     {
