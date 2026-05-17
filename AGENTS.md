@@ -51,7 +51,6 @@ There is no separate linter configured; rely on `dotnet build` and tests.
 ### Web / HTML Report
 - `dotnet build` auto-runs `npm run build` in `web/` via MSBuild target. Skip with `-p:SkipWebBuild=true`.
 - Dev server: `cd web && npm install && npm run dev` (serves at localhost:4321 with test data).
-- Type check: `cd web && npx astro check`.
 - Template uses `{{PLACEHOLDER}}` tokens in prod; `HtmlReportGenerator.cs` replaces them at runtime.
 
 ## Code Style Guidelines

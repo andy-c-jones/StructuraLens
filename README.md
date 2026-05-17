@@ -237,15 +237,6 @@ npm run build
 
 The output is written to `web/dist/index.html` and embedded into `StructuraLens.Core.dll` as a .NET resource on the next `dotnet build`.
 
-### Type Checking
-
-Run the Astro TypeScript checker to validate all scripts:
-
-```bash
-cd web
-npx astro check
-```
-
 ## Project Structure
 
 ```
