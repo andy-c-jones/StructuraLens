@@ -404,9 +404,9 @@ public sealed class CouplingAnalyzer : ICouplingAnalyzer
             AverageExternalDependencies = allMetrics.Count > 0 ? allMetrics.Average(m => m.TotalExternalDependencies) : 0,
             AverageExternalBclDependencies = allMetrics.Count > 0 ? allMetrics.Average(m => m.ExternalBclDependencies) : 0,
             AverageExternalPackageDependencies = allMetrics.Count > 0 ? allMetrics.Average(m => m.ExternalPackageDependencies) : 0,
-            MostCoupledEntity = allMetrics.OrderByDescending(m => m.TotalReferenceStrength).FirstOrDefault()?.EntityName,
-            MostDependentEntity = allMetrics.OrderByDescending(m => m.InternalDependents).FirstOrDefault()?.EntityName,
-            HighestConsumerEntity = allMetrics.OrderByDescending(m => m.DependencyRatio).FirstOrDefault()?.EntityName,
+            MostCoupledEntity = allMetrics.MaxBy(m => m.TotalReferenceStrength)?.EntityName,
+            MostDependentEntity = allMetrics.MaxBy(m => m.InternalDependents)?.EntityName,
+            HighestConsumerEntity = allMetrics.MaxBy(m => m.DependencyRatio)?.EntityName,
             CouplingMode = "All"
         };
     }
