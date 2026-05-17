@@ -317,9 +317,11 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
             // Analyze coupling dependencies - stream directly to shared collector
             CouplingAnalyzer.AnalyzeDocumentCouplingStreaming(semanticModel, filePath, root, dependencyCollector);
 
+            // Single pass to collect all nodes of interest, avoiding redundant tree traversals
+            var descendantNodes = root.DescendantNodes().ToList();
+
             // Analyze traditional type declarations
-            var typeDeclarations = root.DescendantNodes()
-                .OfType<TypeDeclarationSyntax>();
+            var typeDeclarations = descendantNodes.OfType<TypeDeclarationSyntax>();
 
             foreach (var typeDecl in typeDeclarations)
             {
@@ -328,9 +330,7 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
             }
 
             // Analyze top-level statements (C# 9+ feature)
-            var topLevelStatements = root.DescendantNodes()
-                .OfType<GlobalStatementSyntax>()
-                .ToList();
+            var topLevelStatements = descendantNodes.OfType<GlobalStatementSyntax>().ToList();
 
             if (topLevelStatements.Count > 0)
             {
