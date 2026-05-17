@@ -314,9 +314,8 @@ public sealed class CouplingAnalyzer : ICouplingAnalyzer
             var outbound = outboundByEntity.GetValueOrDefault(ns, []);
             var inbound = inboundByEntity.GetValueOrDefault(ns, []);
 
-            // Split into internal and external
-            var internalOut = outbound.Where(d => internalNamespaces.Contains(d.ToEntity)).ToList();
-            var externalOut = outbound.Where(d => !internalNamespaces.Contains(d.ToEntity)).ToList();
+            // Split into internal and external in single pass to avoid multiple iterations
+            var (internalOut, externalOut) = SplitDependenciesByInternal(outbound, internalNamespaces, d => d.ToEntity);
             var internalIn = inbound.Where(d => internalNamespaces.Contains(d.FromEntity)).ToList();
 
             return new CouplingMetrics(ns, DependencyType.NamespaceReference)
@@ -350,9 +349,8 @@ public sealed class CouplingAnalyzer : ICouplingAnalyzer
             var outbound = outboundByEntity.GetValueOrDefault(type, []);
             var inbound = inboundByEntity.GetValueOrDefault(type, []);
 
-            // Split into internal and external
-            var internalOut = outbound.Where(d => internalTypes.Contains(d.ToEntity)).ToList();
-            var externalOut = outbound.Where(d => !internalTypes.Contains(d.ToEntity)).ToList();
+            // Split into internal and external in single pass to avoid multiple iterations
+            var (internalOut, externalOut) = SplitDependenciesByInternal(outbound, internalTypes, d => d.ToEntity);
             var internalIn = inbound.Where(d => internalTypes.Contains(d.FromEntity)).ToList();
 
             return new CouplingMetrics(type, DependencyType.TypeReference)
@@ -362,6 +360,30 @@ public sealed class CouplingAnalyzer : ICouplingAnalyzer
                 ExternalOutbound = externalOut
             };
         }).ToList();
+    }
+
+    /// <summary>
+    /// Splits a list of dependencies into internal and external in a single pass.
+    /// Avoids multiple iterations through the same list.
+    /// </summary>
+    private static (List<DependencyEdge> Internal, List<DependencyEdge> External) SplitDependenciesByInternal(
+        IEnumerable<DependencyEdge> dependencies,
+        HashSet<string> internalEntities,
+        Func<DependencyEdge, string> entitySelector)
+    {
+        var internalList = new List<DependencyEdge>();
+        var externalList = new List<DependencyEdge>();
+
+        foreach (var dep in dependencies)
+        {
+            var entity = entitySelector(dep);
+            if (internalEntities.Contains(entity))
+                internalList.Add(dep);
+            else
+                externalList.Add(dep);
+        }
+
+        return (internalList, externalList);
     }
 
     private List<DependencyEdge> AggregateDependencies(List<DependencyEdge> dependencies)
