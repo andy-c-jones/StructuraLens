@@ -473,18 +473,17 @@ public sealed class SolutionAnalyzer : ISolutionAnalyzer
 
         var methodMetricsList = new List<MethodMetrics>();
 
-        var methods = typeDecl.DescendantNodes()
-            .OfType<MethodDeclarationSyntax>();
+        // Single pass to collect all type members, avoiding redundant tree traversals
+        var members = typeDecl.DescendantNodes().ToList();
 
+        var methods = members.OfType<MethodDeclarationSyntax>();
         foreach (var method in methods)
         {
             var metrics = AnalyzeMethod(method, semanticModel, filePath);
             methodMetricsList.Add(metrics);
         }
 
-        var constructors = typeDecl.DescendantNodes()
-            .OfType<ConstructorDeclarationSyntax>();
-
+        var constructors = members.OfType<ConstructorDeclarationSyntax>();
         foreach (var ctor in constructors)
         {
             var metrics = AnalyzeConstructor(ctor, typeDecl, semanticModel, filePath);
