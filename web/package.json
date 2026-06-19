@@ -10,12 +10,12 @@
     "preview": "astro preview"
   },
   "dependencies": {
-    "astro": "6.3.2",
+    "astro": "6.4.7",
     "d3": "7.9.0"
   },
   "devDependencies": {
     "@types/d3": "7.4.3",
-    "prettier": "3.8.3",
+    "prettier": "3.8.4",
     "prettier-plugin-astro": "0.14.1",
     "typescript": "6.0.3"
   }
