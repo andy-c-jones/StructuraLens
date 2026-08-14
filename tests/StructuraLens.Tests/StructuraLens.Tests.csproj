@@ -17,8 +17,8 @@
 
   <ItemGroup>
     <PackageReference Include="FakeItEasy" Version="9.0.1" />
-    <PackageReference Include="Microsoft.Testing.Extensions.TrxReport" Version="2.2.2" />
-    <PackageReference Include="TUnit" Version="1.44.39" />
+    <PackageReference Include="Microsoft.Testing.Extensions.TrxReport" Version="2.3.3" />
+    <PackageReference Include="TUnit" Version="1.64.6" />
   </ItemGroup>
 
 </Project>
